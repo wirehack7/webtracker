@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>webtracker</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>webtracker</h1>
+      <p class="status" id="status">Audio aus. Klick auf „Audio starten“, dann spielen die Tasten Y–M und Q–U Noten.</p>
+      <button id="start" type="button">Audio starten</button>
+      <p class="note" id="note">---</p>
+      <p class="hint">
+        Untere Reihe ab Y/Z = Oktave 4, obere Reihe ab Q = Oktave 5, F1–F7 wählt die Oktave.
+        Belegung nach physischer Taste, also gleich auf QWERTZ und QWERTY.
+      </p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
