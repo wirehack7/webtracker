@@ -237,3 +237,115 @@ export function buildXm(opts: {
   }
   return new Uint8Array(w.bytes).buffer;
 }
+
+export interface TestS3mCell {
+  note?: number; // S3M note byte: octave << 4 | semitone, 254 = note cut
+  ins?: number;
+  vol?: number; // 0..64
+  cmd?: string; // command letter A..Z
+  info?: number;
+}
+
+/** Builds a Scream Tracker 3 module with 8-bit samples (unsigned, as ST3 writes them). */
+export function buildS3m(opts: {
+  title?: string;
+  samples: { data: Int8Array; volume?: number; c2spd?: number; loopStart?: number; loopEnd?: number }[];
+  patterns: (TestS3mCell | undefined)[][][];
+  orders: number[];
+  channelSettings?: number[]; // channel setting bytes, default 0,8,9,1 (L R R L)
+  panning?: number[]; // optional pan table entries (0..15), one per channel
+  speed?: number;
+  tempo?: number;
+  mono?: boolean;
+}): ArrayBuffer {
+  const w = new ByteWriter();
+  const settings = opts.channelSettings ?? [0, 8, 9, 1];
+  w.str(opts.title ?? 'test', 28);
+  w.u8(0x1a);
+  w.u8(16);
+  w.u16(0);
+  w.u16(opts.orders.length);
+  w.u16(opts.samples.length);
+  w.u16(opts.patterns.length);
+  w.u16(0); // flags
+  w.u16(0x1320); // Scream Tracker 3.20
+  w.u16(2); // unsigned samples
+  w.str('SCRM', 4);
+  w.u8(64); // global volume
+  w.u8(opts.speed ?? 6);
+  w.u8(opts.tempo ?? 125);
+  w.u8(opts.mono ? 48 : 0x80 | 48);
+  w.u8(0); // ultra click
+  w.u8(opts.panning ? 252 : 0);
+  while (w.bytes.length < 64) w.u8(0);
+  for (let c = 0; c < 32; c++) w.u8(settings[c] ?? 255);
+  for (const p of opts.orders) w.u8(p);
+  // Parapointers are patched once the blocks are laid out.
+  const pointerAt = w.bytes.length;
+  for (let i = 0; i < opts.samples.length + opts.patterns.length; i++) w.u16(0);
+  if (opts.panning) for (let c = 0; c < 32; c++) w.u8(c < opts.panning.length ? 0x20 | opts.panning[c]! : 0);
+  const align = () => {
+    while (w.bytes.length % 16) w.u8(0);
+    return w.bytes.length / 16;
+  };
+  const patch = (index: number, para: number) => {
+    w.bytes[pointerAt + index * 2] = para & 0xff;
+    w.bytes[pointerAt + index * 2 + 1] = para >> 8;
+  };
+  const headers: number[] = [];
+  opts.samples.forEach((s, i) => {
+    const para = align();
+    patch(i, para);
+    headers.push(w.bytes.length);
+    w.u8(1);
+    w.str('', 12);
+    w.u8(0);
+    w.u16(0); // memseg, patched below
+    w.u32(s.data.length);
+    w.u32(s.loopStart ?? 0);
+    w.u32(s.loopEnd ?? 0);
+    w.u8(s.volume ?? 64);
+    w.u8(0);
+    w.u8(0);
+    w.u8(s.loopEnd ? 1 : 0);
+    w.u32(s.c2spd ?? 8363);
+    w.str('', 12);
+    w.str(`sample${i + 1}`, 28);
+    w.str('SCRS', 4);
+  });
+  opts.patterns.forEach((pattern, i) => {
+    patch(opts.samples.length + i, align());
+    const start = w.bytes.length;
+    w.u16(0);
+    for (let row = 0; row < 64; row++) {
+      pattern[row]?.forEach((c, ch) => {
+        if (!c) return;
+        let what = ch;
+        if (c.note !== undefined || c.ins !== undefined) what |= 0x20;
+        if (c.vol !== undefined) what |= 0x40;
+        if (c.cmd) what |= 0x80;
+        w.u8(what);
+        if (what & 0x20) {
+          w.u8(c.note ?? 255);
+          w.u8(c.ins ?? 0);
+        }
+        if (what & 0x40) w.u8(c.vol!);
+        if (what & 0x80) {
+          w.u8(c.cmd!.charCodeAt(0) - 64);
+          w.u8(c.info ?? 0);
+        }
+      });
+      w.u8(0);
+    }
+    const length = w.bytes.length - start;
+    w.bytes[start] = length & 0xff;
+    w.bytes[start + 1] = length >> 8;
+  });
+  opts.samples.forEach((s, i) => {
+    const para = align();
+    w.bytes[headers[i]! + 14] = para & 0xff;
+    w.bytes[headers[i]! + 15] = para >> 8;
+    for (const v of s.data) w.u8(v + 128);
+  });
+  return new Uint8Array(w.bytes).buffer;
+}

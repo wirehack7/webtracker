@@ -82,6 +82,8 @@ export interface Song {
   initialTempo: number;
   /** Initial panning per channel, 0..255. */
   channelPanning: number[];
+  /** Global volume at song start, 0..64 (S3M and IT store one; XM always starts at 64). */
+  initialGlobalVolume?: number;
 }
 
 export interface Cell {

@@ -1179,7 +1179,7 @@ window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
   if (!file) return;
-  if (/\.(mod|xm|stk)$/i.test(file.name)) void openModule(file);
+  if (/\.(mod|xm|s3m|stk)$/i.test(file.name)) void openModule(file);
   else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
