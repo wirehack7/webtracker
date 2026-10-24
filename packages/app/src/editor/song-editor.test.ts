@@ -66,6 +66,28 @@ describe('SongEditor', () => {
   });
 });
 
+describe('SongEditor song settings', () => {
+  it('changes the channel count, reloads the player and undoes it', () => {
+    const { editor, sent } = setup();
+    editor.editPattern(0, 'note', (p) => writeCell(editor.song, p, 0, 3, { note: 49, instrument: 1 }));
+    editor.setChannels(2);
+    expect(editor.song.channels).toBe(2);
+    expect(editor.song.patterns[0]!.data.length).toBe(64 * 2 * 5);
+    expect(sent.at(-1)).toMatchObject({ type: 'load' });
+    expect(editor.undo()).toBe('channels');
+    expect(editor.song.channels).toBe(4);
+    expect(readCell(editor.song, editor.song.patterns[0]!, 0, 3).note).toBe(49);
+  });
+
+  it('sets the title, cut to 20 characters, with undo', () => {
+    const { editor } = setup();
+    editor.setTitle('a very long song title indeed');
+    expect(editor.song.title).toBe('a very long song tit');
+    editor.undo();
+    expect(editor.song.title).toBe('');
+  });
+});
+
 describe('SongEditor instruments', () => {
   it('edits an instrument, syncs it and undoes it', () => {
     const { editor, sent } = setup();

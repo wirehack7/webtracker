@@ -2,6 +2,10 @@
 
 Ein Chiptune-Tracker für den Browser, für die Demoscene. Klassische Tracker-Oberfläche, responsive für Desktop, Tablet und Handy, mit XM als Hausformat.
 
+**Direkt im Browser starten: https://wirehack7.github.io/webtracker/**
+
+Die Seite lässt sich als App installieren und läuft danach auch offline. Songs werden laufend im Browser gesichert, die letzten Versionen holt der Save-Dialog zurück.
+
 ## Entwicklung
 
 Voraussetzungen: Node 22 und pnpm 10 (`corepack enable` reicht).
@@ -31,8 +35,8 @@ MODULE_DIR=~/mods pnpm test
 | Paket | Inhalt |
 | --- | --- |
 | `packages/engine` | Song-Modell, Replayer, Mixer. Keine DOM-Abhängigkeit, läuft im AudioWorklet, im Export-Worker und unter Node. |
-| `packages/formats` | Parser für MOD (ProTracker, xCHN, Soundtracker) und XM 1.04. Writer folgen. |
-| `packages/app` | Vite-App: UI, AudioWorklet-Wrapper unter `src/audio/`. |
+| `packages/formats` | Laden von MOD (ProTracker, xCHN, Soundtracker) und XM 1.04, Speichern als XM, MOD und XI, Sample-Import (WAV, AIFF, 8SVX, XI), WAV- und ZIP-Writer für den Export. |
+| `packages/app` | Vite-App: UI, AudioWorklet und Export-Worker unter `src/audio/`, Autosave unter `src/storage/`, Service Worker für den Offline-Betrieb. |
 
 Jeder Push auf `main` wird nach GitHub Pages deployt.
 
@@ -49,4 +53,5 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | Shift+Pfeile, Maus ziehen | Block markieren; Strg+C/X/V kopieren, ausschneiden, einfügen |
 | Alt+↑/↓ | Transponieren (mit Shift um eine Oktave) |
 | Strg+Z / Strg+Y | Undo / Redo |
-| Strg+S | Als XM speichern |
+| Strg+S | Als XM speichern; der Button „Save“ speichert auch als MOD und exportiert WAV (ganzer Song oder ein File pro Kanal) |
+| Klick / Rechtsklick auf ein Scope | Kanal stummschalten / solo |

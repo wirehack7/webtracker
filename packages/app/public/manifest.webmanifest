@@ -1,0 +1,14 @@
+{
+  "name": "webtracker",
+  "short_name": "webtracker",
+  "description": "Chiptune tracker for the browser: XM and MOD, pattern, sample and instrument editors, WAV export.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#3d5578",
+  "theme_color": "#3d5578",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
+  "file_handlers": [
+    { "action": "./", "accept": { "audio/xm": [".xm"], "audio/mod": [".mod"] } }
+  ]
+}

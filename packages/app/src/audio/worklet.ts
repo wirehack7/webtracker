@@ -10,6 +10,8 @@ class EngineProcessor extends AudioWorkletProcessor {
   private songLeft = new Float32Array(128);
   private songRight = new Float32Array(128);
   private framesToScopes = 0;
+  /** Kept here so a reloaded song keeps the muted channels. */
+  private muted: boolean[] = [];
   private framesToVoices = 0;
   /** Whether the last 'voices' message listed any, so silence is sent once. */
   private hadVoices = false;
@@ -35,9 +37,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         const player = new Player(message.song, sampleRate);
         player.onRow = (state) => this.send({ type: 'row', state, levels: player.channelLevels() });
         player.enableScopes(SCOPE_FRAMES);
+        player.muted = this.muted;
         this.player = player;
         break;
       }
+      case 'mute':
+        this.muted = [...message.muted];
+        if (this.player) this.player.muted = this.muted;
+        break;
       case 'play':
         if (this.player) {
           if (message.order !== undefined) this.player.reset(message.order);

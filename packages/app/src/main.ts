@@ -8,6 +8,7 @@ import {
   deleteRow,
   emptySample,
   insertRow,
+  MAX_CHANNELS,
   MAX_PATTERNS,
   NOTE_KEY_OFF,
   noteName,
@@ -21,8 +22,9 @@ import {
   type PlayerState,
   type Song,
 } from '@webtracker/engine';
-import { importSample, loadModule, sampleFromChannels, saveXi, saveXm } from '@webtracker/formats';
+import { importSample, loadModule, sampleFromChannels, saveMod, saveXi, saveXm, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
+import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
 import { SongEditor } from './editor/song-editor.ts';
@@ -32,6 +34,7 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
+import { listAutosaves, writeAutosave, type Autosave } from './storage/autosave.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -41,7 +44,7 @@ const patternEl = $<HTMLDivElement>('#pattern');
 const view = new PatternEditor(patternEl);
 
 const settings = { add: 1, octave: 4 };
-const limits = { bpm: [32, 255], speed: [1, 31], add: [0, 16], octave: [0, 7] } as const;
+const limits = { bpm: [32, 255], speed: [1, 31], add: [0, 16], octave: [0, 7], channels: [1, MAX_CHANNELS] } as const;
 let instrument = 1;
 /** 0-based sample slot of the current instrument, for the sample editor and keymap. */
 let sampleSlot = 0;
@@ -50,6 +53,8 @@ let playing = false;
 /** Position in the order list whose pattern the editor shows. */
 let currentOrder = 0;
 let clipboard: Clip | null = null;
+/** Muted channels, by index; they keep playing silently. */
+let muted: boolean[] = [];
 
 // ---- Audio ---------------------------------------------------------------
 
@@ -78,6 +83,7 @@ function ensureEngine(): Promise<EngineNode | null> {
       engine = node;
       node.onMessage = handleWorkletMessage;
       node.send({ type: 'load', song: editor.song });
+      node.send({ type: 'mute', muted });
       status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
       return node;
     },
@@ -279,6 +285,8 @@ function showSong(): void {
   instrument = Math.min(Math.max(1, instrument), Math.max(1, s.instruments.length));
   showValue('bpm', s.initialTempo, true);
   showValue('speed', s.initialSpeed);
+  $<HTMLOutputElement>('#channels').textContent = String(s.channels).padStart(2, '0');
+  titleInput.value = s.title;
   fillOrders();
   fillInstruments();
   buildScopes(s.channels);
@@ -286,6 +294,20 @@ function showSong(): void {
 }
 
 editor.onChange = (label) => {
+  scheduleAutosave();
+  if (label === 'channels') {
+    // The worklet rebuilt its player for the new layout, so playback has stopped.
+    stop();
+    muted = muted.slice(0, song().channels);
+    engine?.send({ type: 'mute', muted });
+    showSong();
+    view.moveTo(view.row, Math.min(view.channel, song().channels - 1));
+    return;
+  }
+  if (label === 'title') {
+    titleInput.value = song().title;
+    return;
+  }
   fillOrders();
   showPosition();
   // Pattern edits do not touch instruments, so the lists only refresh for the rest.
@@ -341,10 +363,18 @@ for (const [id, delta] of [['#order-dec', -1], ['#order-inc', 1]] as const) {
 $('#len-dec').addEventListener('click', (event) => changeLength(event.shiftKey ? -16 : -1));
 $('#len-inc').addEventListener('click', (event) => changeLength(event.shiftKey ? 16 : 1));
 
+const titleInput = $<HTMLInputElement>('#title');
+titleInput.addEventListener('change', () => editor.setTitle(titleInput.value));
+titleInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === 'Escape') titleInput.blur();
+});
+
+let shiftHeld = false;
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-step]')) {
+  button.addEventListener('pointerdown', (event) => (shiftHeld = event.shiftKey));
   button.addEventListener('click', () => {
     const [key, delta] = button.dataset.step!.split(':') as [keyof typeof limits, string];
-    step(key, Number(delta));
+    step(key, Number(delta) * (key === 'channels' && shiftHeld ? 2 : 1));
   });
 }
 
@@ -358,6 +388,13 @@ function step(key: keyof typeof limits, delta: number): void {
     editor.setTempo(speed, tempo);
     showValue('bpm', tempo, true);
     showValue('speed', speed);
+    return;
+  }
+  if (key === 'channels') {
+    const channels = clampTo(s.channels + delta);
+    if (channels < s.channels && !confirm(`Remove channels ${channels + 1}–${s.channels} from every pattern? Undo brings them back.`)) return;
+    editor.setChannels(channels);
+    status.textContent = `${channels} channels.`;
     return;
   }
   settings[key] = clampTo(settings[key] + delta);
@@ -379,6 +416,8 @@ function buildScopes(count: number): void {
     label.className = 'scope-label';
     label.textContent = String(c + 1);
     box.append(document.createElement('canvas'), label);
+    box.classList.toggle('muted', muted[c] === true);
+    box.title = 'Click: mute, right-click: solo';
     return box;
   });
   scopes.replaceChildren(...boxes);
@@ -432,6 +471,36 @@ function drawScopes(): void {
     }
   });
 }
+
+/** Click mutes a channel; right-click solos it, or unmutes all when it already is the only one playing. */
+function setMuted(next: boolean[]): void {
+  muted = next;
+  engine?.send({ type: 'mute', muted });
+  scopes.querySelectorAll('.scope').forEach((box, c) => box.classList.toggle('muted', muted[c] === true));
+  const off = muted.filter(Boolean).length;
+  status.textContent = off ? `Muted: ${muted.flatMap((m, c) => (m ? [c + 1] : [])).join(' ')}` : 'All channels on.';
+}
+
+function scopeIndex(event: MouseEvent): number {
+  const box = (event.target as HTMLElement).closest('.scope');
+  return box ? [...scopes.children].indexOf(box) : -1;
+}
+
+scopes.addEventListener('click', (event) => {
+  const c = scopeIndex(event);
+  if (c < 0) return;
+  const next = Array.from({ length: song().channels }, (_, k) => muted[k] === true);
+  next[c] = !next[c];
+  setMuted(next);
+});
+scopes.addEventListener('contextmenu', (event) => {
+  const c = scopeIndex(event);
+  if (c < 0) return;
+  event.preventDefault();
+  const count = song().channels;
+  const alreadySolo = Array.from({ length: count }, (_, k) => (muted[k] === true) === (k !== c)).every(Boolean);
+  setMuted(Array.from({ length: count }, (_, k) => !alreadySolo && k !== c));
+});
 
 function clearScopes(): void {
   scopeData = [];
@@ -512,11 +581,14 @@ function confirmDiscard(): boolean {
 function startSong(next: Song): void {
   stop();
   currentOrder = 0;
+  muted = [];
+  engine?.send({ type: 'mute', muted });
   editor.replaceSong(next);
+  scheduleAutosave(true);
   sampleSlot = 0;
   view.moveTo(0, 0, Column.Note);
   showSong();
-setView('pattern');
+  setView('pattern');
   sampleEditor.resetView();
   renderEditors();
 }
@@ -594,13 +666,168 @@ function saveSong(): void {
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
 }
 
+function saveSongAsMod(): void {
+  const s = song();
+  const { bytes, warnings } = saveMod(s);
+  const name = safeName(s.title, 'untitled');
+  download(bytes, `${name}.mod`, 'audio/mod');
+  status.textContent = `Saved ${name}.mod (${bytes.length} bytes)${warnings.length ? `, ${warnings.length} things changed` : ''}.`;
+  $('#save-info').textContent = warnings.length ? `MOD can't hold everything: ${warnings.join(' ')}` : 'Saved as MOD with nothing lost.';
+}
+
+// ---- Save dialog: XM, MOD, WAV export, autosaved versions ----------------
+
+const fileDialog = $<HTMLDialogElement>('#file-dialog');
+const exportGo = $<HTMLButtonElement>('#export-go');
+const exportProgress = $<HTMLProgressElement>('#export-progress');
+const exportInfo = $('#export-info');
+let exporting: Worker | null = null;
+
+function openFileDialog(): void {
+  $('#save-info').textContent = '';
+  void showAutosaves();
+  fileDialog.showModal();
+}
+
+function exportWav(): void {
+  if (exporting) {
+    exporting.terminate();
+    exportDone('Export cancelled.');
+    return;
+  }
+  const s = song();
+  const request: ExportRequest = {
+    song: s,
+    format: $<HTMLSelectElement>('#export-format').value as WavFormat,
+    sampleRate: Number($<HTMLSelectElement>('#export-rate').value),
+    stems: $<HTMLSelectElement>('#export-what').value === 'stems',
+    muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
+    name: safeName(s.title, 'untitled'),
+  };
+  const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
+  exporting = worker;
+  exportGo.textContent = 'Cancel';
+  exportProgress.hidden = false;
+  exportProgress.value = 0;
+  exportInfo.textContent = 'Rendering…';
+  const started = performance.now();
+  worker.onmessage = (event: MessageEvent<ExportReply>) => {
+    const reply = event.data;
+    if (reply.type === 'progress') {
+      exportProgress.value = reply.fraction;
+      return;
+    }
+    worker.terminate();
+    if (reply.type === 'error') {
+      exportDone(`Export failed: ${reply.message}`);
+      return;
+    }
+    const zip = reply.fileName.endsWith('.zip');
+    download(reply.bytes, reply.fileName, zip ? 'application/zip' : 'audio/wav');
+    const took = ((performance.now() - started) / 1000).toFixed(1);
+    exportDone(`${reply.fileName}: ${formatTime(reply.seconds)} of audio, ${(reply.bytes.length / 1e6).toFixed(1)} MB, rendered in ${took} s.`);
+  };
+  worker.onerror = (event) => {
+    worker.terminate();
+    exportDone(`Export failed: ${event.message}`);
+  };
+  worker.postMessage(request);
+}
+
+function exportDone(message: string): void {
+  exporting = null;
+  exportGo.textContent = 'Render';
+  exportProgress.hidden = true;
+  exportInfo.textContent = message;
+  status.textContent = message;
+}
+
+const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+// ---- Autosave ------------------------------------------------------------
+
+let autosaveTimer = 0;
+let freshVersion = false;
+
+/** Saves a few seconds after the last change; `fresh` starts a new version (new or loaded song). */
+function scheduleAutosave(fresh = false): void {
+  freshVersion ||= fresh;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => void autosaveNow(), 2000);
+}
+
+async function autosaveNow(): Promise<void> {
+  const fresh = freshVersion;
+  freshVersion = false;
+  try {
+    await writeAutosave(song().title, saveXm(song()), fresh);
+  } catch {
+    // Private windows and some browsers refuse IndexedDB; the tracker works without it.
+  }
+}
+
+async function showAutosaves(): Promise<void> {
+  const list = $('#autosave-list');
+  let versions: Autosave[] = [];
+  try {
+    versions = await listAutosaves();
+  } catch {
+    list.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Not available in this browser.' }));
+    return;
+  }
+  const items = versions.map((v) => {
+    const li = document.createElement('li');
+    const when = new Date(v.savedAt);
+    const time = document.createElement('span');
+    time.className = 'idx';
+    time.textContent = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    li.append(time, ` ${v.title || 'untitled'}`);
+    li.title = 'Open this version';
+    li.addEventListener('click', () => {
+      if (!confirmDiscard()) return;
+      fileDialog.close();
+      restoreAutosave(v);
+    });
+    return li;
+  });
+  if (!items.length) items.push(Object.assign(document.createElement('li'), { textContent: 'Nothing saved yet.' }));
+  list.replaceChildren(...items);
+}
+
+function restoreAutosave(version: Autosave): void {
+  try {
+    startSong(loadModule(version.bytes.slice().buffer, 'autosave.xm'));
+    status.textContent = `Restored ${version.title || 'untitled'} from ${new Date(version.savedAt).toLocaleString()}.`;
+  } catch (error) {
+    status.textContent = `Could not restore the autosave: ${(error as Error).message}`;
+  }
+}
+
+/** On start, picks up where the last session left off. */
+async function restoreLastSession(): Promise<void> {
+  try {
+    const [latest] = await listAutosaves();
+    if (latest && !editor.dirty) {
+      restoreAutosave(latest);
+      // Keep editing this version rather than starting a new one.
+      freshVersion = false;
+      clearTimeout(autosaveTimer);
+    }
+  } catch {
+    // No IndexedDB, start with a new song.
+  }
+}
+
 $('#new').addEventListener('click', () => {
   if (!confirmDiscard()) return;
   startSong(createSong());
   status.textContent = 'New song: 4 channels, five chip instruments.';
 });
 $('#load').addEventListener('click', () => fileInput.click());
-$('#save').addEventListener('click', saveSong);
+$('#save').addEventListener('click', openFileDialog);
+$('#save-xm').addEventListener('click', saveSong);
+$('#save-mod').addEventListener('click', saveSongAsMod);
+exportGo.addEventListener('click', exportWav);
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
   if (file) void openModule(file);
@@ -637,7 +864,7 @@ $('#help-open').addEventListener('click', () => help.showModal());
 // Buttons hand focus back to the pattern, so Space and Enter never press them twice.
 document.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest('.btn');
-  if (button && !help.contains(button)) patternEl.focus({ preventScroll: true });
+  if (button && !help.contains(button) && !fileDialog.contains(button)) patternEl.focus({ preventScroll: true });
 });
 
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-tab-target]')) {
@@ -749,7 +976,7 @@ function handleMove(event: KeyboardEvent): boolean {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (help.open) return;
+  if (help.open || fileDialog.open) return;
   const target = event.target as HTMLElement;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
@@ -884,3 +1111,11 @@ view.onCursor = () => {
 };
 
 showSong();
+void restoreLastSession();
+
+// Offline use: the service worker exists only in the build.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {
+    // Without it the tracker still works online.
+  });
+}

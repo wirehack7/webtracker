@@ -8,6 +8,7 @@ export type EngineMessage =
   | { type: 'play'; loopPattern: boolean; order?: number }
   | { type: 'stop' }
   | { type: 'seek'; order: number }
+  | { type: 'mute'; muted: boolean[] }
   // Live edits to the song that is playing.
   | { type: 'pattern'; index: number; pattern: Pattern }
   | { type: 'instrument'; index: number; instrument: Instrument }
