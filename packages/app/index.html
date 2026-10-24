@@ -2,43 +2,82 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#3d5578" />
     <title>webtracker</title>
-    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header id="toolbar">
-      <h1>webtracker</h1>
-      <label class="button">
-        MOD/XM laden
-        <input id="file" type="file" accept=".mod,.xm,.stk" hidden />
-      </label>
-      <button id="play-song" type="button" disabled>Play Song</button>
-      <button id="play-pattern" type="button" disabled>Play Pattern</button>
-      <button id="stop" type="button" disabled>Stop</button>
-      <button id="prev-order" type="button" disabled title="Vorherige Position">&laquo;</button>
-      <button id="next-order" type="button" disabled title="Nächste Position">&raquo;</button>
-      <span class="status" id="status">Modul hier ablegen oder laden. Ohne Modul spielen Y–M und Q–U Noten (F1–F7 Oktave).</span>
-    </header>
+    <div class="app" id="app" data-tab="song">
+      <nav class="tabs" aria-label="Bereiche">
+        <button type="button" class="btn" data-tab-target="song">Song</button>
+        <button type="button" class="btn" data-tab-target="instruments">Instr</button>
+        <button type="button" class="btn" data-tab-target="scopes">Scopes</button>
+      </nav>
 
-    <main>
-      <aside id="instruments">
-        <dl class="song-info">
-          <dt>Titel</dt><dd id="song-title">-</dd>
-          <dt>Format</dt><dd id="song-format">-</dd>
-          <dt>Kanäle</dt><dd id="song-channels">-</dd>
-          <dt>Position</dt><dd id="song-position">-</dd>
-          <dt>Speed/BPM</dt><dd id="song-speed">-</dd>
-          <dt>Note</dt><dd id="note">---</dd>
-        </dl>
-        <ol id="instrument-list" class="instrument-list"></ol>
-      </aside>
+      <section class="top" id="toolbar">
+        <div class="panel orders" data-panel="song">
+          <h2 class="ptitle">Position</h2>
+          <ol class="list" id="orders"></ol>
+          <div class="row">
+            <button type="button" class="btn" id="order-ins">Ins</button>
+            <button type="button" class="btn" id="order-del">Del</button>
+            <button type="button" class="btn" id="order-dec">-</button>
+            <button type="button" class="btn" id="order-inc">+</button>
+          </div>
+        </div>
 
-      <section id="pattern">
-        <div id="meters" class="meters"></div>
-        <div id="pattern-view" class="pattern-view"></div>
+        <div class="panel song" data-panel="song">
+          <h2 class="ptitle">Song</h2>
+          <div class="fields">
+            <span class="label">BPM</span><output class="value" id="bpm">125</output>
+            <button type="button" class="btn sm" data-step="bpm:-1">-</button><button type="button" class="btn sm" data-step="bpm:1">+</button>
+            <span class="label">Spd</span><output class="value" id="speed">06</output>
+            <button type="button" class="btn sm" data-step="speed:-1">-</button><button type="button" class="btn sm" data-step="speed:1">+</button>
+            <span class="label">Add</span><output class="value" id="add">01</output>
+            <button type="button" class="btn sm" data-step="add:-1">-</button><button type="button" class="btn sm" data-step="add:1">+</button>
+            <span class="label">Oct</span><output class="value" id="octave">04</output>
+            <button type="button" class="btn sm" data-step="octave:-1">-</button><button type="button" class="btn sm" data-step="octave:1">+</button>
+          </div>
+        </div>
+
+        <div class="panel transport" data-panel="song">
+          <h2 class="ptitle">Transport</h2>
+          <div class="buttons">
+            <button type="button" class="btn" id="play-song">Play Song</button>
+            <button type="button" class="btn" id="play-pattern">Play Pat</button>
+            <button type="button" class="btn" id="stop">Stop</button>
+            <button type="button" class="btn" id="rec" aria-pressed="false">Rec</button>
+            <button type="button" class="btn" id="load">Load</button>
+            <input type="file" id="file" accept=".mod,.xm,.stk" hidden />
+          </div>
+        </div>
+
+        <div class="panel instruments" id="instruments" data-panel="instruments">
+          <h2 class="ptitle">Instrumente</h2>
+          <ol class="list" id="instrument-list"></ol>
+          <h2 class="ptitle">Samples</h2>
+          <ol class="list short" id="sample-list"></ol>
+        </div>
       </section>
-    </main>
+
+      <section class="panel scopes" id="scopes" data-panel="scopes" aria-label="Kanal-Scopes"></section>
+
+      <section class="panel pattern-panel">
+        <div class="pattern-head">
+          <span class="ptitle">Pattern <output class="value" id="pattern-no">00</output></span>
+          <span class="ptitle">Len <output class="value" id="pattern-len">64</output></span>
+          <button type="button" class="btn sm keys-toggle" id="keys-toggle" aria-pressed="false">Keys</button>
+        </div>
+        <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern-Editor"></div>
+      </section>
+
+      <section class="piano" id="piano" aria-label="Klaviatur"></section>
+
+      <footer class="statusbar">
+        <span id="status">Taste drücken oder Klaviatur antippen, dann startet Audio.</span>
+        <span class="brand">webtracker</span>
+      </footer>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
