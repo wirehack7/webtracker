@@ -48,7 +48,7 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | --- | --- |
 | Leertaste | Stop, sonst Edit-Modus (Rec) an/aus |
 | Enter / Shift+Enter | Song / Pattern abspielen |
-| Z–M, Q–U | Noten (nach physischer Taste), F1–F7 Oktave, 1 oder ` Key-Off |
+| Z–M, Q–U | Noten (nach physischer Taste), F1–F7 Oktave (auch Numpad / und * oder Strg+↑/↓), 1 oder ` Key-Off |
 | 0–9, A–F | Instrument, Volume, Effekt und Parameter im Edit-Modus |
 | Shift+Pfeile, Maus ziehen | Block markieren; Strg+C/X/V kopieren, ausschneiden, einfügen |
 | Alt+↑/↓ | Transponieren (mit Shift um eine Oktave) |

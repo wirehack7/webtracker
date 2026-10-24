@@ -21,8 +21,18 @@ describe('noteForKey', () => {
 
 describe('octaveForKey', () => {
   it('selects octaves with F1 to F7', () => {
-    expect(octaveForKey('F1')).toBe(1);
-    expect(octaveForKey('F7')).toBe(7);
-    expect(octaveForKey('F8')).toBeNull();
+    expect(octaveForKey('F1', 4)).toBe(1);
+    expect(octaveForKey('F7', 4)).toBe(7);
+    expect(octaveForKey('F8', 4)).toBeNull();
+  });
+
+  it('steps with Numpad / and * and Ctrl+Up/Down, within 0 to 7', () => {
+    expect(octaveForKey('NumpadDivide', 4)).toBe(3);
+    expect(octaveForKey('NumpadMultiply', 4)).toBe(5);
+    expect(octaveForKey('NumpadMultiply', 7)).toBe(7);
+    expect(octaveForKey('ArrowDown', 0, true)).toBe(0);
+    expect(octaveForKey('ArrowUp', 4, true)).toBe(5);
+    expect(octaveForKey('ArrowUp', 4)).toBeNull();
+    expect(octaveForKey('F2', 4, true)).toBeNull();
   });
 });

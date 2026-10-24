@@ -1008,6 +1008,12 @@ window.addEventListener('keydown', (event) => {
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
   const inPattern = app.dataset.view === 'pattern';
+  const ctrlOctave = event.ctrlKey && !event.altKey && !event.shiftKey ? octaveForKey(event.code, settings.octave, true) : null;
+  if (ctrlOctave !== null) {
+    event.preventDefault();
+    setOctave(ctrlOctave);
+    return;
+  }
   if (event.ctrlKey || event.metaKey) {
     // Outside the pattern only undo, redo, save and load apply.
     if (!inPattern && !['KeyZ', 'KeyY', 'KeyS', 'KeyO'].includes(event.code)) return;
@@ -1033,7 +1039,7 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.repeat) return;
 
-  const newOctave = octaveForKey(event.code);
+  const newOctave = octaveForKey(event.code, settings.octave);
   if (newOctave !== null) {
     event.preventDefault();
     setOctave(newOctave);
@@ -1103,7 +1109,7 @@ window.addEventListener('keydown', (event) => {
 /** Outside the pattern editor the keys only play: notes, octave, Space and Enter. */
 function previewKeys(event: KeyboardEvent): void {
   if (event.altKey || event.repeat) return;
-  const newOctave = octaveForKey(event.code);
+  const newOctave = octaveForKey(event.code, settings.octave);
   if (newOctave !== null) {
     event.preventDefault();
     setOctave(newOctave);
