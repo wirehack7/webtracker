@@ -47,6 +47,21 @@ export interface PlayerState {
   loops: number;
 }
 
+/** What one sounding voice is doing, for play markers in the editors. */
+export interface VoiceState {
+  /** Song channel, or -1 for the preview voice. */
+  channel: number;
+  /** 1-based instrument and 0-based sample within it. */
+  instrument: number;
+  sample: number;
+  note: number;
+  /** Playback position in sample frames. */
+  pos: number;
+  /** Current envelope positions in ticks. */
+  volEnvTick: number;
+  panEnvTick: number;
+}
+
 // Envelopes are only evaluated when enabled, which the loaders only allow with at least one point.
 function envelopeValue(env: Envelope, tick: number): number {
   const pts = env.points;
@@ -1003,6 +1018,28 @@ export class Player {
     ch.delayedCell = null;
     this.triggerNote(ch, note, null);
     if (ch.instrument && ch.active) this.resetInstrumentState(ch, ch.instrument);
+  }
+
+  /** Every voice that is sounding right now, song channels first, then the preview voice. */
+  voices(): VoiceState[] {
+    const out: VoiceState[] = [];
+    const add = (ch: Channel, channel: number) => {
+      if (!ch.active || !ch.instrument || !ch.sample) return;
+      // Released and faded out: the voice still runs but is silent.
+      if (!ch.keyOn && (ch.volume === 0 || ch.fadeout === 0)) return;
+      out.push({
+        channel,
+        instrument: ch.instrumentNumber,
+        sample: ch.instrument.samples.indexOf(ch.sample),
+        note: ch.note,
+        pos: ch.pos,
+        volEnvTick: ch.volEnvTick,
+        panEnvTick: ch.panEnvTick,
+      });
+    };
+    if (this.playing) this.channels.forEach(add);
+    add(this.preview, -1);
+    return out;
   }
 
   /** Releases the preview note: envelopes go past sustain and fade out. */

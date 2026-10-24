@@ -1,4 +1,4 @@
-import type { Instrument, Pattern, PlayerState, Song } from '@webtracker/engine';
+import type { Instrument, Pattern, PlayerState, Song, VoiceState } from '@webtracker/engine';
 
 /** Messages from the main thread to the engine worklet. */
 export type EngineMessage =
@@ -20,4 +20,6 @@ export type WorkletMessage =
   | { type: 'row'; state: PlayerState; levels: number[] }
   | { type: 'state'; state: PlayerState }
   // Recent output of each channel, oldest frame first, for the scopes.
-  | { type: 'scopes'; channels: Float32Array[] };
+  | { type: 'scopes'; channels: Float32Array[] }
+  // Sounding voices, for play markers in the sample and envelope editors.
+  | { type: 'voices'; voices: VoiceState[] };

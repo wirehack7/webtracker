@@ -1,7 +1,7 @@
-import { noteName, type Envelope, type Instrument } from '@webtracker/engine';
+import { noteName, type Envelope, type Instrument, type VoiceState } from '@webtracker/engine';
 import type { SongEditor } from '../editor/song-editor.ts';
 import { hex } from './pattern-view.ts';
-import { button, cssColor, el, fitCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
+import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
 
 export interface InstrumentEditorHost {
   editor: SongEditor;
@@ -19,7 +19,9 @@ const VIBRATO_TYPES = ['Sine', 'Square', 'RampDn', 'RampUp'];
 /** One envelope: a canvas with draggable points and its On/Sus/Loop controls. */
 class EnvelopeView {
   readonly root = el('div', 'envelope');
-  private readonly canvas = el('canvas', 'env');
+  private readonly layers = layeredCanvas('env');
+  private readonly canvas = this.layers.base;
+  private ticks: number[] = [];
   private readonly on: HTMLButtonElement;
   private readonly sus: HTMLButtonElement;
   private readonly loop: HTMLButtonElement;
@@ -47,9 +49,24 @@ class EnvelopeView {
       button('DelPt', () => this.deletePoint(this.selected), 'Delete the selected point (or right-click it)'),
       this.info,
     );
-    this.root.append(row, this.canvas);
+    this.root.append(row, this.layers.root);
     this.bind();
-    new ResizeObserver(() => this.draw()).observe(this.canvas);
+    new ResizeObserver(() => {
+      this.draw();
+      this.drawTicks();
+    }).observe(this.canvas);
+  }
+
+  /** Marks the envelope positions of the voices playing this instrument. */
+  showTicks(ticks: number[]): void {
+    this.ticks = ticks;
+    this.drawTicks();
+  }
+
+  private drawTicks(): void {
+    const env = this.envelope();
+    const span = env ? this.span(env) : 1;
+    drawMarkers(this.layers.overlay, env?.enabled ? this.ticks.map((t) => t / span) : []);
   }
 
   private envelope(): Envelope | null {
@@ -167,6 +184,7 @@ class EnvelopeView {
     const p = env?.points[this.selected];
     this.info.textContent = p ? `Pt ${this.selected + 1}/${n}  X ${p.x}  Y ${hex(p.y)}` : 'Click to add points';
     this.draw();
+    this.drawTicks();
   }
 
   private draw(): void {
@@ -257,6 +275,16 @@ export class InstrumentEditor {
     );
     this.keymap.append(...this.keys);
     this.root.append(top, ...this.envelopes.map((e) => e.root), keyRow, this.keymap);
+  }
+
+  /** Play markers for every voice on this instrument: envelope positions and the keys held. */
+  showVoices(voices: VoiceState[]): void {
+    const ins = this.host.instrumentIndex() + 1;
+    const mine = voices.filter((v) => v.instrument === ins);
+    this.envelopes[0]!.showTicks(mine.map((v) => v.volEnvTick));
+    this.envelopes[1]!.showTicks(mine.map((v) => v.panEnvTick));
+    const notes = new Set(mine.map((v) => v.note - 1));
+    this.keys.forEach((key, k) => key.classList.toggle('playing', notes.has(k)));
   }
 
   private edit(label: string, fn: (ins: Instrument) => void): void {
