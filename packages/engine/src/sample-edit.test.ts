@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   copyRange,
+  crossfadeLoop,
   cropRange,
   deleteRange,
   emptySample,
   fadeIn,
   fadeOut,
+  filterRange,
   generateWave,
   insertFrames,
+  invertRange,
   normalizeRange,
+  quantize8,
+  rateForTuning,
+  removeDcRange,
   resample,
   reverseRange,
+  swapBytesRange,
+  toggleSignRange,
   tuningForRate,
 } from './sample-edit.ts';
 import { LoopType, type Sample } from './song.ts';
@@ -102,5 +110,57 @@ describe('generateWave', () => {
 
   it('makes the same noise for the same seed', () => {
     expect(Array.from(generateWave('noise', 64, 7))).toEqual(Array.from(generateWave('noise', 64, 7)));
+  });
+});
+
+describe('sample tools', () => {
+  const all = (s: Sample) => ({ start: 0, end: s.data.length });
+
+  it('inverts, flips the sign bit and swaps bytes', () => {
+    const s = emptySample();
+    s.data = Float32Array.from([0.5, -0.25, 0]);
+    invertRange(s, all(s));
+    expect(Array.from(s.data)).toEqual([-0.5, 0.25, -0]);
+    // An unsigned 8-bit 0x80 (silence) read as signed is -128; flipping the sign bit gives 0.
+    s.data = Float32Array.from([-1, 0]);
+    toggleSignRange(s, all(s));
+    expect(Array.from(s.data)).toEqual([0, -1]);
+    s.data = Float32Array.from([0x0100 / 32768]);
+    swapBytesRange(s, all(s));
+    expect(s.data[0]).toBeCloseTo(1 / 32768, 8);
+  });
+
+  it('removes the DC offset and rounds to 8 bits', () => {
+    const s = emptySample();
+    s.data = Float32Array.from([0.6, 0.4, 0.6, 0.4]);
+    removeDcRange(s, all(s));
+    expect(s.data.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 6);
+    s.data = Float32Array.from([0.1234]);
+    quantize8(s);
+    expect(s.data[0]! * 128).toBe(16);
+  });
+
+  it('low-pass smooths and high-pass removes a constant', () => {
+    const s = emptySample();
+    s.data = Float32Array.from({ length: 64 }, (_, i) => (i % 2 ? 1 : -1));
+    filterRange(s, all(s), 'lowpass', 500, 8363);
+    expect(Math.max(...s.data.subarray(32).map(Math.abs))).toBeLessThan(0.5);
+    s.data = new Float32Array(256).fill(0.5);
+    filterRange(s, all(s), 'highpass', 500, 8363);
+    expect(Math.abs(s.data[255]!)).toBeLessThan(0.01);
+  });
+
+  it('crossfades the loop end into the frames before the loop start', () => {
+    const s = ramp(100, [40, 40]);
+    expect(crossfadeLoop(s, 10)).toBe(10);
+    // The last loop frame now leads smoothly into the loop start.
+    expect(s.data[79]).toBeCloseTo(s.data[39]!, 1);
+    expect(crossfadeLoop(ramp(10), 4)).toBe(0);
+  });
+
+  it('works out the C-4 rate from the tuning', () => {
+    expect(rateForTuning(0, 0)).toBeCloseTo(8363);
+    const t = tuningForRate(44100);
+    expect(rateForTuning(t.relativeNote, t.finetune)).toBeCloseTo(44100, -2);
   });
 });

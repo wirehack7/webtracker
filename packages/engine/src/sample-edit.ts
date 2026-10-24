@@ -140,6 +140,83 @@ export function fadeOut(sample: Sample, range: Range): void {
   mapRange(sample, range, (v, i, n) => v * (n > 1 ? 1 - i / (n - 1) : 0));
 }
 
+/** Turns the waveform upside down (phase invert). */
+export function invertRange(sample: Sample, range: Range): void {
+  mapRange(sample, range, (v) => -v);
+}
+
+/**
+ * Flips the sign bit as if the frames were 8-bit: fixes samples that were
+ * imported as signed when they were unsigned, or the other way round.
+ */
+export function toggleSignRange(sample: Sample, range: Range): void {
+  mapRange(sample, range, (v) => {
+    const byte = Math.max(-128, Math.min(127, Math.round(v * 128)));
+    return ((byte ^ 0x80) << 24 >> 24) / 128;
+  });
+}
+
+/** Swaps the two bytes of each 16-bit frame: fixes samples imported with the wrong byte order. */
+export function swapBytesRange(sample: Sample, range: Range): void {
+  mapRange(sample, range, (v) => {
+    const word = Math.max(-32768, Math.min(32767, Math.round(v * 32768))) & 0xffff;
+    return ((((word & 0xff) << 8) | (word >> 8)) << 16 >> 16) / 32768;
+  });
+}
+
+/** Removes the DC offset: shifts the range so its average is zero. */
+export function removeDcRange(sample: Sample, range: Range): void {
+  const r = clampRange(sample, range);
+  if (r.end <= r.start) return;
+  let sum = 0;
+  for (let i = r.start; i < r.end; i++) sum += sample.data[i]!;
+  const mean = sum / (r.end - r.start);
+  mapRange(sample, r, (v) => clip(v - mean));
+}
+
+/** Rounds every frame to 8 bits, so the sample is saved (and sounds) as 8-bit. */
+export function quantize8(sample: Sample): void {
+  mapRange(sample, { start: 0, end: sample.data.length }, (v) => Math.max(-128, Math.min(127, Math.round(v * 128))) / 128);
+}
+
+/**
+ * One-pole low-pass or high-pass filter over the range. `cutoff` is in Hz
+ * at the given sample rate.
+ */
+export function filterRange(sample: Sample, range: Range, kind: 'lowpass' | 'highpass', cutoff: number, rate: number): void {
+  const r = clampRange(sample, range);
+  const k = 1 - Math.exp((-2 * Math.PI * Math.min(cutoff, rate / 2)) / rate);
+  let low = sample.data[r.start] ?? 0;
+  for (let i = r.start; i < r.end; i++) {
+    const v = sample.data[i]!;
+    low += (v - low) * k;
+    sample.data[i] = kind === 'lowpass' ? low : clip(v - low);
+  }
+}
+
+/**
+ * Smooths the loop seam: the last `frames` frames of the loop are faded
+ * into the frames just before the loop start, so the jump back is seamless.
+ * Returns how many frames were blended (0 when the loop leaves no room).
+ */
+export function crossfadeLoop(sample: Sample, frames: number): number {
+  if (sample.loopType === LoopType.None || sample.loopLength <= 0) return 0;
+  const start = sample.loopStart;
+  const end = start + sample.loopLength;
+  const n = Math.floor(Math.min(frames, start, sample.loopLength / 2));
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / (n + 1);
+    const at = end - n + i;
+    sample.data[at] = sample.data[at]! * (1 - t) + sample.data[start - n + i]! * t;
+  }
+  return n;
+}
+
+/** The rate a sample plays at on C-4, from its relative note and finetune. */
+export function rateForTuning(relativeNote: number, finetune: number): number {
+  return 8363 * Math.pow(2, (relativeNote + finetune / 128) / 12);
+}
+
 /** Relative note and finetune that make a sample recorded at `rate` Hz play at pitch on C-4. */
 export function tuningForRate(rate: number): { relativeNote: number; finetune: number } {
   const semitones = 12 * Math.log2(rate / 8363);

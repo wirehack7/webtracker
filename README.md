@@ -1,67 +1,69 @@
 # webtracker
 
-Ein Chiptune-Tracker für den Browser, für die Demoscene. Klassische Tracker-Oberfläche, responsive für Desktop, Tablet und Handy, mit XM als Hausformat.
+A chiptune tracker for the browser, made for the demoscene. Classic tracker interface, responsive on desktop, tablet and phone, with XM as its native format.
 
-**Direkt im Browser starten: https://wirehack7.github.io/webtracker/**
+**Start it right in your browser: https://wirehack7.github.io/webtracker/**
 
-Die Seite lässt sich als App installieren und läuft danach auch offline. Songs werden laufend im Browser gesichert, die letzten Versionen holt der Save-Dialog zurück.
+The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions and keeps a library of named songs. Share puts the whole song, compressed, into a link that opens it again, with no server involved.
 
-## Entwicklung
+## Development
 
-Voraussetzungen: Node 22 und pnpm 10 (`corepack enable` reicht).
+Requirements: Node 22 and pnpm 10 (`corepack enable` is enough).
 
 ```sh
 pnpm install
-pnpm dev        # Dev-Server
+pnpm dev        # dev server
 pnpm test       # Vitest
-pnpm typecheck  # TypeScript für alle Pakete
-pnpm build      # Produktions-Build nach packages/app/dist
+pnpm typecheck  # TypeScript for all packages
+pnpm build      # production build into packages/app/dist
 ```
 
-Module offline rendern (gleicher Replayer wie im Browser, Ausgabe als WAV):
+Render a module offline (same replayer as in the browser, output as WAV):
 
 ```sh
-pnpm --filter @webtracker/formats render song.xm out.wav [Sekunden]
+pnpm --filter @webtracker/formats render song.xm out.wav [seconds]
 ```
 
-Robustheitslauf über einen Ordner mit echten Modulen (laden und 10 s rendern, ohne NaN):
+Robustness run over a folder of real modules (load and render 10 s each, no NaN):
 
 ```sh
 MODULE_DIR=~/mods pnpm test
 ```
 
-## Aufbau
+## Layout
 
-| Paket | Inhalt |
+| Package | Contents |
 | --- | --- |
-| `packages/engine` | Song-Modell, Replayer, Mixer. Keine DOM-Abhängigkeit, läuft im AudioWorklet, im Export-Worker und unter Node. |
-| `packages/formats` | Laden von MOD (ProTracker, xCHN, Soundtracker) und XM 1.04, Speichern als XM, MOD und XI, Sample-Import (WAV, AIFF, 8SVX, XI), WAV- und ZIP-Writer für den Export. |
-| `packages/app` | Vite-App: UI, AudioWorklet und Export-Worker unter `src/audio/`, Autosave unter `src/storage/`, Service Worker für den Offline-Betrieb. |
+| `packages/engine` | Song model, replayer, mixer. No DOM dependency; runs in the AudioWorklet, in the export worker and under Node. |
+| `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker) and XM 1.04, saving XM, MOD and XI, sample import (WAV, AIFF, 8SVX, XI), WAV and ZIP writers for export. |
+| `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, service worker for offline use. |
 
-Jeder Push auf `main` wird nach GitHub Pages deployt.
+Every push to `main` is deployed to GitHub Pages.
 
-## Bedienung
+## Usage
 
-Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige Tastenliste zeigt der Button „Help“ in der App. Das Wichtigste:
+The keys follow the FT2 layout. The Help button in the app shows the full list. The essentials:
 
-| Taste | Funktion |
+| Key | Action |
 | --- | --- |
-| Leertaste | Stop, sonst Edit-Modus (Rec) an/aus |
-| Enter / Shift+Enter | Song / Pattern abspielen |
-| Z–M, Q–U | Noten (nach physischer Taste), F1–F7 Oktave (auch Numpad / und * oder Strg+↑/↓), 1 oder ` Key-Off |
-| 0–9, A–F | Instrument, Volume, Effekt und Parameter im Edit-Modus |
-| Shift+Pfeile, Maus ziehen | Block markieren; Strg+C/X/V kopieren, ausschneiden, einfügen |
-| Alt+↑/↓ | Transponieren (mit Shift um eine Oktave) |
-| Strg+Z / Strg+Y | Undo / Redo |
-| Strg+S | Als XM speichern; der Button „Save“ speichert auch als MOD und exportiert WAV (ganzer Song oder ein File pro Kanal) |
-| Klick / Rechtsklick auf ein Scope | Kanal stummschalten / solo |
-| Strg+I | Lautstärke-Spalte oder Effekt im markierten Bereich interpolieren |
-| Strg+E / Button „Edit“ | Transponieren mit Instrument-Filter, Instrumente umnummerieren, Lautstärke skalieren (Auswahl, Track, Pattern oder ganzer Song) |
-| Strg+Enter | Pattern ab der Cursor-Zeile spielen (mit Shift den Song) |
-| F9–F12 | Zu Zeile 0, ¼, ½ und ¾ des Patterns springen |
-| Shift+M / Shift+U | Kanal unter dem Cursor stumm / alle wieder an |
-| Strg+F | Song folgen an/aus |
-| Shift / Strg / Alt + F3–F5 | Track / Pattern / Auswahl ausschneiden, kopieren, einfügen (Strg+F4 und Alt+F4 gehören dem Browser: Pattern kopieren mit Strg+Shift+F4, Auswahl mit Strg+C) |
-| Alt+Q…I, Alt+A…K | Zu Kanal 1–8 bzw. 9–16 springen |
+| Space | Stop, otherwise edit mode (Rec) on/off |
+| Enter / Shift+Enter | Play song / pattern |
+| Z–M, Q–U | Notes (by physical key), F1–F7 octave (also Numpad / and * or Ctrl+↑/↓), 1 or ` key-off |
+| 0–9, A–F | Instrument, volume, effect and parameter in edit mode |
+| Shift+arrows, mouse drag | Select a block; Ctrl+C/X/V copy, cut, paste |
+| Alt+↑/↓ | Transpose (with Shift by an octave) |
+| Ctrl+Z / Ctrl+Y | Undo / redo |
+| Ctrl+S | Save as XM; the Save button also saves MOD and exports WAV (whole song or one file per channel) |
+| Click / right-click a scope | Mute / solo a channel |
+| Ctrl+I | Interpolate the volume column or effect across the selection |
+| Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song) |
+| Ctrl+Enter | Play the pattern from the cursor row (with Shift the song) |
+| F9–F12 | Jump to row 0, ¼, ½ and ¾ of the pattern |
+| Shift+M / Shift+U | Mute the cursor channel / unmute all |
+| Ctrl+F | Follow song on/off |
+| Shift / Ctrl / Alt + F3–F5 | Cut, copy, paste the track / pattern / selection (Ctrl+F4 and Alt+F4 belong to the browser: copy the pattern with Ctrl+Shift+F4, the selection with Ctrl+C) |
+| Alt+Q…I, Alt+A…K | Jump to channel 1–8 or 9–16 |
 
-Unter „Setup“ lässt sich der Klang einstellen: Resampling (Auto spielt MOD über den Amiga-500-Filter, bei dem E00/E01 das LED-Filter schalten, und XM linear interpoliert; dazu Linear, Cubic und ganz ohne Interpolation) sowie die Stereo-Breite von Mono bis 200 %. Der WAV-Export verwendet dieselben Einstellungen.
+Besides cutting, normalizing, fades and resampling, the sample editor has tools to repair and shape samples: invert the phase, swap sign and byte order (for wrongly imported raw data), remove DC offset, reduce to 8 bits, low-pass and high-pass, loop crossfade, resample to any length and Save as WAV.
+
+Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, where E00/E01 switch the LED filter, and XM with linear interpolation; also Linear, Cubic and no interpolation at all) and the stereo width from mono to 200 %. WAV export uses the same settings.
