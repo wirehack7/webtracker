@@ -42,6 +42,7 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
+import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
@@ -900,8 +901,8 @@ async function showAutosaves(): Promise<void> {
   let versions: Autosave[] = [];
   try {
     versions = await listAutosaves();
-  } catch {
-    list.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Not available in this browser.' }));
+  } catch (error) {
+    list.replaceChildren(listNote(storageProblem(error)));
     return;
   }
   const items = versions.map((v) => {
@@ -963,7 +964,16 @@ let libraryEntry: { id: number; name: string } | null = null;
 let librarySongs: LibrarySong[] = [];
 let librarySelected = -1;
 
-const listNote = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
+function listNote(text: string): HTMLLIElement {
+  const li = Object.assign(document.createElement('li'), { textContent: text });
+  li.style.whiteSpace = 'normal';
+  return li;
+}
+
+/** Why the browser storage failed, in words for the user. */
+function storageProblem(error: unknown): string {
+  return (error as Error).message === BLOCKED ? BLOCKED : 'Not available in this browser.';
+}
 
 function openSongsDialog(): void {
   libraryName.value = libraryEntry?.name ?? (song().title.trim() || 'untitled');
@@ -974,9 +984,10 @@ function openSongsDialog(): void {
 async function showLibrary(): Promise<void> {
   try {
     librarySongs = await listSongs();
-  } catch {
+  } catch (error) {
     librarySongs = [];
-    libraryList.replaceChildren(listNote('Not available in this browser.'));
+    libraryList.replaceChildren(listNote(storageProblem(error)));
+    selectLibrarySong(-1);
     return;
   }
   const items = librarySongs.map((entry, i) => {
