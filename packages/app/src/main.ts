@@ -35,7 +35,7 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
-import { listAutosaves, writeAutosave, type Autosave } from './storage/autosave.ts';
+import { applyOrigin, listAutosaves, writeAutosave, type Autosave } from './storage/autosave.ts';
 import { loadSettings, midiToNote, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -402,8 +402,19 @@ function step(key: keyof typeof limits, delta: number): void {
     status.textContent = `${channels} channels.`;
     return;
   }
+  if (key === 'octave') {
+    setOctave(clampTo(settings.octave + delta));
+    return;
+  }
   settings[key] = clampTo(settings[key] + delta);
   showValue(key, settings[key]);
+}
+
+/** The base octave for the keyboard; `scroll` brings the on-screen piano along. */
+function setOctave(octave: number, scroll = true): void {
+  settings.octave = octave;
+  showValue('octave', octave);
+  if (scroll) piano.showOctave(octave);
 }
 
 const scopes = $('#scopes');
@@ -768,7 +779,12 @@ async function autosaveNow(): Promise<void> {
   const fresh = freshVersion;
   freshVersion = false;
   try {
-    await writeAutosave(song().title, saveXm(song()), fresh);
+    const s = song();
+    await writeAutosave(s.title, saveXm(s), fresh, Date.now(), {
+      format: s.format,
+      formatName: s.formatName,
+      channelPanning: [...s.channelPanning],
+    });
   } catch {
     // Private windows and some browsers refuse IndexedDB; the tracker works without it.
   }
@@ -804,7 +820,7 @@ async function showAutosaves(): Promise<void> {
 
 function restoreAutosave(version: Autosave): void {
   try {
-    startSong(loadModule(version.bytes.slice().buffer, 'autosave.xm'));
+    startSong(applyOrigin(loadModule(version.bytes.slice().buffer, 'autosave.xm'), version.origin));
     status.textContent = `Restored ${version.title || 'untitled'} from ${new Date(version.savedAt).toLocaleString()}.`;
   } catch (error) {
     status.textContent = `Could not restore the autosave: ${(error as Error).message}`;
@@ -900,10 +916,13 @@ keysToggle.addEventListener('click', () => {
 });
 syncKeysToggle();
 
-mountPiano($('#piano'), 2, {
-  down: (semitone) => playNote(settings.octave * 12 + semitone + 1),
-  up: (semitone) => previewOff(settings.octave * 12 + semitone + 1),
+const piano = mountPiano($('#piano'), {
+  down: (note) => playNote(note),
+  up: (note) => previewOff(note),
+  // Swiping the piano also sets the octave for the computer keyboard, and back.
+  scrolled: (octave) => setOctave(octave, false),
 });
+piano.showOctave(settings.octave);
 
 // ---- Keyboard ------------------------------------------------------------
 
@@ -992,8 +1011,7 @@ window.addEventListener('keydown', (event) => {
   const ctrlOctave = event.ctrlKey && !event.altKey && !event.shiftKey ? octaveForKey(event.code, settings.octave, true) : null;
   if (ctrlOctave !== null) {
     event.preventDefault();
-    settings.octave = ctrlOctave;
-    showValue('octave', ctrlOctave);
+    setOctave(ctrlOctave);
     return;
   }
   if (event.ctrlKey || event.metaKey) {
@@ -1024,8 +1042,7 @@ window.addEventListener('keydown', (event) => {
   const newOctave = octaveForKey(event.code, settings.octave);
   if (newOctave !== null) {
     event.preventDefault();
-    settings.octave = newOctave;
-    showValue('octave', newOctave);
+    setOctave(newOctave);
     return;
   }
 
@@ -1095,8 +1112,7 @@ function previewKeys(event: KeyboardEvent): void {
   const newOctave = octaveForKey(event.code, settings.octave);
   if (newOctave !== null) {
     event.preventDefault();
-    settings.octave = newOctave;
-    showValue('octave', newOctave);
+    setOctave(newOctave);
     return;
   }
   if (event.code === 'Space') {
