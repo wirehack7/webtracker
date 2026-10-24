@@ -7,8 +7,12 @@ import {
   deleteRow,
   ensurePattern,
   insertRow,
+  interpolateBlock,
   pasteClip,
+  patternBlock,
+  remapInstrument,
   resizePattern,
+  scaleVolumeBlock,
   transposeBlock,
   writeCell,
 } from './edit.ts';
@@ -87,6 +91,69 @@ describe('transposeBlock', () => {
     expect(readCell(song, pattern, 0, 0).note).toBe(50);
     expect(readCell(song, pattern, 1, 0).note).toBe(NOTE_KEY_OFF);
     expect(readCell(song, pattern, 2, 0).note).toBe(96);
+  });
+});
+
+describe('pattern tools', () => {
+  it('transposes only the chosen instrument', () => {
+    const { song, pattern } = setup();
+    writeCell(song, pattern, 0, 0, { note: 49, instrument: 1 });
+    writeCell(song, pattern, 1, 0, { note: 49, instrument: 2 });
+    expect(transposeBlock(song, pattern, patternBlock(song, pattern), 12, 2)).toBe(1);
+    expect(readCell(song, pattern, 0, 0).note).toBe(49);
+    expect(readCell(song, pattern, 1, 0).note).toBe(61);
+  });
+
+  it('interpolates the volume column and effect parameters', () => {
+    const { song, pattern } = setup();
+    writeCell(song, pattern, 0, 0, { volume: 0x10 + 64, effect: 0x08, param: 0x00 });
+    writeCell(song, pattern, 4, 0, { volume: 0x10, effect: 0x08, param: 0x80 });
+    writeCell(song, pattern, 0, 1, { volume: 0x10 + 32 });
+    writeCell(song, pattern, 4, 1, { volume: 0xc8 });
+    const block = blockBetween(0, 0, 4, 1);
+    expect(interpolateBlock(song, pattern, block, 'volume')).toBe(3);
+    expect([1, 2, 3].map((r) => readCell(song, pattern, r, 0).volume)).toEqual([0x10 + 48, 0x10 + 32, 0x10 + 16]);
+    // Different kinds of command at the ends: channel 1 stays.
+    expect(readCell(song, pattern, 2, 1).volume).toBe(0);
+    expect(interpolateBlock(song, pattern, block, 'effect')).toBe(3);
+    expect(readCell(song, pattern, 2, 0)).toMatchObject({ effect: 0x08, param: 0x40 });
+  });
+
+  it('scales volumes from the start to the end factor', () => {
+    const { song, pattern } = setup();
+    writeCell(song, pattern, 0, 0, { volume: 0x10 + 40 });
+    writeCell(song, pattern, 2, 0, { note: 49, instrument: 1 });
+    writeCell(song, pattern, 4, 0, { effect: 0x0c, param: 0x40 });
+    const sampleVolume = song.instruments[0]!.samples[0]!.volume;
+    expect(scaleVolumeBlock(song, pattern, blockBetween(0, 0, 4, 0), 100, 50)).toBe(3);
+    expect(readCell(song, pattern, 0, 0).volume).toBe(0x10 + 40);
+    expect(readCell(song, pattern, 2, 0).volume).toBe(0x10 + Math.round(sampleVolume * 0.75));
+    expect(readCell(song, pattern, 4, 0).param).toBe(32);
+  });
+
+  it('renames instrument numbers', () => {
+    const { song, pattern } = setup();
+    writeCell(song, pattern, 0, 0, { note: 49, instrument: 3 });
+    writeCell(song, pattern, 1, 1, { note: 49, instrument: 4 });
+    expect(remapInstrument(song, pattern, patternBlock(song, pattern), 3, 7)).toBe(1);
+    expect(readCell(song, pattern, 0, 0).instrument).toBe(7);
+    expect(readCell(song, pattern, 1, 1).instrument).toBe(4);
+  });
+});
+
+describe('Player.reset', () => {
+  it('starts at a given row', () => {
+    const { song } = setup();
+    const player = new Player(song, 44100);
+    const rows: number[] = [];
+    player.onRow = (state) => rows.push(state.row);
+    player.reset(0, 20);
+    player.playing = true;
+    const buf = new Float32Array(2048);
+    player.process(buf, new Float32Array(2048));
+    expect(rows[0]).toBe(20);
+    player.reset(0, 999);
+    expect(player.getState().row).toBe(63);
   });
 });
 

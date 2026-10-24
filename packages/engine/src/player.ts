@@ -254,12 +254,14 @@ export class Player {
     this.reset();
   }
 
-  reset(order = 0): void {
+  /** Starts over at `order`, optionally at `row` of that position's pattern. */
+  reset(order = 0, row = 0): void {
     const song = this.song;
     this.channels = song.channelPanning.map((p) => new Channel(p));
     if (this.scopeRings.length) this.enableScopes(this.scopeRings[0]!.length);
     this.order = Math.min(order, song.orders.length - 1);
-    this.row = 0;
+    const rows = song.patterns[song.orders[this.order] ?? 0]?.rows ?? 64;
+    this.row = Math.max(0, Math.min(row, rows - 1));
     this.tick = 0;
     this.speed = song.initialSpeed;
     this.tempo = song.initialTempo;

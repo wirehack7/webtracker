@@ -23,6 +23,16 @@ describe('SongEditor', () => {
     expect(readCell(editor.song, editor.song.patterns[0]!, 2, 1).note).toBe(49);
   });
 
+  it('edits several patterns as one undo step', () => {
+    const { editor } = setup();
+    editor.editPatterns([0, 1, 1], 'song edit', (p) => writeCell(editor.song, p, 0, 0, { note: 49 }));
+    expect(readCell(editor.song, editor.song.patterns[1]!, 0, 0).note).toBe(49);
+    expect(editor.undo()).toBe('song edit');
+    expect(readCell(editor.song, editor.song.patterns[0]!, 0, 0).note).toBe(0);
+    expect(readCell(editor.song, editor.song.patterns[1]!, 0, 0).note).toBe(0);
+    expect(editor.undo()).toBeNull();
+  });
+
   it('does not record edits that change nothing', () => {
     const { editor, sent } = setup();
     editor.editPattern(0, 'nothing', () => {});

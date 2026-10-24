@@ -55,5 +55,11 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | Strg+Z / Strg+Y | Undo / Redo |
 | Strg+S | Als XM speichern; der Button „Save“ speichert auch als MOD und exportiert WAV (ganzer Song oder ein File pro Kanal) |
 | Klick / Rechtsklick auf ein Scope | Kanal stummschalten / solo |
+| Strg+I | Lautstärke-Spalte oder Effekt im markierten Bereich interpolieren |
+| Strg+E / Button „Edit“ | Transponieren mit Instrument-Filter, Instrumente umnummerieren, Lautstärke skalieren (Auswahl, Track, Pattern oder ganzer Song) |
+| Strg+Enter | Pattern ab der Cursor-Zeile spielen (mit Shift den Song) |
+| F9–F12 | Zu Zeile 0, ¼, ½ und ¾ des Patterns springen |
+| Shift+M / Shift+U | Kanal unter dem Cursor stumm / alle wieder an |
+| Strg+F | Song folgen an/aus |
 
 Unter „Setup“ lässt sich der Klang einstellen: Resampling (Auto spielt MOD über den Amiga-500-Filter, bei dem E00/E01 das LED-Filter schalten, und XM linear interpoliert; dazu Linear, Cubic und ganz ohne Interpolation) sowie die Stereo-Breite von Mono bis 200 %. Der WAV-Export verwendet dieselben Einstellungen.
