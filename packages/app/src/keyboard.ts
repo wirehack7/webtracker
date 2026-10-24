@@ -23,6 +23,18 @@ export function noteForKey(code: string, octave: number): number | null {
   return note >= 1 && note <= 96 ? note : null;
 }
 
-export function octaveForKey(code: string): number | null {
+// Relative octave keys for keyboards where the F keys are media keys.
+const OCTAVE_STEPS: Record<string, number> = { NumpadDivide: -1, NumpadMultiply: 1 };
+const CTRL_OCTAVE_STEPS: Record<string, number> = { ArrowDown: -1, ArrowUp: 1 };
+const MAX_OCTAVE = 7;
+
+/** The octave a key selects (F1–F7, Numpad / and *, Ctrl+Up/Down), or null. */
+export function octaveForKey(code: string, current: number, ctrl = false): number | null {
+  if (ctrl) {
+    const step = CTRL_OCTAVE_STEPS[code];
+    return step === undefined ? null : Math.max(0, Math.min(MAX_OCTAVE, current + step));
+  }
+  const step = OCTAVE_STEPS[code];
+  if (step !== undefined) return Math.max(0, Math.min(MAX_OCTAVE, current + step));
   return OCTAVE_KEYS[code] ?? null;
 }
