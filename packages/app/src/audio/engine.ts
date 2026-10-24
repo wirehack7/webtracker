@@ -11,6 +11,16 @@ export class EngineNode {
     private readonly node: AudioWorkletNode,
   ) {
     node.port.onmessage = (event: MessageEvent<WorkletMessage>) => this.onMessage?.(event.data);
+    // Phones suspend or interrupt audio when the browser goes to the background.
+    // Resume on return, or on the next tap where the browser wants a gesture.
+    const wake = () => {
+      if (document.visibilityState === 'visible' && context.state !== 'running' && context.state !== 'closed') {
+        void context.resume().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', wake);
+    context.addEventListener('statechange', wake);
+    for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, wake, { capture: true });
   }
 
   /** Must be called from a user gesture, browsers block audio otherwise. */
