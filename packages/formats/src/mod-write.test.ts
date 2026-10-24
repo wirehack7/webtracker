@@ -44,6 +44,14 @@ describe('saveMod', () => {
     expect(readCell(back, back.patterns[0]!, 31, 0)).toMatchObject({ effect: 0x0d, param: 0 });
   });
 
+  it('writes the ProTracker conventions for empty slots and restart', () => {
+    const { bytes } = saveMod(createSong(4));
+    // Slot 31 is empty: repeat length one word, like ProTracker writes it.
+    expect((bytes[20 + 30 * 30 + 28]! << 8) | bytes[20 + 30 * 30 + 29]!).toBe(1);
+    expect(bytes[951]).toBe(127);
+    expect(loadMod(bytes.slice().buffer).restartPosition).toBe(0);
+  });
+
   it('shifts notes by the relative note so the pitch stays', () => {
     const song = createSong(4);
     song.instruments[0]!.samples[0]!.relativeNote = 12;
