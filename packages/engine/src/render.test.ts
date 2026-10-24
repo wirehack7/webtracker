@@ -58,9 +58,39 @@ describe('mixer options', () => {
   it('holds each frame without interpolation', () => {
     const s = song();
     const smooth = renderSong(s, { sampleRate: RATE, maxSeconds: 0.2 });
-    const raw = renderSong(s, { sampleRate: RATE, maxSeconds: 0.2, interpolation: false });
+    const raw = renderSong(s, { sampleRate: RATE, maxSeconds: 0.2, resampler: 'none' });
     // Without interpolation the output only has as many distinct levels as the sample has.
     const levels = (a: Float32Array) => new Set(Array.from(a.subarray(2000, 4000), (v) => v.toFixed(5))).size;
     expect(levels(raw.left)).toBeLessThan(levels(smooth.left));
+  });
+
+  it('runs the Amiga filters, with E00 switching the LED filter in', () => {
+    // Treble energy: the sum of squared differences between neighbouring frames.
+    const treble = (a: Float32Array) => a.subarray(2000, 6000).reduce((t, v, i, b) => t + (i ? (v - b[i - 1]!) ** 2 : 0), 0);
+    const raw = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'none' });
+    const amiga = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'amiga' });
+    const led = song();
+    writeCell(led, led.patterns[0]!, 0, 1, { effect: 0x0e, param: 0x00 });
+    led.format = 'mod';
+    const ledOn = renderSong(led, { sampleRate: 44100, maxSeconds: 0.2 });
+    expect(treble(amiga.left)).toBeLessThan(treble(raw.left) * 0.7);
+    expect(treble(ledOn.left)).toBeLessThan(treble(amiga.left) * 0.7);
+  });
+
+  it('interpolates cubic close to linear on smooth samples', () => {
+    const linear = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'linear' });
+    const cubic = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'cubic' });
+    const diff = cubic.left.reduce((m, v, i) => Math.max(m, Math.abs(v - linear.left[i]!)), 0);
+    expect(peak(cubic.left)).toBeGreaterThan(0.05);
+    expect(diff).toBeLessThan(peak(linear.left) * 0.2);
+  });
+
+  it('narrows and widens the stereo image', () => {
+    const mono = renderSong(song(), { sampleRate: RATE, maxSeconds: 0.5, stereoSeparation: 0 });
+    for (let i = 0; i < mono.left.length; i += 101) expect(mono.left[i]).toBeCloseTo(mono.right[i]!, 6);
+    const normal = renderSong(song(), { sampleRate: RATE, maxSeconds: 0.5 });
+    const wide = renderSong(song(), { sampleRate: RATE, maxSeconds: 0.5, stereoSeparation: 150 });
+    const side = (r: { left: Float32Array; right: Float32Array }) => r.left.reduce((t, v, i) => t + Math.abs(v - r.right[i]!), 0);
+    expect(side(wide)).toBeGreaterThan(side(normal) * 1.3);
   });
 });

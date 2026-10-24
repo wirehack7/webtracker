@@ -1,4 +1,4 @@
-import type { Instrument, Pattern, PlayerState, Song, VoiceState } from '@webtracker/engine';
+import type { Instrument, Pattern, PlayerState, Resampler, Song, VoiceState } from '@webtracker/engine';
 
 /** Messages from the main thread to the engine worklet. */
 export type EngineMessage =
@@ -9,7 +9,7 @@ export type EngineMessage =
   | { type: 'stop' }
   | { type: 'seek'; order: number }
   | { type: 'mute'; muted: boolean[] }
-  | { type: 'mixer'; interpolation: boolean; volumeRamps: boolean }
+  | { type: 'mixer'; resampler: Resampler; stereoSeparation: number; volumeRamps: boolean }
   // Live edits to the song that is playing.
   | { type: 'pattern'; index: number; pattern: Pattern }
   | { type: 'instrument'; index: number; instrument: Instrument }

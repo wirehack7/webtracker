@@ -55,3 +55,5 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | Strg+Z / Strg+Y | Undo / Redo |
 | Strg+S | Als XM speichern; der Button „Save“ speichert auch als MOD und exportiert WAV (ganzer Song oder ein File pro Kanal) |
 | Klick / Rechtsklick auf ein Scope | Kanal stummschalten / solo |
+
+Unter „Setup“ lässt sich der Klang einstellen: Resampling (Auto spielt MOD über den Amiga-500-Filter, bei dem E00/E01 das LED-Filter schalten, und XM linear interpoliert; dazu Linear, Cubic und ganz ohne Interpolation) sowie die Stereo-Breite von Mono bis 200 %. Der WAV-Export verwendet dieselben Einstellungen.

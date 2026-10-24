@@ -1,4 +1,5 @@
 /** Preferences that belong to the browser, not the song, kept in localStorage. */
+import type { Resampler } from '@webtracker/engine';
 
 export const THEMES = {
   classic: 'Classic blue',
@@ -10,8 +11,10 @@ export type Theme = keyof typeof THEMES;
 
 export interface Settings {
   theme: Theme;
-  /** Linear interpolation in the mixer; off is the raw stepped sound. */
-  interpolation: boolean;
+  /** How samples are resampled; 'auto' is Amiga for MOD and linear for XM. */
+  resampler: Resampler;
+  /** Stereo width in percent, 0..200. */
+  stereoSeparation: number;
   /** Short volume ramps against clicks. */
   volumeRamps: boolean;
   /** Row highlight every n rows, and the stronger one; 0 is off. */
@@ -26,7 +29,8 @@ export interface Settings {
 
 export const DEFAULTS: Settings = {
   theme: 'classic',
-  interpolation: true,
+  resampler: 'auto',
+  stereoSeparation: 100,
   volumeRamps: true,
   beat: 4,
   bar: 16,
@@ -39,7 +43,10 @@ const KEY = 'webtracker.settings';
 
 export function loadSettings(): Settings {
   try {
-    const stored = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings>;
+    const stored = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings> & { interpolation?: boolean };
+    // Older versions only had an interpolation switch.
+    if (stored.resampler === undefined && stored.interpolation === false) stored.resampler = 'none';
+    delete stored.interpolation;
     const merged = { ...DEFAULTS, ...stored };
     if (!(merged.theme in THEMES)) merged.theme = DEFAULTS.theme;
     return merged;

@@ -33,6 +33,20 @@ const [SINE, RAMP_DOWN, SQUARE] = WAVEFORMS as [Int16Array, Int16Array, Int16Arr
 // Instrument auto-vibrato uses a different waveform order: sine, square, ramp down, ramp up.
 const AUTO_VIBRATO_WAVEFORMS: Int16Array[] = [SINE, SQUARE, RAMP_DOWN, RAMP_DOWN.map((v) => -v)];
 
+/**
+ * How sample frames are turned into output frames. 'amiga' holds each frame
+ * (no interpolation) and runs the mix through the Amiga 500 output filters:
+ * the fixed RC low-pass, and the "LED" filter that E00/E01 switch in MOD.
+ * 'auto' is 'amiga' for MOD and 'linear' for XM.
+ */
+export type Resampler = 'auto' | 'cubic' | 'linear' | 'none' | 'amiga';
+
+// A500 output stage: one-pole RC low-pass near 4.4 kHz, LED filter a
+// two-pole Butterworth-like low-pass near 3.3 kHz.
+const A500_RC_HZ = 4420;
+const LED_HZ = 3275;
+const LED_Q = 0.66;
+
 /** Length of the volume ramp applied to every gain change, in seconds. */
 const RAMP_SECONDS = 0.003;
 
@@ -97,6 +111,10 @@ class Channel {
   active = false;
   pos = 0;
   dir = 1;
+  // Band-limited step state for the Amiga resampler: the frame held last and
+  // the correction owed to the next output frame.
+  held = 0;
+  blepNext = 0;
   step = 0;
 
   // Pitch.
@@ -195,8 +213,10 @@ export class Player {
   loopPattern = false;
   /** Channels that keep playing but are not heard, by channel index. */
   muted: boolean[] = [];
-  /** Linear interpolation between sample frames; off gives the raw, aliased chip sound. */
-  interpolation = true;
+  /** See Resampler; 'none' gives the raw, aliased chip sound. */
+  resampler: Resampler = 'auto';
+  /** Stereo width in percent: 0 is mono, 100 the song's panning, 200 twice as wide. */
+  stereoSeparation = 100;
   /** Short volume ramps against clicks; off changes volume at once, like old hardware. */
   volumeRamps = true;
   /** Overall output gain applied after mixing. */
@@ -209,6 +229,11 @@ export class Player {
   private breakRow = -1;
   private loopJumpRow = -1;
   private rampSamples: number;
+  /** ProTracker E0x: the LED filter, on with E00, off with E01. */
+  ledFilter = false;
+  private rcCoef: number;
+  private filterState = new Float64Array(10);
+  private led: { b0: number; b1: number; b2: number; a1: number; a2: number };
   // Per channel output for scopes: a ring buffer each, filled from a block tap.
   private scopeRings: Float32Array[] = [];
   private scopeTaps: Float32Array[] = [];
@@ -222,7 +247,10 @@ export class Player {
     this.sampleRate = sampleRate;
     this.isMod = song.format === 'mod';
     this.rampSamples = Math.max(1, Math.round(sampleRate * RAMP_SECONDS));
-    this.masterGain = 1.0 / Math.sqrt(Math.max(4, song.channels));
+    // Four full-volume channels in phase stay just under full scale.
+    this.masterGain = 0.8 / Math.sqrt(Math.max(4, song.channels));
+    this.rcCoef = 1 - Math.exp((-2 * Math.PI * A500_RC_HZ) / sampleRate);
+    this.led = biquadLowPass(LED_HZ, LED_Q, sampleRate);
     this.reset();
   }
 
@@ -243,6 +271,14 @@ export class Player {
     this.breakRow = -1;
     this.loopJumpRow = -1;
     this.loops = 0;
+    this.ledFilter = false;
+    this.filterState.fill(0);
+  }
+
+  /** The resampler in effect, with 'auto' resolved by the song's format. */
+  get activeResampler(): Exclude<Resampler, 'auto'> {
+    if (this.resampler !== 'auto') return this.resampler;
+    return this.isMod ? 'amiga' : 'linear';
   }
 
   getState(): PlayerState {
@@ -290,11 +326,51 @@ export class Player {
     }
     if (this.playing && this.scopeTaps.length) this.pushScopes(frames);
 
+    if (this.activeResampler === 'amiga') this.amigaFilter(left, right, frames);
     const g = this.masterGain;
+    const width = Math.max(0, this.stereoSeparation) / 100;
     for (let i = 0; i < frames; i++) {
-      left[i] = softClip(left[i]! * g);
-      right[i] = softClip(right[i]! * g);
+      let l = left[i]!;
+      let r = right[i]!;
+      if (width !== 1) {
+        const mid = (l + r) / 2;
+        const side = ((l - r) / 2) * width;
+        l = mid + side;
+        r = mid - side;
+      }
+      left[i] = softClip(l * g);
+      right[i] = softClip(r * g);
     }
+  }
+
+  private amigaFilter(left: Float32Array, right: Float32Array, frames: number): void {
+    const st = this.filterState;
+    const k = this.rcCoef;
+    const { b0, b1, b2, a1, a2 } = this.led;
+    const led = this.ledFilter;
+    const run = (buf: Float32Array, o: number) => {
+      let rc = st[o]!, x1 = st[o + 1]!, x2 = st[o + 2]!, y1 = st[o + 3]!, y2 = st[o + 4]!;
+      for (let i = 0; i < frames; i++) {
+        rc += (buf[i]! - rc) * k;
+        let v = rc;
+        if (led) {
+          const y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+          x2 = x1;
+          x1 = v;
+          y2 = y1;
+          y1 = y;
+          v = y;
+        } else {
+          // Keep the LED stage primed so switching it on does not click.
+          x2 = x1;
+          x1 = y2 = y1 = v;
+        }
+        buf[i] = v;
+      }
+      st[o] = rc; st[o + 1] = x1; st[o + 2] = x2; st[o + 3] = y1; st[o + 4] = y2;
+    };
+    run(left, 0);
+    run(right, 5);
   }
 
   // ---------------------------------------------------------------- sequencing
@@ -655,6 +731,9 @@ export class Player {
 
   private extendedTick0(ch: Channel, x: number, y: number, note: number): void {
     switch (x) {
+      case 0x0:
+        if (this.isMod) this.ledFilter = (y & 1) === 0;
+        break;
       case 0x1:
         if (y || this.isMod) ch.fineUpMem = y;
         ch.period = this.clampPeriod(ch.period - this.slideUnits(ch.fineUpMem));
@@ -965,7 +1044,12 @@ export class Player {
     let gainL = ch.gainL;
     let gainR = ch.gainR;
     const step = ch.step;
-    const smooth = this.interpolation;
+    const mode = this.activeResampler;
+    const smooth = mode === 'linear';
+    const cubic = mode === 'cubic';
+    const blep = mode === 'amiga';
+    let held = ch.held;
+    let blepNext = ch.blepNext;
 
     for (let i = offset, end = offset + count; i < end; i++) {
       const idx = pos | 0;
@@ -974,7 +1058,30 @@ export class Player {
       let nextIdx = idx + 1;
       if (looped && nextIdx >= loopEnd) nextIdx = pingPong ? idx : loopStart;
       const b = nextIdx < len ? data[nextIdx]! : 0;
-      const s = smooth ? a + (b - a) * frac : a;
+      let s = smooth ? a + (b - a) * frac : a;
+      if (cubic) {
+        // Catmull-Rom through the frames around the read position.
+        const prevIdx = Math.max(0, idx - 1);
+        let next2 = nextIdx + 1;
+        if (looped && next2 >= loopEnd) next2 = pingPong ? nextIdx : loopStart + (next2 - loopEnd);
+        const p0 = data[prevIdx]!;
+        const p3 = next2 < len ? data[next2]! : 0;
+        const t = frac;
+        s = a + 0.5 * t * (b - p0 + t * (2 * p0 - 5 * a + 4 * b - p3 + t * (3 * (a - b) + p3 - p0)));
+      }
+      if (blep) {
+        // Paula holds each frame; a polyBLEP smooths the steps so they do not
+        // alias back below the output Nyquist frequency.
+        s += blepNext;
+        blepNext = 0;
+        if (a !== held) {
+          const delta = a - held;
+          const d = Math.min(1, frac / step);
+          s -= (delta * (1 - d) * (1 - d)) / 2;
+          blepNext = (delta * d * d) / 2;
+          held = a;
+        }
+      }
 
       if (ch.rampLeft > 0) {
         gainL += ch.rampL;
@@ -1013,6 +1120,8 @@ export class Player {
 
     ch.pos = pos;
     ch.dir = dir;
+    ch.held = held;
+    ch.blepNext = blepNext;
     ch.gainL = gainL;
     ch.gainR = gainR;
   }
@@ -1114,6 +1223,21 @@ function multiRetrigVolume(volume: number, x: number): number {
     case 0xf: return Math.min(64, volume * 2);
     default: return volume;
   }
+}
+
+/** RBJ cookbook low-pass coefficients, normalised by a0. */
+function biquadLowPass(hz: number, q: number, rate: number) {
+  const w = (2 * Math.PI * Math.min(hz, rate * 0.45)) / rate;
+  const alpha = Math.sin(w) / (2 * q);
+  const cos = Math.cos(w);
+  const a0 = 1 + alpha;
+  return {
+    b0: (1 - cos) / 2 / a0,
+    b1: (1 - cos) / a0,
+    b2: (1 - cos) / 2 / a0,
+    a1: (-2 * cos) / a0,
+    a2: (1 - alpha) / a0,
+  };
 }
 
 function softClip(x: number): number {

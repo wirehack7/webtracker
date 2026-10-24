@@ -1,4 +1,4 @@
-import { Player } from '@webtracker/engine';
+import { Player, type Resampler } from '@webtracker/engine';
 import type { EngineMessage, WorkletMessage } from './messages.ts';
 
 /** Frames per scope snapshot, and snapshots per second. */
@@ -12,7 +12,7 @@ class EngineProcessor extends AudioWorkletProcessor {
   private framesToScopes = 0;
   /** Kept here so a reloaded song keeps the muted channels. */
   private muted: boolean[] = [];
-  private mixer = { interpolation: true, volumeRamps: true };
+  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean } = { resampler: 'auto', stereoSeparation: 100, volumeRamps: true };
   private framesToVoices = 0;
   /** Whether the last 'voices' message listed any, so silence is sent once. */
   private hadVoices = false;
@@ -48,7 +48,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (this.player) this.player.muted = this.muted;
         break;
       case 'mixer':
-        this.mixer = { interpolation: message.interpolation, volumeRamps: message.volumeRamps };
+        this.mixer = { resampler: message.resampler, stereoSeparation: message.stereoSeparation, volumeRamps: message.volumeRamps };
         if (this.player) Object.assign(this.player, this.mixer);
         break;
       case 'play':
