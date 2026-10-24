@@ -8,17 +8,23 @@ import {
   deleteRow,
   emptySample,
   insertRow,
+  interpolateBlock,
   MAX_CHANNELS,
   MAX_PATTERNS,
   NOTE_KEY_OFF,
   noteName,
   pasteClip,
+  patternBlock,
   readCell,
+  remapInstrument,
   resizePattern,
+  scaleVolumeBlock,
   transposeBlock,
   writeCell,
+  type Block,
   type Cell,
   type Clip,
+  type Pattern,
   type PlayerState,
   type Resampler,
   type Song,
@@ -59,6 +65,8 @@ let currentOrder = 0;
 let clipboard: Clip | null = null;
 /** Muted channels, by index; they keep playing silently. */
 let muted: boolean[] = [];
+/** Ctrl+F: whether the pattern view rides along with playback. */
+let followSong = true;
 
 // ---- Audio ---------------------------------------------------------------
 
@@ -201,6 +209,50 @@ function transpose(semitones: number): void {
   editor.editPattern(view.patternIndex, 'transpose', (p) => {
     transposeBlock(song(), p, block, semitones);
   });
+}
+
+/** Ctrl+I: interpolates the volume column or the effect under the cursor across the selection. */
+function interpolateSelection(): void {
+  const block = view.selection;
+  if (!block || block.row1 - block.row0 < 2) {
+    status.textContent = 'Select at least three rows to interpolate.';
+    return;
+  }
+  const column = view.column >= Column.Effect ? 'effect' : 'volume';
+  let changed = 0;
+  editor.editPattern(view.patternIndex, 'interpolate', (p) => {
+    changed = interpolateBlock(song(), p, block, column);
+  });
+  status.textContent = changed
+    ? `Interpolated ${changed} ${column === 'effect' ? 'effect values' : 'volumes'}.`
+    : `Nothing to interpolate: the first and last row need the same kind of ${column === 'effect' ? 'effect' : 'volume command'}.`;
+}
+
+const JUMP_KEYS: Record<string, number> = { F9: 0, F10: 1, F11: 2, F12: 3 };
+
+type EditRange = 'selection' | 'track' | 'pattern' | 'song';
+
+/** The patterns and the block within each that an Advanced Edit range covers. */
+function rangeTargets(range: EditRange): { indices: number[]; block: (index: number) => Block } {
+  const s = song();
+  if (range === 'song') {
+    const indices = s.patterns.map((_, i) => i);
+    return { indices, block: (i) => patternBlock(s, s.patterns[i]!) };
+  }
+  const index = view.patternIndex;
+  const selection = view.selection;
+  const block =
+    range === 'selection' && selection ? selection : patternBlock(s, view.pattern, range === 'pattern' ? undefined : view.channel);
+  return { indices: [index], block: () => block };
+}
+
+function applyRange(range: EditRange, label: string, edit: (pattern: Pattern, block: Block) => number): number {
+  const { indices, block } = rangeTargets(range);
+  let changed = 0;
+  editor.editPatterns(indices, label, (p) => {
+    changed += edit(p, block(song().patterns.indexOf(p)));
+  });
+  return changed;
 }
 
 function changeLength(delta: number): void {
@@ -557,6 +609,7 @@ function showPlayerState(state: PlayerState): void {
     selectListItem($('#orders'), currentOrder);
   }
   // While playing, the cursor rides on the playing row, so edit mode records there.
+  if (!followSong) return;
   const changedPattern = state.pattern !== view.patternIndex;
   view.follow(state.pattern, state.row);
   if (changedPattern) {
@@ -565,10 +618,11 @@ function showPlayerState(state: PlayerState): void {
   }
 }
 
-async function play(loopPattern: boolean): Promise<void> {
+/** Plays from the current order position; `row` starts there instead of at the top. */
+async function play(loopPattern: boolean, row = 0): Promise<void> {
   const node = engine ?? (await ensureEngine());
   if (!node) return;
-  node.send({ type: 'play', loopPattern, order: currentOrder });
+  node.send({ type: 'play', loopPattern, order: currentOrder, row });
   playing = true;
 }
 
@@ -882,6 +936,51 @@ $('#play-song').addEventListener('click', () => void play(false));
 $('#play-pattern').addEventListener('click', () => void play(true));
 $('#stop').addEventListener('click', stop);
 
+// ---- Advanced Edit ---------------------------------------------------------
+
+const editTools = $<HTMLDialogElement>('#edit-tools');
+const editInfo = $('#edit-info');
+const editRange = $<HTMLSelectElement>('#edit-range');
+const hexField = (id: string) => parseInt($<HTMLInputElement>(id).value, 16);
+const numberField = (id: string) => Number($<HTMLInputElement>(id).value);
+
+function openEditTools(): void {
+  editRange.value = view.selection ? 'selection' : 'track';
+  $<HTMLOptionElement>('#edit-range option[value="selection"]').disabled = !view.selection;
+  $<HTMLInputElement>('#rm-from').value = hex(instrument, 2);
+  editInfo.textContent = 'Applies to the range above; Ctrl+Z undoes it.';
+  editTools.showModal();
+}
+
+function runEditTool(label: string, tool: (pattern: Pattern, block: Block) => number, what: string): void {
+  const changed = applyRange(editRange.value as EditRange, label, tool);
+  const name = label[0]!.toUpperCase() + label.slice(1);
+  editInfo.textContent = changed ? `${name}: ${changed} ${what} changed.` : `${name}: nothing to change.`;
+  status.textContent = editInfo.textContent;
+}
+
+$('#edit-tools-open').addEventListener('click', openEditTools);
+$('#tr-go').addEventListener('click', () => {
+  const amount = Math.trunc(numberField('#tr-amount'));
+  const ins = hexField('#tr-ins') || 0;
+  if (!amount) return;
+  runEditTool('transpose', (p, b) => transposeBlock(song(), p, b, amount, ins), 'notes');
+});
+$('#rm-go').addEventListener('click', () => {
+  const from = hexField('#rm-from');
+  const to = hexField('#rm-to');
+  if (!(from >= 1 && from <= 128 && to >= 1 && to <= 128) || from === to) {
+    editInfo.textContent = 'Instrument numbers are hex, 01 to 80.';
+    return;
+  }
+  runEditTool('remap instrument', (p, b) => remapInstrument(song(), p, b, from, to), 'cells');
+});
+$('#sc-go').addEventListener('click', () => {
+  const start = Math.max(0, numberField('#sc-start'));
+  const end = Math.max(0, numberField('#sc-end'));
+  runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), 'volumes');
+});
+
 const help = $<HTMLDialogElement>('#help');
 $('#help-open').addEventListener('click', () => help.showModal());
 
@@ -959,6 +1058,21 @@ function handleCommand(event: KeyboardEvent): boolean {
       return true;
     case 'KeyO':
       fileInput.click();
+      return true;
+    case 'KeyI':
+      interpolateSelection();
+      return true;
+    case 'KeyE':
+      openEditTools();
+      return true;
+    case 'KeyF':
+      followSong = !followSong;
+      status.textContent = followSong ? 'Follow song on.' : 'Follow song off: the cursor stays put while the song plays.';
+      return true;
+    case 'Enter':
+    case 'NumpadEnter':
+      // Ctrl+Enter plays the pattern from the cursor row, with Shift the song.
+      void play(!event.shiftKey, view.row);
       return true;
   }
   return false;
@@ -1043,6 +1157,21 @@ window.addEventListener('keydown', (event) => {
   if (newOctave !== null) {
     event.preventDefault();
     setOctave(newOctave);
+    return;
+  }
+
+  const jump = JUMP_KEYS[event.code];
+  if (jump !== undefined) {
+    // F9–F12 jump to the start, a quarter, half and three quarters of the pattern.
+    event.preventDefault();
+    view.moveTo(Math.floor((view.pattern.rows * jump) / 4), view.channel, view.column, event.shiftKey);
+    return;
+  }
+  if (event.shiftKey && (event.code === 'KeyM' || event.code === 'KeyU')) {
+    event.preventDefault();
+    const next = Array.from({ length: song().channels }, (_, k) => muted[k] === true);
+    if (event.code === 'KeyM') next[view.channel] = !next[view.channel];
+    setMuted(event.code === 'KeyM' ? next : []);
     return;
   }
 

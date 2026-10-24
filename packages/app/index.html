@@ -84,6 +84,7 @@
             <button type="button" class="btn sm" id="len-dec" title="Shorter (Shift: 16 rows)">-</button><button type="button" class="btn sm" id="len-inc" title="Longer (Shift: 16 rows)">+</button>
           </span>
           <button type="button" class="btn sm keys-toggle" id="keys-toggle" aria-pressed="false">Keys</button>
+          <button type="button" class="btn sm" id="edit-tools-open" title="Transpose, remap instruments, scale volume (Ctrl+E)">Edit</button>
           <button type="button" class="btn sm" id="setup-open" title="Colours, mixer, keys and MIDI">Setup</button>
         </div>
         <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern editor"></div>
@@ -120,6 +121,12 @@
           <tr><th>Ctrl+C X V</th><td>Copy, cut, paste; Ctrl+Shift+V pastes into empty fields only</td></tr>
           <tr><th>Ctrl+A</th><td>Select the whole pattern; Esc clears the selection</td></tr>
           <tr><th>Alt+Up/Down</th><td>Transpose the selection or cell a semitone (Shift: octave)</td></tr>
+          <tr><th>Ctrl+I</th><td>Interpolate the volume column or effect under the cursor across the selection</td></tr>
+          <tr><th>Ctrl+E</th><td>Advanced Edit: transpose with instrument filter, remap instruments, scale volume</td></tr>
+          <tr><th>Ctrl+Enter</th><td>Play the pattern from the cursor row (Shift: the song)</td></tr>
+          <tr><th>F9 – F12</th><td>Jump to row 0, 1/4, 1/2, 3/4 of the pattern</td></tr>
+          <tr><th>Shift+M / Shift+U</th><td>Mute or unmute the cursor channel / unmute all</td></tr>
+          <tr><th>Ctrl+F</th><td>Follow song on or off</td></tr>
           <tr><th>Ctrl+Z / Ctrl+Y</th><td>Undo / redo</td></tr>
           <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module; the Save button also saves MOD and exports WAV</td></tr>
           <tr><th>Setup</th><td>Colours, resampling, stereo width, volume ramps, row highlights, Space key, MIDI keyboard input</td></tr>
@@ -210,6 +217,39 @@
         <label><span class="label">MIDI velocity</span><input type="checkbox" id="set-velocity" title="Write the velocity into the volume column while recording" /></label>
       </div>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog" id="edit-tools">
+      <h2 class="ptitle">Advanced Edit</h2>
+      <div class="setup-fields">
+        <label><span class="label">Range</span>
+          <select class="value" id="edit-range">
+            <option value="selection">Selection</option><option value="track">Track (cursor channel)</option>
+            <option value="pattern">Pattern</option><option value="song">Song (all patterns)</option>
+          </select>
+        </label>
+      </div>
+      <h3 class="ptitle">Transpose</h3>
+      <div class="setup-fields">
+        <label><span class="label">Semitones</span><input type="number" class="value text" id="tr-amount" value="12" min="-95" max="95" /></label>
+        <label><span class="label">Instrument</span><input type="text" class="value text" id="tr-ins" value="00" maxlength="2" spellcheck="false" title="Hex; 00 transposes every instrument" /></label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="tr-go">Transpose</button></div>
+      <h3 class="ptitle">Remap instrument</h3>
+      <div class="setup-fields">
+        <label><span class="label">From</span><input type="text" class="value text" id="rm-from" value="01" maxlength="2" spellcheck="false" /></label>
+        <label><span class="label">To</span><input type="text" class="value text" id="rm-to" value="02" maxlength="2" spellcheck="false" /></label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="rm-go">Remap</button></div>
+      <h3 class="ptitle">Scale volume</h3>
+      <div class="setup-fields">
+        <label><span class="label">Start %</span><input type="number" class="value text" id="sc-start" value="100" min="0" max="400" /></label>
+        <label><span class="label">End %</span><input type="number" class="value text" id="sc-end" value="50" min="0" max="400" /></label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="sc-go">Scale</button></div>
+      <p class="info" id="edit-info"></p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>

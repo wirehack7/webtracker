@@ -5,7 +5,7 @@ export type EngineMessage =
   | { type: 'noteOn'; note: number; instrument: number }
   | { type: 'noteOff' }
   | { type: 'load'; song: Song }
-  | { type: 'play'; loopPattern: boolean; order?: number }
+  | { type: 'play'; loopPattern: boolean; order?: number; row?: number }
   | { type: 'stop' }
   | { type: 'seek'; order: number }
   | { type: 'mute'; muted: boolean[] }

@@ -105,6 +105,28 @@ export class SongEditor {
     this.changed(label);
   }
 
+  /** Edits several patterns in place as one undo step, e.g. a song-wide transpose. */
+  editPatterns(indices: number[], label: string, edit: (pattern: Pattern) => void): void {
+    const changes: { index: number; before: Pattern; after: Pattern }[] = [];
+    for (const index of new Set(indices)) {
+      const current = ensurePattern(this.song, index);
+      const before = clonePattern(current);
+      edit(current);
+      if (!samePattern(before, current)) changes.push({ index, before, after: clonePattern(current) });
+    }
+    if (!changes.length) return;
+    const apply = (side: 'before' | 'after') => {
+      for (const change of changes) {
+        this.song.patterns[change.index] = clonePattern(change[side]);
+        this.sendPattern(change.index);
+      }
+      this.changed(label);
+    };
+    this.history.push({ label, undo: () => apply('before'), redo: () => apply('after') });
+    for (const change of changes) this.sendPattern(change.index);
+    this.changed(label);
+  }
+
   /** The instrument at 0-based `index`, adding empty instruments up to it. */
   instrument(index: number): Instrument {
     const list = this.song.instruments;

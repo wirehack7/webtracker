@@ -105,9 +105,9 @@ export function pasteClip(song: Song, pattern: Pattern, row: number, channel: nu
 /**
  * Moves every note in the block by `semitones`. Key-offs stay, and notes
  * that would leave C-0..B-7 are left alone, as in FT2. Returns how many
- * notes changed.
+ * notes changed. With `instrument`, only notes of that instrument move.
  */
-export function transposeBlock(song: Song, pattern: Pattern, block: Block, semitones: number): number {
+export function transposeBlock(song: Song, pattern: Pattern, block: Block, semitones: number, instrument = 0): number {
   const b = clamp(song, pattern, block);
   let changed = 0;
   for (let r = b.row0; r <= b.row1; r++) {
@@ -115,9 +115,114 @@ export function transposeBlock(song: Song, pattern: Pattern, block: Block, semit
       const o = cellOffset(song, r, c);
       const note = pattern.data[o] ?? 0;
       if (note === 0 || note === NOTE_KEY_OFF) continue;
+      if (instrument && pattern.data[o + 1] !== instrument) continue;
       const moved = note + semitones;
       if (moved < 1 || moved > 96) continue;
       pattern.data[o] = moved;
+      changed++;
+    }
+  }
+  return changed;
+}
+
+/** The whole pattern, or the channel `channel` of it, as a block. */
+export function patternBlock(song: Song, pattern: Pattern, channel?: number): Block {
+  const [ch0, ch1] = channel === undefined ? [0, song.channels - 1] : [channel, channel];
+  return { row0: 0, row1: pattern.rows - 1, ch0, ch1 };
+}
+
+/**
+ * Fills the rows between the first and last row of the block with values
+ * that run in a straight line from the first to the last, per channel.
+ * 'volume' works on the volume column when both ends hold the same kind of
+ * command (set volume, slide, panning ...); 'effect' on the effect parameter
+ * when both ends hold the same effect. Returns how many cells were written.
+ */
+export function interpolateBlock(song: Song, pattern: Pattern, block: Block, column: 'volume' | 'effect'): number {
+  const b = clamp(song, pattern, block);
+  const span = b.row1 - b.row0;
+  if (span < 2) return 0;
+  const d = pattern.data;
+  let changed = 0;
+  for (let c = b.ch0; c <= b.ch1; c++) {
+    const first = cellOffset(song, b.row0, c);
+    const last = cellOffset(song, b.row1, c);
+    if (column === 'volume') {
+      const a = d[first + 2] ?? 0;
+      const z = d[last + 2] ?? 0;
+      const kind = (v: number) => (v >= 0x10 && v <= 0x50 ? 0x10 : v & 0xf0);
+      if (a === 0 || z === 0 || kind(a) !== kind(z)) continue;
+      const base = kind(a);
+      for (let r = 1; r < span; r++) {
+        d[cellOffset(song, b.row0 + r, c) + 2] = base + Math.round(a - base + ((z - a) * r) / span);
+        changed++;
+      }
+    } else {
+      const effect = d[first + 3] ?? 0;
+      if (effect !== d[last + 3] || (effect === 0 && d[first + 4] === 0 && d[last + 4] === 0)) continue;
+      const a = d[first + 4] ?? 0;
+      const z = d[last + 4] ?? 0;
+      for (let r = 1; r < span; r++) {
+        const o = cellOffset(song, b.row0 + r, c);
+        d[o + 3] = effect;
+        d[o + 4] = Math.round(a + ((z - a) * r) / span);
+        changed++;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
+ * Scales volumes in the block by a factor that runs from `startPercent` on
+ * the first row to `endPercent` on the last, as in FT2's volume scaling.
+ * Set-volume commands and Cxx are scaled; a note with an instrument and no
+ * volume gets the scaled default volume of its sample. Returns how many
+ * cells changed.
+ */
+export function scaleVolumeBlock(song: Song, pattern: Pattern, block: Block, startPercent: number, endPercent: number): number {
+  const b = clamp(song, pattern, block);
+  const span = Math.max(1, b.row1 - b.row0);
+  const d = pattern.data;
+  let changed = 0;
+  for (let r = b.row0; r <= b.row1; r++) {
+    const factor = (startPercent + ((endPercent - startPercent) * (r - b.row0)) / span) / 100;
+    const scale = (v: number) => Math.max(0, Math.min(64, Math.round(v * factor)));
+    for (let c = b.ch0; c <= b.ch1; c++) {
+      const o = cellOffset(song, r, c);
+      const volume = d[o + 2] ?? 0;
+      let done = false;
+      if (volume >= 0x10 && volume <= 0x50) {
+        d[o + 2] = 0x10 + scale(volume - 0x10);
+        done = true;
+      } else if (volume === 0) {
+        const note = d[o] ?? 0;
+        const ins = song.instruments[(d[o + 1] ?? 0) - 1];
+        const sample = note >= 1 && note <= 96 && ins ? ins.samples[ins.keymap[note - 1] ?? 0] : undefined;
+        if (sample && d[o + 3] !== 0x0c) {
+          d[o + 2] = 0x10 + scale(sample.volume);
+          done = true;
+        }
+      }
+      if (d[o + 3] === 0x0c) {
+        d[o + 4] = scale(d[o + 4] ?? 0);
+        done = true;
+      }
+      if (done) changed++;
+    }
+  }
+  return changed;
+}
+
+/** Changes instrument number `from` to `to` in the block. Returns how many cells changed. */
+export function remapInstrument(song: Song, pattern: Pattern, block: Block, from: number, to: number): number {
+  const b = clamp(song, pattern, block);
+  let changed = 0;
+  for (let r = b.row0; r <= b.row1; r++) {
+    for (let c = b.ch0; c <= b.ch1; c++) {
+      const o = cellOffset(song, r, c) + 1;
+      if (pattern.data[o] !== from) continue;
+      pattern.data[o] = to;
       changed++;
     }
   }

@@ -53,7 +53,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         break;
       case 'play':
         if (this.player) {
-          if (message.order !== undefined) this.player.reset(message.order);
+          if (message.order !== undefined) this.player.reset(message.order, message.row ?? 0);
           this.player.loopPattern = message.loopPattern;
           this.player.playing = true;
         }
