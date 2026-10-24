@@ -37,6 +37,7 @@
   --pat-param: #ffdf7f;
   --pat-empty: #3a4660;
   --scope-line: #7fff8f;
+  --play-marker: #ffffff;
   --pat-sel: #3c3f8f;
   --pat-rec: #6a2f3f;
 }
@@ -267,6 +268,8 @@ output {
 
 .pattern-head {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: calc(var(--px) * 2);
   align-items: baseline;
   gap: calc(var(--px) * 8);
   margin-bottom: calc(var(--px) * 3);
@@ -469,8 +472,13 @@ output {
   .transport .ptitle {
     display: none;
   }
+  /* Buttons keep their full label and share each row; long rows wrap. */
   .transport .buttons {
-    grid-template-columns: repeat(4, 1fr);
+    display: flex;
+  }
+  .transport .btn {
+    flex: 1 1 auto;
+    padding-inline: calc(var(--px) * 3);
   }
   .transport .btn,
   .orders .btn,
@@ -505,6 +513,13 @@ output {
 
 .app.hide-piano .piano {
   display: none;
+}
+
+/* Narrow phones: one step smaller so a row of controls still fits. */
+@media (max-width: 419px) {
+  :root {
+    --px: 1.25px;
+  }
 }
 
 @media (pointer: coarse) and (max-width: 639px) {
@@ -637,6 +652,21 @@ output {
   margin-left: calc(var(--px) * 2);
 }
 
+.layered {
+  position: relative;
+}
+
+.layered canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.layered .overlay {
+  pointer-events: none;
+}
+
 .wave {
   display: block;
   width: 100%;
@@ -681,6 +711,11 @@ output {
 .keymap .km.current {
   background: var(--btn-on);
   color: #000;
+}
+
+.keymap .km.playing {
+  background: var(--pat-cursor);
+  color: var(--text);
 }
 
 .keymap .km.missing {
