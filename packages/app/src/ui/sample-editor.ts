@@ -442,23 +442,32 @@ export class SampleEditor {
       g.fillRect(x(sel.start), 0, Math.max(1, x(sel.end) - x(sel.start)), h);
     }
 
-    // One min/max line per pixel column.
+    // One min/max line per pixel column. Each column also reaches to where the
+    // next one starts, so zoomed-in or high-density screens draw a joined line.
     g.fillStyle = cssColor('--pat-vol', '#7fff8f');
     const mid = h / 2;
+    const thickness = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    const at = (f: number) => {
+      const i = Math.min(len - 1, Math.max(0, Math.floor(f)));
+      const next = s.data[Math.min(len - 1, i + 1)]!;
+      return s.data[i]! + (next - s.data[i]!) * Math.min(1, Math.max(0, f - i));
+    };
     for (let px = 0; px < w; px++) {
-      const a = Math.floor(v.start + (px / w) * span);
-      const b = Math.max(a + 1, Math.floor(v.start + ((px + 1) / w) * span));
-      let lo = 1;
-      let hi = -1;
-      for (let i = a; i < b && i < len; i++) {
+      const f0 = v.start + (px / w) * span;
+      const f1 = v.start + ((px + 1) / w) * span;
+      if (f0 >= len) break;
+      const e0 = at(f0);
+      const e1 = at(Math.min(f1, len - 1));
+      let lo = Math.min(e0, e1);
+      let hi = Math.max(e0, e1);
+      for (let i = Math.ceil(f0); i < f1 && i < len; i++) {
         const value = s.data[i]!;
         if (value < lo) lo = value;
         if (value > hi) hi = value;
       }
-      if (hi < lo) continue;
       const y0 = mid - hi * (mid - 1);
       const y1 = mid - lo * (mid - 1);
-      g.fillRect(px, y0, 1, Math.max(1, y1 - y0));
+      g.fillRect(px, y0 - thickness / 2, 1, Math.max(thickness, y1 - y0 + thickness));
     }
 
     if (sel) {
