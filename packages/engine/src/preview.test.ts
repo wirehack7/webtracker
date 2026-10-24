@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSong } from './edit.ts';
+import { LoopType } from './song.ts';
 import { Player } from './player.ts';
 
 const RATE = 48000;
@@ -33,6 +34,20 @@ describe('preview voice', () => {
     render(player, 4800);
     player.previewOff();
     render(player, 4800);
+    expect(peak(render(player, 4800))).toBeLessThan(1e-6);
+  });
+
+  it('lets a one-shot sample play to its end after a quick release', () => {
+    const song = createSong(4);
+    const sample = song.instruments[0]!.samples[0]!;
+    sample.data = new Float32Array(4000).fill(0.5); // about half a second at C-4
+    sample.loopType = LoopType.None;
+    const player = new Player(song, RATE);
+    player.previewNote(1, 49);
+    render(player, 480);
+    player.previewOff();
+    expect(peak(render(player, 4800))).toBeGreaterThan(0.05);
+    render(player, RATE * 2);
     expect(peak(render(player, 4800))).toBeLessThan(1e-6);
   });
 
