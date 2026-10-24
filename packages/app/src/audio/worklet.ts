@@ -33,6 +33,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       case 'play':
         if (this.player) {
+          if (message.order !== undefined) this.player.reset(message.order);
           this.player.loopPattern = message.loopPattern;
           this.player.playing = true;
         }
@@ -46,6 +47,27 @@ class EngineProcessor extends AudioWorkletProcessor {
       case 'seek':
         this.player?.reset(message.order);
         break;
+      case 'pattern':
+        if (this.player) this.player.song.patterns[message.index] = message.pattern;
+        return;
+      case 'orders':
+        if (this.player) {
+          const song = this.player.song;
+          song.orders = message.orders;
+          song.restartPosition = message.restartPosition;
+          if (this.player.order >= song.orders.length) this.player.order = 0;
+        }
+        return;
+      case 'tempo':
+        if (this.player) {
+          const song = this.player.song;
+          song.initialSpeed = message.speed;
+          song.initialTempo = message.tempo;
+          // Like FT2, a change while playing takes effect right away.
+          this.player.speed = message.speed;
+          this.player.tempo = message.tempo;
+        }
+        return;
     }
     if (this.player) this.send({ type: 'state', state: this.player.getState() });
   }
