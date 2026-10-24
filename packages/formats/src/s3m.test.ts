@@ -31,6 +31,7 @@ describe('S3M loader', () => {
     expect(song.channelPanning).toEqual([0x33, 0xcc, 0xcc, 0x33]);
     const s = song.instruments[0]!.samples[0]!;
     expect(s.volume).toBe(48);
+    expect(s.usePanning).toBe(false);
     expect(s.loopLength).toBe(64);
     expect(s.data[0]).toBeCloseTo(100 / 128);
     expect(s.data[40]).toBeCloseTo(-100 / 128);
@@ -70,6 +71,19 @@ describe('S3M loader', () => {
     const out = render(song, 0.5).left;
     // 16726 Hz through a 32 sample cycle.
     expect(estimateFrequency(out, SR * 0.1, SR * 0.4)).toBeCloseTo(16726 / 32, -1);
+  });
+
+  it('keeps the channel panning when a note starts', () => {
+    const song = loadModule(
+      buildS3m({
+        samples: [{ data: squareWave(32), loopStart: 0, loopEnd: 32 }],
+        patterns: [[[{ note: C4, ins: 1 }]]],
+        orders: [0],
+      }),
+    );
+    const { left, right } = render(song, 0.2);
+    const energy = (x: Float32Array) => x.reduce((sum, v) => sum + v * v, 0);
+    expect(energy(left)).toBeGreaterThan(energy(right) * 2);
   });
 
   it('converts commands to XM effects', () => {

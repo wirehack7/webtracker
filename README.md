@@ -35,7 +35,7 @@ MODULE_DIR=~/mods pnpm test
 | Package | Contents |
 | --- | --- |
 | `packages/engine` | Song model, replayer, mixer. No DOM dependency; runs in the AudioWorklet, in the export worker and under Node. |
-| `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker), XM 1.04 and S3M (Scream Tracker 3), saving XM, MOD and XI, sample import (WAV, AIFF, 8SVX, XI), WAV and ZIP writers for export. |
+| `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker), XM 1.04, S3M (Scream Tracker 3) and IT (Impulse Tracker, including compressed samples), saving XM, MOD and XI, sample import (WAV, AIFF, 8SVX, XI), WAV and ZIP writers for export. |
 | `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, service worker for offline use. |
 
 Every push to `main` is deployed to GitHub Pages.

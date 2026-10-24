@@ -349,3 +349,249 @@ export function buildS3m(opts: {
   });
   return new Uint8Array(w.bytes).buffer;
 }
+
+/** IT 2.14/2.15 sample compression, choosing the narrowest bit width for every value. */
+export function compressIt(values: Int8Array | Int16Array, it215: boolean): Uint8Array {
+  const is16 = values instanceof Int16Array;
+  const bits = is16 ? 16 : 8;
+  const fullWidth = bits + 1;
+  const blockFrames = is16 ? 0x4000 : 0x8000;
+  const out: number[] = [];
+  for (let start = 0; start < values.length; start += blockFrames) {
+    const block = values.subarray(start, start + blockFrames);
+    const stream: number[] = [];
+    let bitPos = 0;
+    const write = (v: number, n: number) => {
+      for (let i = 0; i < n; i++, bitPos++) {
+        if ((bitPos & 7) === 0) stream.push(0);
+        stream[stream.length - 1]! |= ((v >> i) & 1) << (bitPos & 7);
+      }
+    };
+    const wrap = (v: number) => (v << (32 - bits)) >> (32 - bits);
+    // Whether `v` can be written at width `w` without looking like a width change.
+    const fits = (v: number, w: number) => {
+      if (w === fullWidth) return true;
+      if (v < -(1 << (w - 1)) || v >= 1 << (w - 1)) return false;
+      const u = v & ((1 << w) - 1);
+      if (w < 7) return u !== 1 << (w - 1);
+      const border = ((is16 ? 0xffff : 0xff) >> (fullWidth - w)) - (is16 ? 8 : 4);
+      return !(u > border && u <= border + (is16 ? 16 : 8));
+    };
+    let width = fullWidth;
+    let d1 = 0;
+    let d2 = 0;
+    for (const value of block) {
+      // The decoder adds deltas up once (2.14) or twice (2.15).
+      let v: number;
+      if (it215) {
+        const nd1 = wrap(value - d2);
+        v = wrap(nd1 - d1);
+        d1 = nd1;
+        d2 = value;
+      } else {
+        v = wrap(value - d1);
+        d1 = value;
+      }
+      let w = 1;
+      while (!fits(v, w)) w++;
+      if (w !== width) {
+        if (width < 7) {
+          write(1 << (width - 1), width);
+          write((w < width ? w : w - 1) - 1, is16 ? 4 : 3);
+        } else if (width < fullWidth) {
+          const border = ((is16 ? 0xffff : 0xff) >> (fullWidth - width)) - (is16 ? 8 : 4);
+          write(border + (w < width ? w : w - 1), width);
+        } else {
+          write((1 << bits) | (w - 1), width);
+        }
+        width = w;
+      }
+      // At full width the top bit marks a width change, so the value keeps only `bits` bits.
+      write(v & ((1 << Math.min(width, bits)) - 1), width);
+    }
+    out.push(stream.length & 0xff, stream.length >> 8, ...stream);
+  }
+  return new Uint8Array(out);
+}
+
+export interface TestItCell {
+  note?: number; // IT note 0..119, 254 cut, 255 off
+  ins?: number;
+  vol?: number; // raw IT volume column
+  cmd?: string;
+  info?: number;
+}
+
+export interface TestItSample {
+  data: Int8Array | Int16Array;
+  volume?: number;
+  globalVolume?: number;
+  c5speed?: number;
+  loop?: [number, number];
+  pingpong?: boolean;
+  pan?: number; // 0..64, sets the default pan flag
+  compressed?: 'it214' | 'it215';
+}
+
+export interface TestItInstrument {
+  name?: string;
+  /** Sample number (1-based) for every IT note, or one sample for all notes. */
+  keyboard: number | number[];
+  fadeout?: number;
+  volumeEnvelope?: { points: [number, number][]; sustain?: number; loop?: [number, number] };
+  panningEnvelope?: { points: [number, number][] };
+}
+
+export function buildIt(opts: {
+  title?: string;
+  samples: TestItSample[];
+  instruments?: TestItInstrument[];
+  patterns: { rows?: number; cells: (TestItCell | undefined)[][] }[];
+  orders: number[];
+  linear?: boolean;
+  stereo?: boolean;
+  channelPan?: number[];
+  globalVolume?: number;
+  speed?: number;
+  tempo?: number;
+}): ArrayBuffer {
+  const w = new ByteWriter();
+  const instruments = opts.instruments ?? [];
+  w.str('IMPM', 4);
+  w.str(opts.title ?? 'test', 26);
+  w.u16(0x1004);
+  w.u16(opts.orders.length);
+  w.u16(instruments.length);
+  w.u16(opts.samples.length);
+  w.u16(opts.patterns.length);
+  w.u16(0x0214);
+  w.u16(0x0214);
+  w.u16((opts.stereo === false ? 0 : 1) | (instruments.length ? 4 : 0) | (opts.linear === false ? 0 : 8));
+  w.u16(0);
+  w.u8(opts.globalVolume ?? 128);
+  w.u8(48);
+  w.u8(opts.speed ?? 6);
+  w.u8(opts.tempo ?? 125);
+  w.u8(128);
+  w.u8(0);
+  w.u16(0);
+  w.u32(0);
+  w.u32(0);
+  for (let c = 0; c < 64; c++) w.u8(opts.channelPan?.[c] ?? 32);
+  for (let c = 0; c < 64; c++) w.u8(64);
+  for (const p of opts.orders) w.u8(p);
+  const pointers = w.bytes.length;
+  const count = instruments.length + opts.samples.length + opts.patterns.length;
+  for (let i = 0; i < count; i++) w.u32(0);
+  const patch = (index: number, at: number) => {
+    for (let b = 0; b < 4; b++) w.bytes[pointers + index * 4 + b] = (at >>> (b * 8)) & 0xff;
+  };
+  const envelope = (env: { points: [number, number][]; sustain?: number; loop?: [number, number] } | undefined) => {
+    const start = w.bytes.length;
+    if (env) {
+      w.u8(1 | (env.loop ? 2 : 0) | (env.sustain !== undefined ? 4 : 0));
+      w.u8(env.points.length);
+      w.u8(env.loop?.[0] ?? 0);
+      w.u8(env.loop?.[1] ?? 0);
+      w.u8(env.sustain ?? 0);
+      w.u8(env.sustain ?? 0);
+      for (const [x, y] of env.points) {
+        w.u8(y);
+        w.u16(x);
+      }
+    }
+    while (w.bytes.length < start + 82) w.u8(0);
+  };
+  instruments.forEach((ins, i) => {
+    patch(i, w.bytes.length);
+    const start = w.bytes.length;
+    w.str('IMPI', 4);
+    w.str('', 12);
+    w.u8(0);
+    w.u8(0); // NNA
+    w.u8(0);
+    w.u8(0);
+    w.u16(ins.fadeout ?? 0);
+    w.u8(0);
+    w.u8(60);
+    w.u8(128);
+    w.u8(32);
+    w.u8(0);
+    w.u8(0);
+    w.u16(0x0214);
+    w.u8(0);
+    w.u8(0);
+    w.str(ins.name ?? `instrument${i + 1}`, 26);
+    w.zeros(6);
+    for (let n = 0; n < 120; n++) {
+      w.u8(n);
+      w.u8(typeof ins.keyboard === 'number' ? ins.keyboard : (ins.keyboard[n] ?? 0));
+    }
+    envelope(ins.volumeEnvelope);
+    envelope(ins.panningEnvelope);
+    envelope(undefined);
+    while (w.bytes.length < start + 554) w.u8(0);
+  });
+  const sampleHeaders: number[] = [];
+  opts.samples.forEach((s, i) => {
+    patch(instruments.length + i, w.bytes.length);
+    sampleHeaders.push(w.bytes.length);
+    const is16 = s.data instanceof Int16Array;
+    w.str('IMPS', 4);
+    w.str('', 12);
+    w.u8(0);
+    w.u8(s.globalVolume ?? 64);
+    w.u8(1 | (is16 ? 2 : 0) | (s.compressed ? 8 : 0) | (s.loop ? 0x10 : 0) | (s.pingpong ? 0x40 : 0));
+    w.u8(s.volume ?? 64);
+    w.str(`sample${i + 1}`, 26);
+    w.u8(1 | (s.compressed === 'it215' ? 4 : 0));
+    w.u8(s.pan === undefined ? 32 : 0x80 | s.pan);
+    w.u32(s.data.length);
+    w.u32(s.loop?.[0] ?? 0);
+    w.u32(s.loop?.[1] ?? 0);
+    w.u32(s.c5speed ?? 8363);
+    w.u32(0);
+    w.u32(0);
+    w.u32(0); // pointer, patched below
+    w.zeros(4);
+  });
+  opts.patterns.forEach((pattern, i) => {
+    patch(instruments.length + opts.samples.length + i, w.bytes.length);
+    const rows = pattern.rows ?? 64;
+    const start = w.bytes.length;
+    w.u16(0);
+    w.u16(rows);
+    w.zeros(4);
+    for (let row = 0; row < rows; row++) {
+      pattern.cells[row]?.forEach((c, ch) => {
+        if (!c) return;
+        const mask = (c.note !== undefined ? 1 : 0) | (c.ins !== undefined ? 2 : 0) | (c.vol !== undefined ? 4 : 0) | (c.cmd ? 8 : 0);
+        w.u8((ch + 1) | 0x80);
+        w.u8(mask);
+        if (mask & 1) w.u8(c.note!);
+        if (mask & 2) w.u8(c.ins!);
+        if (mask & 4) w.u8(c.vol!);
+        if (mask & 8) {
+          w.u8(c.cmd!.charCodeAt(0) - 64);
+          w.u8(c.info ?? 0);
+        }
+      });
+      w.u8(0);
+    }
+    const length = w.bytes.length - start - 8;
+    w.bytes[start] = length & 0xff;
+    w.bytes[start + 1] = length >> 8;
+  });
+  opts.samples.forEach((s, i) => {
+    const at = w.bytes.length;
+    for (let b = 0; b < 4; b++) w.bytes[sampleHeaders[i]! + 0x48 + b] = (at >>> (b * 8)) & 0xff;
+    if (s.compressed) {
+      for (const b of compressIt(s.data, s.compressed === 'it215')) w.u8(b);
+    } else if (s.data instanceof Int16Array) {
+      for (const v of s.data) w.u16(v);
+    } else {
+      for (const v of s.data) w.u8(v);
+    }
+  });
+  return new Uint8Array(w.bytes).buffer;
+}

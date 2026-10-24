@@ -27,6 +27,8 @@ export interface Sample {
   finetune: number;
   /** 0..255 */
   panning: number;
+  /** False when a note leaves the channel panning alone (S3M, IT samples without default pan). */
+  usePanning?: boolean;
   relativeNote: number;
 }
 
@@ -55,6 +57,8 @@ export interface Instrument {
   volumeEnvelope: Envelope;
   panningEnvelope: Envelope;
   fadeout: number;
+  /** IT: after key off the fadeout waits for a volume envelope without loop to reach its end. */
+  fadeAfterEnvelope?: boolean;
   vibratoType: number;
   vibratoSweep: number;
   vibratoDepth: number;
