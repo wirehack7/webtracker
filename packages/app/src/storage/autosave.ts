@@ -10,6 +10,18 @@ export interface Autosave {
   savedAt: number;
   title: string;
   bytes: Uint8Array;
+  /**
+   * What XM cannot hold for a MOD: its format, which selects the ProTracker
+   * effect rules in the player, and the hard Amiga channel panning.
+   * Missing on versions saved before this was added.
+   */
+  origin?: AutosaveOrigin;
+}
+
+export interface AutosaveOrigin {
+  format: 'mod' | 'xm';
+  formatName: string;
+  channelPanning: number[];
 }
 
 const DB = 'webtracker';
@@ -53,7 +65,13 @@ export async function listAutosaves(): Promise<Autosave[]> {
 }
 
 /** Saves the song; `fresh` starts a new version, for a song just created or loaded. */
-export async function writeAutosave(title: string, bytes: Uint8Array, fresh = false, now = Date.now()): Promise<void> {
+export async function writeAutosave(
+  title: string,
+  bytes: Uint8Array,
+  fresh = false,
+  now = Date.now(),
+  origin?: AutosaveOrigin,
+): Promise<void> {
   const versions = await listAutosaves();
   const db = await open();
   const tx = db.transaction(STORE, 'readwrite');
@@ -61,6 +79,16 @@ export async function writeAutosave(title: string, bytes: Uint8Array, fresh = fa
   const newest = versions[0];
   const id = !fresh && newest && now - newest.id < VERSION_GAP_MS ? newest.id : now;
   if (id === now) for (const old of versions.slice(KEEP - 1)) store.delete(old.id);
-  store.put({ id, savedAt: now, title, bytes } satisfies Autosave);
+  store.put({ id, savedAt: now, title, bytes, ...(origin ? { origin } : {}) } satisfies Autosave);
   await done(tx);
+}
+
+/** Undoes what saving as XM changed for a song that was loaded from a MOD. */
+export function applyOrigin<T extends AutosaveOrigin>(song: T, origin: AutosaveOrigin | undefined): T {
+  if (origin?.format === 'mod' && origin.channelPanning.length === song.channelPanning.length) {
+    song.format = 'mod';
+    song.formatName = origin.formatName;
+    song.channelPanning = [...origin.channelPanning];
+  }
+  return song;
 }

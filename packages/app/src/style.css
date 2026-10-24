@@ -363,16 +363,70 @@ output {
 
 .piano {
   display: none;
-  position: relative;
   flex: none;
-  height: calc(var(--px) * 44);
+  height: calc(var(--px) * 52);
   background: var(--desk-lo);
-  touch-action: none;
   user-select: none;
+  /* Octaves visible at once; the rest is a swipe away. */
+  --piano-visible: 4;
 }
 
 .app.show-piano .piano {
-  display: block;
+  display: flex;
+}
+
+.piano-arrow {
+  flex: none;
+  min-width: calc(var(--px) * 16);
+  padding-inline: 0;
+}
+
+.piano-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+}
+
+.piano-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.piano-inner {
+  display: flex;
+  flex-direction: column;
+  width: calc(100% * 8 / var(--piano-visible));
+  height: 100%;
+}
+
+/* Swipe here to move along the keyboard; the keys themselves never scroll. */
+.piano-strip {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  height: calc(var(--px) * 10);
+  background: var(--desk);
+  box-shadow: inset 0 calc(var(--px) * -1) 0 var(--desk-lo);
+  color: var(--label);
+  font-size: calc(var(--px) * 6);
+  line-height: calc(var(--px) * 10);
+  touch-action: pan-x;
+  cursor: grab;
+}
+
+.piano-strip span {
+  scroll-snap-align: start;
+  padding-left: calc(var(--px) * 2);
+  border-left: var(--px) solid var(--desk-lo);
+}
+
+.piano-keys {
+  position: relative;
+  flex: 1 1 auto;
+  touch-action: none;
 }
 
 .piano .key {
@@ -404,6 +458,18 @@ output {
 .piano .key.down {
   background: var(--btn-on);
   color: #000;
+}
+
+@media (max-width: 1279px) {
+  .piano {
+    --piano-visible: 3;
+  }
+}
+
+@media (max-width: 639px) {
+  .piano {
+    --piano-visible: 2;
+  }
 }
 
 /* ---- Status bar ------------------------------------------------------ */
@@ -516,7 +582,7 @@ output {
 /* Touch devices get the on-screen piano by default. */
 @media (pointer: coarse) {
   .piano {
-    display: block;
+    display: flex;
   }
 }
 
@@ -533,7 +599,7 @@ output {
 
 @media (pointer: coarse) and (max-width: 639px) {
   .piano {
-    height: calc(var(--px) * 56);
+    height: calc(var(--px) * 64);
   }
 }
 
