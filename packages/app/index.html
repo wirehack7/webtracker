@@ -7,7 +7,7 @@
     <title>webtracker</title>
   </head>
   <body>
-    <div class="app" id="app" data-tab="song">
+    <div class="app" id="app" data-tab="song" data-view="pattern">
       <nav class="tabs" aria-label="Sections">
         <button type="button" class="btn" data-tab-target="song">Song</button>
         <button type="button" class="btn" data-tab-target="instruments">Instr</button>
@@ -52,6 +52,7 @@
             <button type="button" class="btn" id="save" title="Save as XM (Ctrl+S)">Save</button>
             <button type="button" class="btn" id="help-open" title="Keyboard shortcuts">Help</button>
             <input type="file" id="file" accept=".mod,.xm,.stk" hidden />
+            <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.flac,.mp3,.ogg,.opus,audio/*" hidden />
           </div>
         </div>
 
@@ -67,6 +68,11 @@
 
       <section class="panel pattern-panel">
         <div class="pattern-head">
+          <span class="view-tabs" role="tablist" aria-label="Editor">
+            <button type="button" class="btn sm" data-view-target="pattern" title="Pattern editor">Pattern</button>
+            <button type="button" class="btn sm" data-view-target="sample" title="Sample editor">Sample</button>
+            <button type="button" class="btn sm" data-view-target="instrument" title="Instrument editor">Instr</button>
+          </span>
           <span class="ptitle">Pattern <output class="value" id="pattern-no">00</output></span>
           <span class="ptitle">
             Len <output class="value" id="pattern-len">64</output>
@@ -75,6 +81,7 @@
           <button type="button" class="btn sm keys-toggle" id="keys-toggle" aria-pressed="false">Keys</button>
         </div>
         <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern editor"></div>
+        <div id="editors" class="editors"></div>
       </section>
 
       <section class="piano" id="piano" aria-label="Piano"></section>
@@ -107,6 +114,9 @@
           <tr><th>Alt+Up/Down</th><td>Transpose the selection or cell a semitone (Shift: octave)</td></tr>
           <tr><th>Ctrl+Z / Ctrl+Y</th><td>Undo / redo</td></tr>
           <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module</td></tr>
+          <tr><th>Sample view</th><td>Drag to select, drag the yellow markers to move the loop, double-click selects all</td></tr>
+          <tr><th>Instr view</th><td>Click to add envelope points, drag to move, right-click to delete</td></tr>
+          <tr><th>Drop a file</th><td>MOD/XM opens as a song; WAV, AIFF, FLAC, MP3, OGG, 8SVX or XI goes into the current sample slot</td></tr>
         </tbody>
       </table>
       <form method="dialog" class="row">

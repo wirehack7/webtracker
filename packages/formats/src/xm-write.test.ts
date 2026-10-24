@@ -68,3 +68,15 @@ describe('saveXm', () => {
     expect(essence(roundTrip(original))).toEqual(essence(original));
   });
 });
+
+describe('saveXm with large data', () => {
+  it('writes songs bigger than the initial buffer', () => {
+    const song = createSong(4);
+    // 200000 16-bit frames: 400 kB of sample data, far past the first 64 kB buffer.
+    song.instruments[0]!.samples[0]!.data = Float32Array.from({ length: 200000 }, (_, i) => Math.round(Math.sin(i / 50) * 20000) / 32768);
+    song.instruments[0]!.samples[0]!.loopLength = 100;
+    const back = roundTrip(song);
+    expect(Array.from(back.instruments[0]!.samples[0]!.data)).toEqual(Array.from(song.instruments[0]!.samples[0]!.data));
+    expect(back.instruments).toHaveLength(song.instruments.length);
+  });
+});

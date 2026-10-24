@@ -6,6 +6,7 @@ import {
   copyBlock,
   createSong,
   deleteRow,
+  emptySample,
   insertRow,
   MAX_PATTERNS,
   NOTE_KEY_OFF,
@@ -20,15 +21,17 @@ import {
   type PlayerState,
   type Song,
 } from '@webtracker/engine';
-import { loadModule, saveXm } from '@webtracker/formats';
+import { importSample, loadModule, sampleFromChannels, saveXi, saveXm } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
 import { SongEditor } from './editor/song-editor.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
+import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
+import { SampleEditor } from './ui/sample-editor.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -40,6 +43,8 @@ const view = new PatternEditor(patternEl);
 const settings = { add: 1, octave: 4 };
 const limits = { bpm: [32, 255], speed: [1, 31], add: [0, 16], octave: [0, 7] } as const;
 let instrument = 1;
+/** 0-based sample slot of the current instrument, for the sample editor and keymap. */
+let sampleSlot = 0;
 let recording = false;
 let playing = false;
 /** Position in the order list whose pattern the editor shows. */
@@ -53,6 +58,18 @@ let starting: Promise<EngineNode | null> | null = null;
 let sounding: number | null = null;
 
 const editor = new SongEditor(createSong(), (message) => engine?.send(message));
+
+const host = {
+  editor,
+  instrumentIndex: () => instrument - 1,
+  sampleIndex: () => sampleSlot,
+  status: (text: string) => (status.textContent = text),
+  importFile: () => $<HTMLInputElement>('#sample-file').click(),
+  saveInstrument: () => saveInstrument(),
+};
+const sampleEditor = new SampleEditor(host);
+const instrumentEditor = new InstrumentEditor(host);
+$('#editors').append(sampleEditor.root, instrumentEditor.root);
 
 /** Starts audio on the first key or tap, browsers only allow it from a gesture. */
 function ensureEngine(): Promise<EngineNode | null> {
@@ -77,7 +94,7 @@ async function previewOn(note: number): Promise<void> {
   sounding = note;
   const node = engine ?? (await ensureEngine());
   if (!node || sounding !== note) return;
-  node.send({ type: 'noteOn', note });
+  node.send({ type: 'noteOn', note, instrument });
 }
 
 function previewOff(note: number): void {
@@ -225,7 +242,22 @@ function fillInstruments(): void {
 
 function fillSampleList(): void {
   const samples = song().instruments[instrument - 1]?.samples ?? [];
-  fillList($('#sample-list'), Math.max(16, samples.length), 0, (i) => samples[i]?.name ?? '');
+  fillList($('#sample-list'), 16, 0, (i) => samples[i]?.name ?? '', sampleSlot);
+}
+
+/** Redraws whichever sample or instrument editor is showing. */
+function renderEditors(): void {
+  if (app.dataset.view === 'sample') sampleEditor.render();
+  else if (app.dataset.view === 'instrument') instrumentEditor.render();
+}
+
+function setView(name: string): void {
+  app.dataset.view = name;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view-target]')) {
+    b.setAttribute('aria-selected', String(b.dataset.viewTarget === name));
+  }
+  if (name === 'pattern') showPosition();
+  renderEditors();
 }
 
 function showValue(id: string, value: number, decimal = false): void {
@@ -253,15 +285,31 @@ function showSong(): void {
   showPosition();
 }
 
-editor.onChange = () => {
+editor.onChange = (label) => {
   fillOrders();
   showPosition();
+  // Pattern edits do not touch instruments, so the lists only refresh for the rest.
+  if (!['note', 'entry', 'clear', 'cut', 'paste', 'transpose', 'key off', 'insert row', 'delete row', 'length'].includes(label)) {
+    fillInstruments();
+  }
+  renderEditors();
 };
 
 $('#instrument-list').addEventListener('select', (event) => {
   instrument = (event as CustomEvent<number>).detail;
+  sampleSlot = 0;
   fillSampleList();
+  sampleEditor.resetView();
+  renderEditors();
 });
+$('#sample-list').addEventListener('select', (event) => {
+  sampleSlot = (event as CustomEvent<number>).detail;
+  sampleEditor.resetView();
+  renderEditors();
+});
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view-target]')) {
+  b.addEventListener('click', () => setView(b.dataset.viewTarget!));
+}
 $('#orders').addEventListener('select', (event) => {
   currentOrder = (event as CustomEvent<number>).detail;
   if (playing) engine?.send({ type: 'seek', order: currentOrder });
@@ -460,8 +508,12 @@ function startSong(next: Song): void {
   stop();
   currentOrder = 0;
   editor.replaceSong(next);
+  sampleSlot = 0;
   view.moveTo(0, 0, Column.Note);
   showSong();
+setView('pattern');
+  sampleEditor.resetView();
+  renderEditors();
 }
 
 async function openModule(file: File): Promise<void> {
@@ -475,16 +527,64 @@ async function openModule(file: File): Promise<void> {
   }
 }
 
+/** Puts a sample or XI instrument file into the current slot. */
+async function importIntoSlot(file: File): Promise<void> {
+  const index = instrument - 1;
+  const slot = sampleSlot;
+  try {
+    const buffer = await file.arrayBuffer();
+    let imported = importSample(buffer, file.name);
+    if (!imported) {
+      // MP3, OGG, FLAC and the rest: the browser decodes them, resampled to 44.1 kHz.
+      const rate = 44100;
+      const audio = await new OfflineAudioContext(1, 1, rate).decodeAudioData(buffer);
+      const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
+      imported = { kind: 'sample', sample: sampleFromChannels(channels, rate, file.name), rate };
+    }
+    if (imported.kind === 'instrument') {
+      const ins = imported.instrument;
+      editor.replaceInstrument(index, 'load instrument', ins);
+      status.textContent = `${file.name}: instrument with ${ins.samples.length} samples in ${hex(instrument)}.`;
+    } else {
+      const sample = imported.sample;
+      editor.editInstrument(index, 'load sample', (ins) => {
+        while (ins.samples.length < slot) ins.samples.push(emptySample());
+        ins.samples[slot] = sample;
+        if (!ins.name) ins.name = sample.name;
+      });
+      status.textContent = `${file.name}: ${sample.data.length} frames at ${imported.rate} Hz in ${hex(instrument)}/${hex(slot, 1)}.`;
+    }
+    sampleEditor.resetView();
+    if (app.dataset.view === 'pattern') setView('sample');
+  } catch (error) {
+    status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
+  }
+}
+
+function download(bytes: Uint8Array, fileName: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const safeName = (name: string, fallback: string) => (name.trim() || fallback).replace(/[^\w .-]+/g, '_');
+
+function saveInstrument(): void {
+  const ins = song().instruments[instrument - 1];
+  if (!ins) return;
+  const name = safeName(ins.name, `instrument${hex(instrument)}`);
+  download(saveXi(ins), `${name}.xi`, 'application/octet-stream');
+  status.textContent = `Saved ${name}.xi.`;
+}
+
 function saveSong(): void {
   const s = song();
   const bytes = saveXm(s);
-  const name = (s.title.trim() || 'untitled').replace(/[^\w .-]+/g, '_');
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'audio/xm' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${name}.xm`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const name = safeName(s.title, 'untitled');
+  download(bytes, `${name}.xm`, 'audio/xm');
   editor.dirty = false;
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
 }
@@ -502,10 +602,18 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 window.addEventListener('dragover', (event) => event.preventDefault());
+const sampleInput = $<HTMLInputElement>('#sample-file');
+sampleInput.addEventListener('change', () => {
+  const file = sampleInput.files?.[0];
+  if (file) void importIntoSlot(file);
+  sampleInput.value = '';
+});
 window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
-  if (file) void openModule(file);
+  if (!file) return;
+  if (/\.(mod|xm|stk)$/i.test(file.name)) void openModule(file);
+  else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
   if (editor.dirty) event.preventDefault();
@@ -640,8 +748,15 @@ window.addEventListener('keydown', (event) => {
   const target = event.target as HTMLElement;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
+  const inPattern = app.dataset.view === 'pattern';
   if (event.ctrlKey || event.metaKey) {
+    // Outside the pattern only undo, redo, save and load apply.
+    if (!inPattern && !['KeyZ', 'KeyY', 'KeyS', 'KeyO'].includes(event.code)) return;
     if (!event.altKey && handleCommand(event)) event.preventDefault();
+    return;
+  }
+  if (!inPattern) {
+    previewKeys(event);
     return;
   }
 
@@ -723,6 +838,34 @@ window.addEventListener('keydown', (event) => {
   heldKeys.set(event.code, note);
   playNote(note);
 });
+
+/** Outside the pattern editor the keys only play: notes, octave, Space and Enter. */
+function previewKeys(event: KeyboardEvent): void {
+  if (event.altKey || event.repeat) return;
+  const newOctave = octaveForKey(event.code);
+  if (newOctave !== null) {
+    event.preventDefault();
+    settings.octave = newOctave;
+    showValue('octave', newOctave);
+    return;
+  }
+  if (event.code === 'Space') {
+    event.preventDefault();
+    if (playing) stop();
+    return;
+  }
+  if (event.code === 'Enter') {
+    event.preventDefault();
+    void play(event.shiftKey);
+    return;
+  }
+  const note = noteForKey(event.code, settings.octave);
+  if (note === null) return;
+  event.preventDefault();
+  heldKeys.set(event.code, note);
+  void previewOn(note);
+  status.textContent = `${noteName(note)}  Instr ${hex(instrument)}`;
+}
 
 window.addEventListener('keyup', (event) => {
   const note = heldKeys.get(event.code);

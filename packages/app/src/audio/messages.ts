@@ -1,8 +1,8 @@
-import type { Pattern, PlayerState, Song } from '@webtracker/engine';
+import type { Instrument, Pattern, PlayerState, Song } from '@webtracker/engine';
 
 /** Messages from the main thread to the engine worklet. */
 export type EngineMessage =
-  | { type: 'noteOn'; note: number }
+  | { type: 'noteOn'; note: number; instrument: number }
   | { type: 'noteOff' }
   | { type: 'load'; song: Song }
   | { type: 'play'; loopPattern: boolean; order?: number }
@@ -10,6 +10,7 @@ export type EngineMessage =
   | { type: 'seek'; order: number }
   // Live edits to the song that is playing.
   | { type: 'pattern'; index: number; pattern: Pattern }
+  | { type: 'instrument'; index: number; instrument: Instrument }
   | { type: 'orders'; orders: number[]; restartPosition: number }
   | { type: 'tempo'; speed: number; tempo: number };
 

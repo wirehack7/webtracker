@@ -22,14 +22,18 @@ class Writer {
     return at;
   }
 
+  // Each write reserves first: growing replaces `bytes` and `view`, so they must be read afterwards.
   u8(v: number) {
-    this.bytes[this.reserve(1)] = v & 0xff;
+    const at = this.reserve(1);
+    this.bytes[at] = v & 0xff;
   }
   u16(v: number) {
-    this.view.setUint16(this.reserve(2), v, true);
+    const at = this.reserve(2);
+    this.view.setUint16(at, v, true);
   }
   u32(v: number) {
-    this.view.setUint32(this.reserve(4), v, true);
+    const at = this.reserve(4);
+    this.view.setUint32(at, v, true);
   }
   /** Fixed-length ASCII, NUL padded; anything outside printable ASCII becomes a space. */
   text(s: string, length: number) {
@@ -40,7 +44,8 @@ class Writer {
     }
   }
   raw(data: Uint8Array) {
-    this.bytes.set(data, this.reserve(data.length));
+    const at = this.reserve(data.length);
+    this.bytes.set(data, at);
   }
   zeros(n: number) {
     this.reserve(n);
@@ -112,15 +117,8 @@ function writeEnvelopePoints(w: Writer, env: Envelope) {
   }
 }
 
-function writeInstrument(w: Writer, ins: Instrument) {
-  const samples = ins.samples.slice(0, 16);
-  const encoded = samples.map(encodeSample);
-
-  w.u32(INSTRUMENT_HEADER_SIZE);
-  w.text(ins.name, 22);
-  w.u8(0);
-  w.u16(samples.length);
-  w.u32(SAMPLE_HEADER_SIZE);
+/** The fields XM and XI share, from the keymap to the reserved bytes after fadeout. */
+function writeInstrumentFields(w: Writer, ins: Instrument) {
   for (let k = 0; k < 96; k++) w.u8(ins.keymap[k] ?? 0);
   writeEnvelopePoints(w, ins.volumeEnvelope);
   writeEnvelopePoints(w, ins.panningEnvelope);
@@ -142,7 +140,11 @@ function writeInstrument(w: Writer, ins: Instrument) {
   w.u8(ins.vibratoRate);
   w.u16(ins.fadeout);
   w.zeros(22);
+}
 
+/** Sample headers followed by all sample data, as both XM and XI store them. */
+function writeSamples(w: Writer, samples: Sample[]) {
+  const encoded = samples.map(encodeSample);
   samples.forEach((s, i) => {
     const { bytes, is16 } = encoded[i]!;
     const scale = is16 ? 2 : 1;
@@ -159,6 +161,32 @@ function writeInstrument(w: Writer, ins: Instrument) {
     w.text(s.name, 22);
   });
   for (const { bytes } of encoded) w.raw(bytes);
+}
+
+function writeInstrument(w: Writer, ins: Instrument) {
+  const samples = ins.samples.slice(0, 16);
+  w.u32(INSTRUMENT_HEADER_SIZE);
+  w.text(ins.name, 22);
+  w.u8(0);
+  w.u16(samples.length);
+  w.u32(SAMPLE_HEADER_SIZE);
+  writeInstrumentFields(w, ins);
+  writeSamples(w, samples);
+}
+
+/** Writes one instrument as an FT2 XI file. */
+export function saveXi(ins: Instrument): Uint8Array {
+  const w = new Writer();
+  const samples = ins.samples.slice(0, 16);
+  w.text('Extended Instrument: ', 21);
+  w.text(ins.name, 22);
+  w.u8(0x1a);
+  w.text(TRACKER_NAME, 20);
+  w.u16(0x0102);
+  writeInstrumentFields(w, ins);
+  w.u16(samples.length);
+  writeSamples(w, samples);
+  return w.result();
 }
 
 /** Writes the song as an FT2-compatible XM 1.04 file. */

@@ -567,3 +567,128 @@ output {
   font-weight: normal;
   white-space: nowrap;
 }
+
+/* ---- Sample and instrument editors ----------------------------------- */
+
+.view-tabs {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+
+.editors {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app:not([data-view='pattern']) .pattern-view {
+  display: none;
+}
+
+.app:not([data-view='pattern']) .editors {
+  display: block;
+}
+
+.app:not([data-view='sample']) .sample-editor,
+.app:not([data-view='instrument']) .instrument-editor {
+  display: none;
+}
+
+.editor-view {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  min-height: 100%;
+}
+
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.tool-row .label {
+  margin-left: calc(var(--px) * 2);
+}
+
+.stepper,
+.text-field {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+}
+
+.stepper .value {
+  min-width: calc(var(--px) * 26);
+}
+
+.value.text {
+  font: inherit;
+  border: 0;
+  width: calc(var(--px) * 8 * 23);
+  max-width: 60vw;
+  text-align: left;
+}
+
+.info {
+  color: var(--dim);
+  margin-left: calc(var(--px) * 2);
+}
+
+.wave {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: calc(var(--px) * 80);
+  background: var(--pat-bg);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.env {
+  display: block;
+  width: 100%;
+  height: calc(var(--px) * 56);
+  margin-top: calc(var(--px) * 2);
+  background: var(--pat-bg);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.keymap {
+  display: grid;
+  grid-template-columns: repeat(48, minmax(0, 1fr));
+  gap: var(--px);
+}
+
+.keymap .km {
+  font: inherit;
+  font-size: calc(var(--px) * 6);
+  padding: calc(var(--px) * 2) 0;
+  border: 0;
+  background: #e8ecf4;
+  color: #10141c;
+  cursor: pointer;
+}
+
+.keymap .km.black {
+  background: #10141c;
+  color: #e8ecf4;
+}
+
+.keymap .km.current {
+  background: var(--btn-on);
+  color: #000;
+}
+
+.keymap .km.missing {
+  opacity: 0.4;
+}
+
+@media (max-width: 639px) {
+  .keymap {
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+  }
+}

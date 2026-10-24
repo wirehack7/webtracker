@@ -65,3 +65,46 @@ describe('SongEditor', () => {
     expect(sent.at(-1)?.type).toBe('load');
   });
 });
+
+describe('SongEditor instruments', () => {
+  it('edits an instrument, syncs it and undoes it', () => {
+    const { editor, sent } = setup();
+    editor.editInstrument(0, 'volume', (ins) => {
+      ins.samples[0]!.volume = 10;
+      ins.samples[0]!.data[0] = 0;
+    });
+    expect(sent.at(-1)).toMatchObject({ type: 'instrument', index: 0 });
+    editor.undo();
+    expect(editor.song.instruments[0]!.samples[0]!.volume).toBe(48);
+    expect(editor.song.instruments[0]!.samples[0]!.data[0]).not.toBe(0);
+  });
+
+  it('adds empty instruments up to the one edited', () => {
+    const { editor } = setup();
+    editor.editInstrument(9, 'name', (ins) => {
+      ins.name = 'lead';
+    });
+    expect(editor.song.instruments).toHaveLength(10);
+    expect(editor.song.instruments[9]!.name).toBe('lead');
+  });
+
+  it('records a drag as one step', () => {
+    const { editor } = setup();
+    const before = editor.snapshotInstrument(0);
+    const ins = editor.song.instruments[0]!;
+    for (let i = 1; i <= 5; i++) {
+      ins.fadeout = i * 100;
+      editor.previewInstrument(0);
+    }
+    editor.recordInstrument(0, 'drag', before);
+    editor.undo();
+    expect(editor.song.instruments[0]!.fadeout).toBe(0);
+    expect(editor.undo()).toBeNull();
+  });
+
+  it('skips instrument edits that change nothing', () => {
+    const { editor } = setup();
+    editor.editInstrument(0, 'nothing', () => {});
+    expect(editor.undo()).toBeNull();
+  });
+});
