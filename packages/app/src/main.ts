@@ -891,12 +891,16 @@ document.addEventListener('click', (event) => {
   if (button && !(button.closest('dialog'))) patternEl.focus({ preventScroll: true });
 });
 
+// A phone on its side has little height, so it starts with the panels folded.
+if (matchMedia('(max-height: 500px) and (orientation: landscape)').matches) app.dataset.tab = 'none';
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-tab-target]')) {
   tab.setAttribute('aria-selected', String(tab.dataset.tabTarget === app.dataset.tab));
   tab.addEventListener('click', () => {
-    app.dataset.tab = tab.dataset.tabTarget!;
+    // The open tab folds the panels away, leaving room for pattern and piano.
+    const open = app.dataset.tab !== tab.dataset.tabTarget;
+    app.dataset.tab = open ? tab.dataset.tabTarget! : 'none';
     for (const other of document.querySelectorAll('[data-tab-target]')) {
-      other.setAttribute('aria-selected', String(other === tab));
+      other.setAttribute('aria-selected', String(open && other === tab));
     }
   });
 }

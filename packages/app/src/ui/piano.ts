@@ -1,7 +1,8 @@
 // On-screen keyboard for touch and mouse. It spans every octave a note can
-// be in (C-0 to B-7) and scrolls sideways: swipe the octave strip on top,
-// use the arrow buttons, or scroll with a mouse wheel or trackpad. Only part
-// of it is visible at a time (2 octaves on a phone, more on wider screens).
+// be in (C-0 to B-7) and scrolls sideways: drag the octave strip on top,
+// hold a key and drag, swipe the keys with two fingers, use the arrow
+// buttons, or scroll with a mouse wheel or trackpad. Only part of it is visible at a time (1 octave on a
+// phone held upright, more on wider screens).
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 export const PIANO_OCTAVES = 8;
@@ -77,7 +78,7 @@ export function mountPiano(container: HTMLElement, handlers: PianoHandlers): Pia
   const firstOctave = () => Math.round(scroller.scrollLeft / Math.max(1, octaveWidth()));
 
   // One active key per pointer, so multi-touch and sliding across keys work.
-  // Keys never scroll; only the strip, the arrows and the wheel do.
+  // A quick slide across the keys plays them; see below for moving the keyboard.
   const active = new Map<number, number>();
   const keyAt = (x: number, y: number): number | null => {
     const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('.key');
@@ -99,19 +100,77 @@ export function mountPiano(container: HTMLElement, handlers: PianoHandlers): Pia
     handlers.down(note);
   };
 
+  // Moving the keyboard from the keys themselves, without losing quick
+  // slides across keys:
+  // - hold a key still for a moment, then drag: the keyboard follows,
+  // - or swipe sideways with two fingers.
+  // The notes those fingers started are released when the keyboard moves.
+  interface Touch { x0: number; y0: number; x: number; held: boolean; timer: number }
+  const touches = new Map<number, Touch>();
+  let pan: { startX: number; startLeft: number } | null = null;
+  const averageX = () => [...touches.values()].reduce((sum, t) => sum + t.x, 0) / Math.max(1, touches.size);
+  const HOLD_MS = 350;
+  const HOLD_SLOP = 8;
+  const PAN_START = 16;
+
+  const startPan = (): void => {
+    for (const pointer of [...active.keys()]) release(pointer);
+    pan = { startX: averageX(), startLeft: scroller.scrollLeft };
+    container.classList.add('moving');
+  };
+  const endTouch = (pointer: number): void => {
+    clearTimeout(touches.get(pointer)?.timer);
+    touches.delete(pointer);
+    if (touches.size === 0) container.classList.remove('holding');
+    if (pan && touches.size === 0) {
+      pan = null;
+      container.classList.remove('moving');
+      piano.showOctave(firstOctave(), true);
+    }
+  };
+
   keyArea.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     keyArea.setPointerCapture(event.pointerId);
+    const touch: Touch = { x0: event.clientX, y0: event.clientY, x: event.clientX, held: false, timer: 0 };
+    if (event.pointerType !== 'mouse') {
+      // Held still long enough, the finger can now grab the keyboard.
+      touch.timer = window.setTimeout(() => {
+        touch.held = true;
+        container.classList.add('holding');
+      }, HOLD_MS);
+    }
+    touches.set(event.pointerId, touch);
+    if (pan) return;
     press(event.pointerId, keyAt(event.clientX, event.clientY));
   });
   keyArea.addEventListener('pointermove', (event) => {
+    const touch = touches.get(event.pointerId);
+    if (touch) {
+      touch.x = event.clientX;
+      if (!touch.held && Math.hypot(event.clientX - touch.x0, event.clientY - touch.y0) > HOLD_SLOP) clearTimeout(touch.timer);
+    }
+    if (!pan && touch?.held && Math.abs(touch.x - touch.x0) > HOLD_SLOP) startPan();
+    if (!pan && event.pointerType === 'touch' && touches.size === 2) {
+      const [a, b] = [...touches.values()] as [Touch, Touch];
+      const da = a.x - a.x0;
+      const db = b.x - b.x0;
+      if (Math.sign(da) === Math.sign(db) && Math.abs(da) > PAN_START && Math.abs(db) > PAN_START) startPan();
+    }
+    if (pan) {
+      scroller.scrollLeft = pan.startLeft - (averageX() - pan.startX);
+      return;
+    }
     if (active.has(event.pointerId)) press(event.pointerId, keyAt(event.clientX, event.clientY));
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
-    keyArea.addEventListener(type, (event) => release(event.pointerId));
+    keyArea.addEventListener(type, (event) => {
+      release(event.pointerId);
+      endTouch(event.pointerId);
+    });
   }
 
-  // A mouse wheel scrolls sideways, and a mouse can drag the strip like a finger.
+  // A mouse wheel scrolls sideways, and the strip can be dragged with a finger or the mouse.
   scroller.addEventListener(
     'wheel',
     (event) => {
@@ -124,7 +183,6 @@ export function mountPiano(container: HTMLElement, handlers: PianoHandlers): Pia
   let dragFrom: { x: number; left: number } | null = null;
   let dragged = false;
   strip.addEventListener('pointerdown', (event) => {
-    if (event.pointerType !== 'mouse') return;
     strip.setPointerCapture(event.pointerId);
     dragFrom = { x: event.clientX, left: scroller.scrollLeft };
     dragged = false;
@@ -132,10 +190,19 @@ export function mountPiano(container: HTMLElement, handlers: PianoHandlers): Pia
   strip.addEventListener('pointermove', (event) => {
     if (!dragFrom) return;
     const dx = event.clientX - dragFrom.x;
-    if (Math.abs(dx) > 4) dragged = true;
+    if (Math.abs(dx) > 4 && !dragged) {
+      dragged = true;
+      container.classList.add('moving');
+    }
     scroller.scrollLeft = dragFrom.left - dx;
   });
-  strip.addEventListener('pointerup', () => (dragFrom = null));
+  const dropStrip = () => {
+    if (dragFrom && dragged) piano.showOctave(firstOctave(), true);
+    container.classList.remove('moving');
+    dragFrom = null;
+  };
+  strip.addEventListener('pointerup', dropStrip);
+  strip.addEventListener('pointercancel', dropStrip);
 
   // A tap on the strip jumps to that octave.
   strip.addEventListener('click', (event) => {
