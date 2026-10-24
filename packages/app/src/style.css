@@ -880,6 +880,28 @@ select.value {
   margin-right: calc(var(--px) * 2);
 }
 
+.library-save {
+  flex-wrap: nowrap;
+  margin-bottom: calc(var(--px) * 3);
+}
+
+.library-save .value.text {
+  flex: 1;
+  min-width: 0;
+}
+
+#songs-dialog .list {
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+}
+
+.share-url.value.text {
+  display: block;
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+  max-width: none;
+  margin-top: calc(var(--px) * 3);
+  color: var(--dim);
+}
+
 /* ---- Colour schemes (Setup dialog) ------------------------------------- */
 
 :root[data-theme='midnight'] {

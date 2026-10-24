@@ -35,7 +35,9 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
-import { applyOrigin, listAutosaves, writeAutosave, type Autosave } from './storage/autosave.ts';
+import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
+import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
+import { decodeShare, encodeShare, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { loadSettings, midiToNote, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -601,6 +603,7 @@ function startSong(next: Song): void {
   engine?.send({ type: 'mute', muted });
   editor.replaceSong(next);
   scheduleAutosave(true);
+  libraryEntry = null;
   sampleSlot = 0;
   view.moveTo(0, 0, Column.Note);
   showSong();
@@ -780,11 +783,7 @@ async function autosaveNow(): Promise<void> {
   freshVersion = false;
   try {
     const s = song();
-    await writeAutosave(s.title, saveXm(s), fresh, Date.now(), {
-      format: s.format,
-      formatName: s.formatName,
-      channelPanning: [...s.channelPanning],
-    });
+    await writeAutosave(s.title, saveXm(s), fresh, Date.now(), originOf(s));
   } catch {
     // Private windows and some browsers refuse IndexedDB; the tracker works without it.
   }
@@ -840,6 +839,217 @@ async function restoreLastSession(): Promise<void> {
   } catch {
     // No IndexedDB, start with a new song.
   }
+}
+
+/** What saving as XM would lose of a MOD, kept beside the XM bytes. */
+function originOf(s: Song): AutosaveOrigin {
+  return { format: s.format, formatName: s.formatName, channelPanning: [...s.channelPanning] };
+}
+
+// ---- Library: songs kept in this browser ---------------------------------
+
+const songsDialog = $<HTMLDialogElement>('#songs-dialog');
+const libraryName = $<HTMLInputElement>('#library-name');
+const libraryList = $('#library-list');
+const libraryInfo = $('#library-info');
+/** The library song the current song was opened from or last saved as. */
+let libraryEntry: { id: number; name: string } | null = null;
+let librarySongs: LibrarySong[] = [];
+let librarySelected = -1;
+
+const listNote = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
+
+function openSongsDialog(): void {
+  libraryName.value = libraryEntry?.name ?? (song().title.trim() || 'untitled');
+  void showLibrary();
+  songsDialog.showModal();
+}
+
+async function showLibrary(): Promise<void> {
+  try {
+    librarySongs = await listSongs();
+  } catch {
+    librarySongs = [];
+    libraryList.replaceChildren(listNote('Not available in this browser.'));
+    return;
+  }
+  const items = librarySongs.map((entry, i) => {
+    const li = document.createElement('li');
+    const when = new Date(entry.savedAt);
+    const time = document.createElement('span');
+    time.className = 'idx';
+    time.textContent = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    li.append(time, ` ${entry.name}`);
+    li.title = 'Double-click to open';
+    li.addEventListener('click', () => selectLibrarySong(i));
+    li.addEventListener('dblclick', () => openLibrarySong());
+    return li;
+  });
+  if (!items.length) items.push(listNote('No songs saved here yet.'));
+  libraryList.replaceChildren(...items);
+  selectLibrarySong(Math.max(0, librarySongs.findIndex((e) => e.id === libraryEntry?.id)));
+}
+
+function selectLibrarySong(index: number): void {
+  librarySelected = librarySongs.length ? index : -1;
+  libraryList.querySelectorAll('li').forEach((li, i) => li.setAttribute('aria-selected', String(i === librarySelected)));
+  for (const id of ['#library-open', '#library-rename', '#library-delete']) $<HTMLButtonElement>(id).disabled = librarySelected < 0;
+}
+
+async function saveToLibrary(): Promise<void> {
+  const name = libraryName.value.trim() || 'untitled';
+  const same = librarySongs.find((e) => e.name === name);
+  if (same && same.id !== libraryEntry?.id && !confirm(`Replace the saved song "${name}"?`)) return;
+  const s = song();
+  try {
+    const id = await putSong({ id: same?.id, name, savedAt: Date.now(), bytes: saveXm(s), origin: originOf(s) });
+    libraryEntry = { id, name };
+    editor.dirty = false;
+    status.textContent = `Saved ${name} in this browser.`;
+    libraryInfo.textContent = status.textContent;
+    await showLibrary();
+  } catch (error) {
+    libraryInfo.textContent = `Could not save: ${(error as Error).message}`;
+  }
+}
+
+function openLibrarySong(): void {
+  const entry = librarySongs[librarySelected];
+  if (!entry || !confirmDiscard()) return;
+  try {
+    startSong(applyOrigin(loadModule(entry.bytes.slice().buffer, `${entry.name}.xm`), entry.origin));
+    libraryEntry = { id: entry.id, name: entry.name };
+    songsDialog.close();
+    status.textContent = `Opened ${entry.name}.`;
+  } catch (error) {
+    libraryInfo.textContent = `Could not open ${entry.name}: ${(error as Error).message}`;
+  }
+}
+
+async function renameLibrarySong(): Promise<void> {
+  const entry = librarySongs[librarySelected];
+  const name = entry && prompt('New name', entry.name)?.trim();
+  if (!entry || !name || name === entry.name) return;
+  await renameSong(entry.id, name);
+  if (libraryEntry?.id === entry.id) libraryEntry.name = libraryName.value = name;
+  await showLibrary();
+}
+
+async function deleteLibrarySong(): Promise<void> {
+  const entry = librarySongs[librarySelected];
+  if (!entry || !confirm(`Delete "${entry.name}" from this browser?`)) return;
+  await deleteSong(entry.id);
+  if (libraryEntry?.id === entry.id) libraryEntry = null;
+  await showLibrary();
+}
+
+$('#songs-open').addEventListener('click', openSongsDialog);
+$('#library-save').addEventListener('click', () => void saveToLibrary());
+$('#library-open').addEventListener('click', openLibrarySong);
+$('#library-rename').addEventListener('click', () => void renameLibrarySong());
+$('#library-delete').addEventListener('click', () => void deleteLibrarySong());
+libraryName.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') void saveToLibrary();
+});
+
+// ---- Share links -----------------------------------------------------------
+
+const shareDialog = $<HTMLDialogElement>('#share-dialog');
+const shareQuality = $<HTMLSelectElement>('#share-quality');
+const shareUrl = $<HTMLInputElement>('#share-url');
+const shareInfo = $('#share-info');
+const shareSend = $<HTMLButtonElement>('#share-send');
+const shareFile = $<HTMLButtonElement>('#share-file');
+/** Beyond this many characters chat apps and mail start to cut links off. */
+const LONG_LINK = 8000;
+let sharePacking = 0;
+
+function openShareDialog(): void {
+  shareSend.hidden = !('share' in navigator);
+  shareFile.hidden = !navigator.canShare?.({ files: [new File([], 'song.xm')] });
+  void updateShareLink();
+  shareDialog.showModal();
+}
+
+async function updateShareLink(): Promise<void> {
+  const packing = ++sharePacking;
+  shareUrl.value = '';
+  shareInfo.textContent = 'Packing…';
+  const s = song();
+  try {
+    const xm = saveXm(shrinkSong(s, shareQuality.value as ShareQuality));
+    const text = await encodeShare(xm, originOf(s));
+    if (packing !== sharePacking) return;
+    const url = new URL(location.href);
+    url.hash = `${SHARE_PARAM}=${text}`;
+    shareUrl.value = url.href;
+    const length = url.href.length.toLocaleString('en');
+    shareInfo.textContent =
+      url.href.length > LONG_LINK
+        ? `${length} characters. Chat apps and mail may cut a link this long; a smaller quality or Send file is safer.`
+        : `${length} characters. The song travels inside the link; nothing is uploaded.`;
+  } catch (error) {
+    if (packing === sharePacking) shareInfo.textContent = `Could not make a link: ${(error as Error).message}`;
+  }
+}
+
+async function copyShareLink(): Promise<void> {
+  if (!shareUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(shareUrl.value);
+    shareInfo.textContent = 'Link copied.';
+  } catch {
+    shareUrl.select();
+    shareInfo.textContent = 'Select the link and copy it.';
+  }
+}
+
+async function sendShare(withFile: boolean): Promise<void> {
+  const s = song();
+  const title = s.title.trim() || 'untitled';
+  const data: ShareData = withFile
+    ? { title, files: [new File([saveXm(s) as BlobPart], `${safeName(s.title, 'untitled')}.xm`, { type: 'application/octet-stream' })] }
+    : { title, url: shareUrl.value };
+  try {
+    await navigator.share(data);
+  } catch (error) {
+    if ((error as Error).name !== 'AbortError') shareInfo.textContent = `Could not share: ${(error as Error).message}`;
+  }
+}
+
+/** Opens the song in a `#song=…` link; returns the error, if any. */
+async function openSharedSong(text: string): Promise<string | null> {
+  // Drop the song from the address, so a reload doesn't throw away later edits.
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const { xm, origin } = await decodeShare(text);
+    const loaded = applyOrigin(loadModule(xm.slice().buffer, 'shared.xm'), origin);
+    startSong(loaded);
+    status.textContent = `Opened the shared song ${loaded.title.trim() || 'untitled'}.`;
+    return null;
+  } catch (error) {
+    return `Could not open the shared song: ${(error as Error).message}.`;
+  }
+}
+
+$('#share-open').addEventListener('click', openShareDialog);
+shareQuality.addEventListener('change', () => void updateShareLink());
+$('#share-copy').addEventListener('click', () => void copyShareLink());
+shareSend.addEventListener('click', () => void sendShare(false));
+shareFile.addEventListener('click', () => void sendShare(true));
+shareUrl.addEventListener('focus', () => shareUrl.select());
+window.addEventListener('hashchange', () => {
+  const text = shareFromHash(location.hash);
+  if (text && confirmDiscard()) void openSharedSong(text).then((error) => error && (status.textContent = error));
+});
+
+/** On start, a shared song from the link wins over the last session. */
+async function startUp(): Promise<void> {
+  const text = shareFromHash(location.hash);
+  const error = text ? await openSharedSong(text) : null;
+  if (text && !error) return;
+  await restoreLastSession();
+  if (error) status.textContent = error;
 }
 
 $('#new').addEventListener('click', () => {
@@ -1241,7 +1451,7 @@ async function connectMidi(on: boolean): Promise<void> {
 
 applySettings();
 showSong();
-void restoreLastSession();
+void startUp();
 
 // Offline use: the service worker exists only in the build.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
