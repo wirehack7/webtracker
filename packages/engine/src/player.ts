@@ -265,7 +265,7 @@ export class Player {
     this.tick = 0;
     this.speed = song.initialSpeed;
     this.tempo = song.initialTempo;
-    this.globalVolume = 64;
+    this.globalVolume = Math.min(64, song.initialGlobalVolume ?? 64);
     this.samplesLeftInTick = 0;
     this.patternDelay = 0;
     this.repeatingRow = false;
