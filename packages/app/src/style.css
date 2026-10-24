@@ -206,6 +206,17 @@ output {
   display: none;
 }
 
+/* The sheet only exists as a box on phones; elsewhere its panels sit in the page. */
+.sheet {
+  display: contents;
+}
+
+.phone-bar,
+.phone-only,
+.sheet-backdrop {
+  display: none;
+}
+
 .top {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) auto auto minmax(0, 1.4fr);
@@ -593,6 +604,87 @@ output {
   }
   .brand {
     display: none;
+  }
+
+  /* Only the editor, the piano and a bar of big buttons stay on screen.
+     Everything else lives in a sheet that slides up from Menu. */
+  .sheet {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    z-index: 20;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 85dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: var(--desk);
+    box-shadow: 0 calc(var(--px) * -2) 0 var(--desk-hi), 0 0 calc(var(--px) * 16) rgb(0 0 0 / 0.6);
+    transform: translateY(100%);
+    visibility: hidden;
+    transition: transform 0.18s ease-out, visibility 0s 0.18s;
+  }
+  .app.sheet-open .sheet {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.18s ease-out;
+  }
+  .app.sheet-open .sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgb(0 0 0 / 0.45);
+  }
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .phone-only {
+    display: inline-block;
+  }
+  .pattern-head .len,
+  .pattern-head .head-extra {
+    display: none;
+  }
+  .pattern-head {
+    gap: calc(var(--px) * 4);
+  }
+  .phone-bar {
+    display: flex;
+    flex: none;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 2);
+    background: var(--desk);
+  }
+  .phone-bar > .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: calc(var(--px) * 24);
+    padding-inline: calc(var(--px) * 2);
+  }
+  .phone-bar .bar-octave {
+    flex: 1.6 1 0;
+    min-width: 0;
+    display: flex;
+    gap: calc(var(--px) * 1);
+    align-items: stretch;
+  }
+  .phone-bar .bar-octave .btn {
+    flex: none;
+    min-width: calc(var(--px) * 20);
+    padding-inline: 0;
+  }
+  .phone-bar .bar-octave .value {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
   }
 }
 
