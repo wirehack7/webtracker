@@ -26,6 +26,7 @@
   /* Pattern editor, also used by the pattern view in src/ui/. */
   --pat-bg: #000000;
   --pat-rowhl: #121a2a;
+  --pat-rowhl2: #1c2840;
   --pat-cursor: #2f4f9c;
   --pat-cell: #ffd84a;
   --pat-rn: #8ca0c0;
@@ -309,6 +310,10 @@ output {
   background: var(--pat-rowhl);
 }
 
+.pattern-view .r.bar {
+  background: var(--pat-rowhl2);
+}
+
 .pattern-view .r.cur {
   background: var(--pat-cursor);
 }
@@ -325,6 +330,10 @@ output {
 
 .pattern-view .r.beat .rn {
   background-color: var(--pat-rowhl);
+}
+
+.pattern-view .r.bar .rn {
+  background-color: var(--pat-rowhl2);
 }
 
 .pattern-view .r.cur .rn {
@@ -803,4 +812,92 @@ select.value {
 
 .file-dialog .list li .idx {
   margin-right: calc(var(--px) * 2);
+}
+
+/* ---- Colour schemes (Setup dialog) ------------------------------------- */
+
+:root[data-theme='midnight'] {
+  --desk: #2a2d34;
+  --desk-hi: #5c616d;
+  --desk-lo: #121317;
+  --btn: #3e424c;
+  --btn-hi: #7a808e;
+  --btn-lo: #15171b;
+  --btn-on: #e0a040;
+  --label: #c8ccd6;
+  --dim: #7a808e;
+  --list-sel: #4a4f60;
+  --pat-rowhl: #15171c;
+  --pat-rowhl2: #20232a;
+  --pat-cursor: #4a4f60;
+  --pat-sep: #24262d;
+  --pat-empty: #383b44;
+  --pat-rn: #8a8f9c;
+  --pat-sel: #3d3a5c;
+}
+
+:root[data-theme='amber'] {
+  --desk: #4a3420;
+  --desk-hi: #9a7448;
+  --desk-lo: #1e140a;
+  --btn: #6a4a2a;
+  --btn-hi: #b88c58;
+  --btn-lo: #24180c;
+  --btn-on: #ffd27a;
+  --label: #ffe2b0;
+  --dim: #b08850;
+  --field-fg: #ffb040;
+  --list-sel: #7a4a10;
+  --pat-rowhl: #1a1006;
+  --pat-rowhl2: #2a1a0a;
+  --pat-cursor: #6a3c08;
+  --pat-cell: #ffe080;
+  --pat-rn: #c08840;
+  --pat-sep: #2a1c0c;
+  --pat-note: #ffc060;
+  --pat-instr: #ffa040;
+  --pat-vol: #ffd080;
+  --pat-fx: #ff8030;
+  --pat-param: #ffe0a0;
+  --pat-empty: #4a3218;
+  --scope-line: #ffb040;
+  --pat-sel: #5a3410;
+}
+
+:root[data-theme='mint'] {
+  --desk: #2f5a52;
+  --desk-hi: #7fb0a4;
+  --desk-lo: #142a26;
+  --btn: #487a6e;
+  --btn-hi: #9fd0c2;
+  --btn-lo: #16302a;
+  --btn-on: #f0d060;
+  --label: #d8f4ec;
+  --dim: #80b0a4;
+  --list-sel: #2a7a64;
+  --pat-rowhl: #0c1a17;
+  --pat-rowhl2: #142a25;
+  --pat-cursor: #2a7a64;
+  --pat-rn: #80b0a4;
+  --pat-sep: #183a33;
+  --pat-empty: #2e4a44;
+  --pat-sel: #2a5a6a;
+}
+
+.setup-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 3) calc(var(--px) * 4);
+  align-items: center;
+}
+
+.setup-fields label {
+  display: contents;
+}
+
+.setup-fields input[type='checkbox'] {
+  justify-self: start;
+  width: calc(var(--px) * 8);
+  height: calc(var(--px) * 8);
+  accent-color: var(--btn-on);
 }

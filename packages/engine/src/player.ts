@@ -195,6 +195,10 @@ export class Player {
   loopPattern = false;
   /** Channels that keep playing but are not heard, by channel index. */
   muted: boolean[] = [];
+  /** Linear interpolation between sample frames; off gives the raw, aliased chip sound. */
+  interpolation = true;
+  /** Short volume ramps against clicks; off changes volume at once, like old hardware. */
+  volumeRamps = true;
   /** Overall output gain applied after mixing. */
   masterGain: number;
 
@@ -923,7 +927,11 @@ export class Player {
     const targetL = ch.active ? gain * Math.sqrt(1 - p) : 0;
     const targetR = ch.active ? gain * Math.sqrt(p) : 0;
 
-    if (targetL !== ch.targetL || targetR !== ch.targetR || ch.rampLeft > 0) {
+    if (!this.volumeRamps) {
+      ch.targetL = ch.gainL = targetL;
+      ch.targetR = ch.gainR = targetR;
+      ch.rampLeft = 0;
+    } else if (targetL !== ch.targetL || targetR !== ch.targetR || ch.rampLeft > 0) {
       ch.targetL = targetL;
       ch.targetR = targetR;
       ch.rampLeft = this.rampSamples;
@@ -957,6 +965,7 @@ export class Player {
     let gainL = ch.gainL;
     let gainR = ch.gainR;
     const step = ch.step;
+    const smooth = this.interpolation;
 
     for (let i = offset, end = offset + count; i < end; i++) {
       const idx = pos | 0;
@@ -965,7 +974,7 @@ export class Player {
       let nextIdx = idx + 1;
       if (looped && nextIdx >= loopEnd) nextIdx = pingPong ? idx : loopStart;
       const b = nextIdx < len ? data[nextIdx]! : 0;
-      const s = a + (b - a) * frac;
+      const s = smooth ? a + (b - a) * frac : a;
 
       if (ch.rampLeft > 0) {
         gainL += ch.rampL;

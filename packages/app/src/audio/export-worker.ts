@@ -13,6 +13,8 @@ export interface ExportRequest {
   stems: boolean;
   /** Channels muted in the tracker stay out of the mix. */
   muted: boolean[];
+  interpolation: boolean;
+  volumeRamps: boolean;
   name: string;
 }
 
@@ -29,12 +31,13 @@ const scope = self as unknown as {
 const pad = (n: number) => String(n + 1).padStart(2, '0');
 
 scope.onmessage = (event) => {
-  const { song, format, sampleRate, stems, muted, name } = event.data;
+  const { song, format, sampleRate, stems, muted, name, interpolation, volumeRamps } = event.data;
+  const mixer = { interpolation, volumeRamps };
   try {
     const passes = stems ? song.channels + 1 : 1;
     const progress = (pass: number) => (f: number) => scope.postMessage({ type: 'progress', fraction: (pass + f) / passes });
 
-    const mix = renderSong(song, { sampleRate, muted, onProgress: progress(0) });
+    const mix = renderSong(song, { sampleRate, muted, ...mixer, onProgress: progress(0) });
     const seconds = mix.left.length / sampleRate;
     const mixWav = encodeWav([mix.left, mix.right], sampleRate, format);
     if (!stems) {
@@ -45,7 +48,7 @@ scope.onmessage = (event) => {
     const entries: ZipEntry[] = [{ name: `${name}.wav`, data: mixWav }];
     for (let c = 0; c < song.channels; c++) {
       const solo = Array.from({ length: song.channels }, (_, k) => k !== c);
-      const stem = renderSong(song, { sampleRate, muted: solo, onProgress: progress(c + 1) });
+      const stem = renderSong(song, { sampleRate, muted: solo, ...mixer, onProgress: progress(c + 1) });
       // Channels that never sound would only add silent files.
       if (!stem.left.some((v) => v !== 0) && !stem.right.some((v) => v !== 0)) continue;
       entries.push({ name: `${name} - channel ${pad(c)}.wav`, data: encodeWav([stem.left, stem.right], sampleRate, format) });
