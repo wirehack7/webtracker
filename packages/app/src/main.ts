@@ -20,12 +20,13 @@ import {
   type Cell,
   type Clip,
   type PlayerState,
+  type Resampler,
   type Song,
 } from '@webtracker/engine';
 import { importSample, loadModule, sampleFromChannels, saveMod, saveXi, saveXm, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
-import type { WorkletMessage } from './audio/messages.ts';
+import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
 import { SongEditor } from './editor/song-editor.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
@@ -87,7 +88,7 @@ function ensureEngine(): Promise<EngineNode | null> {
       node.onMessage = handleWorkletMessage;
       node.send({ type: 'load', song: editor.song });
       node.send({ type: 'mute', muted });
-      node.send({ type: 'mixer', interpolation: prefs.interpolation, volumeRamps: prefs.volumeRamps });
+      node.send(mixerMessage());
       status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
       return node;
     },
@@ -706,7 +707,8 @@ function exportWav(): void {
     sampleRate: Number($<HTMLSelectElement>('#export-rate').value),
     stems: $<HTMLSelectElement>('#export-what').value === 'stems',
     muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
-    interpolation: prefs.interpolation,
+    resampler: prefs.resampler,
+    stereoSeparation: prefs.stereoSeparation,
     volumeRamps: prefs.volumeRamps,
     name: safeName(s.title, 'untitled'),
   };
@@ -1129,13 +1131,17 @@ themeSelect.replaceChildren(
 );
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
+function mixerMessage(): EngineMessage {
+  return { type: 'mixer', resampler: prefs.resampler, stereoSeparation: prefs.stereoSeparation, volumeRamps: prefs.volumeRamps };
+}
+
 function applySettings(): void {
   document.documentElement.dataset.theme = prefs.theme;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
   view.beat = prefs.beat;
   view.bar = prefs.bar;
   view.render();
-  engine?.send({ type: 'mixer', interpolation: prefs.interpolation, volumeRamps: prefs.volumeRamps });
+  engine?.send(mixerMessage());
   scopesDirty = true;
   renderEditors();
   void connectMidi(prefs.midi);
@@ -1143,7 +1149,9 @@ function applySettings(): void {
 
 function showSettings(): void {
   themeSelect.value = prefs.theme;
-  checkbox('#set-interpolation').checked = prefs.interpolation;
+  $<HTMLSelectElement>('#set-resampler').value = prefs.resampler;
+  $<HTMLInputElement>('#set-separation').value = String(prefs.stereoSeparation);
+  $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   checkbox('#set-ramps').checked = prefs.volumeRamps;
   $<HTMLSelectElement>('#set-beat').value = String(prefs.beat);
   $<HTMLSelectElement>('#set-bar').value = String(prefs.bar);
@@ -1154,7 +1162,9 @@ function showSettings(): void {
 
 setup.addEventListener('change', () => {
   prefs.theme = themeSelect.value as Theme;
-  prefs.interpolation = checkbox('#set-interpolation').checked;
+  prefs.resampler = $<HTMLSelectElement>('#set-resampler').value as Resampler;
+  prefs.stereoSeparation = Number($<HTMLInputElement>('#set-separation').value);
+  $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   prefs.volumeRamps = checkbox('#set-ramps').checked;
   prefs.beat = Number($<HTMLSelectElement>('#set-beat').value);
   prefs.bar = Number($<HTMLSelectElement>('#set-bar').value);

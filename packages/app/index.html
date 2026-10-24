@@ -120,7 +120,7 @@
           <tr><th>Alt+Up/Down</th><td>Transpose the selection or cell a semitone (Shift: octave)</td></tr>
           <tr><th>Ctrl+Z / Ctrl+Y</th><td>Undo / redo</td></tr>
           <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module; the Save button also saves MOD and exports WAV</td></tr>
-          <tr><th>Setup</th><td>Colours, interpolation, volume ramps, row highlights, Space key, MIDI keyboard input</td></tr>
+          <tr><th>Setup</th><td>Colours, resampling, stereo width, volume ramps, row highlights, Space key, MIDI keyboard input</td></tr>
           <tr><th>Scopes</th><td>Click to mute a channel, right-click to solo it</td></tr>
           <tr><th>Sample view</th><td>Drag to select, drag the yellow markers to move the loop, double-click selects all</td></tr>
           <tr><th>Instr view</th><td>Click to add envelope points, drag to move, right-click to delete</td></tr>
@@ -178,7 +178,13 @@
       <h2 class="ptitle">Setup</h2>
       <div class="setup-fields">
         <label><span class="label">Colours</span><select class="value" id="set-theme"></select></label>
-        <label><span class="label">Interpolation</span><input type="checkbox" id="set-interpolation" /></label>
+        <label><span class="label">Resampling</span>
+          <select class="value" id="set-resampler">
+            <option value="auto">Auto (Amiga for MOD)</option><option value="linear">Linear</option><option value="cubic">Cubic</option>
+            <option value="amiga">Amiga 500 filter</option><option value="none">None (raw)</option>
+          </select>
+        </label>
+        <label><span class="label">Stereo</span><span class="range-field"><input type="range" id="set-separation" min="0" max="200" step="10" /><span id="set-separation-value"></span></span></label>
         <label><span class="label">Volume ramps</span><input type="checkbox" id="set-ramps" /></label>
         <label><span class="label">Highlight</span>
           <select class="value" id="set-beat">
@@ -201,7 +207,7 @@
         <label><span class="label">MIDI input</span><input type="checkbox" id="set-midi" /></label>
         <label><span class="label">MIDI velocity</span><input type="checkbox" id="set-velocity" title="Write the velocity into the volume column while recording" /></label>
       </div>
-      <p class="info" id="setup-info">Interpolation off and volume ramps off give the raw sound of old hardware. Settings stay in this browser.</p>
+      <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>

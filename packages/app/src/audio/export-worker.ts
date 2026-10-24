@@ -2,7 +2,7 @@
  * Renders the song to WAV off the main thread, with the same engine the
  * worklet plays, so the export sounds exactly like playback.
  */
-import { renderSong, type Song } from '@webtracker/engine';
+import { renderSong, type Resampler, type Song } from '@webtracker/engine';
 import { createZip, encodeWav, type WavFormat, type ZipEntry } from '@webtracker/formats';
 
 export interface ExportRequest {
@@ -13,7 +13,8 @@ export interface ExportRequest {
   stems: boolean;
   /** Channels muted in the tracker stay out of the mix. */
   muted: boolean[];
-  interpolation: boolean;
+  resampler: Resampler;
+  stereoSeparation: number;
   volumeRamps: boolean;
   name: string;
 }
@@ -31,8 +32,8 @@ const scope = self as unknown as {
 const pad = (n: number) => String(n + 1).padStart(2, '0');
 
 scope.onmessage = (event) => {
-  const { song, format, sampleRate, stems, muted, name, interpolation, volumeRamps } = event.data;
-  const mixer = { interpolation, volumeRamps };
+  const { song, format, sampleRate, stems, muted, name, resampler, stereoSeparation, volumeRamps } = event.data;
+  const mixer = { resampler, stereoSeparation, volumeRamps };
   try {
     const passes = stems ? song.channels + 1 : 1;
     const progress = (pass: number) => (f: number) => scope.postMessage({ type: 'progress', fraction: (pass + f) / passes });

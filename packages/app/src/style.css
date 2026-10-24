@@ -895,6 +895,18 @@ select.value {
   display: contents;
 }
 
+.setup-fields .range-field {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+
+.setup-fields .range-field input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--btn-on);
+}
+
 .setup-fields input[type='checkbox'] {
   justify-self: start;
   width: calc(var(--px) * 8);
