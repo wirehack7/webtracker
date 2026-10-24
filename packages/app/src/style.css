@@ -1,0 +1,51 @@
+:root {
+  color-scheme: dark;
+  --bg: #10141c;
+  --fg: #d8e0ec;
+  --accent: #6fc3ff;
+  --muted: #7d8899;
+  font-family: ui-monospace, 'Cascadia Mono', 'DejaVu Sans Mono', monospace;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+}
+
+main {
+  max-width: 40rem;
+  padding: 2rem 1rem;
+}
+
+h1 {
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.note {
+  font-size: 3rem;
+  margin: 1.5rem 0;
+}
+
+.status,
+.hint {
+  color: var(--muted);
+}
