@@ -1,0 +1,989 @@
+/**
+ * Module replayer with FastTracker 2 semantics. MOD files are played through
+ * the same code with Amiga periods and the few ProTracker differences
+ * (no effect memory for slides) switched on via `song.format`.
+ *
+ * The player has no Web Audio dependency so it runs both inside the
+ * AudioWorklet and in Node (tests, offline rendering).
+ */
+import {
+  CELL_SIZE,
+  LoopType,
+  NOTE_KEY_OFF,
+  type Envelope,
+  type Instrument,
+  type Sample,
+  type Song,
+} from './song.ts';
+
+// Vibrato/tremolo waveforms, 64 steps, amplitude +-255.
+const WAVEFORMS: Int16Array[] = (() => {
+  const sine = new Int16Array(64);
+  const rampDown = new Int16Array(64);
+  const square = new Int16Array(64);
+  for (let i = 0; i < 64; i++) {
+    sine[i] = Math.round(255 * Math.sin((2 * Math.PI * i) / 64));
+    rampDown[i] = 255 - i * 8;
+    square[i] = i < 32 ? 255 : -255;
+  }
+  return [sine, rampDown, square, sine];
+})();
+const [SINE, RAMP_DOWN, SQUARE] = WAVEFORMS as [Int16Array, Int16Array, Int16Array, Int16Array];
+
+// Instrument auto-vibrato uses a different waveform order: sine, square, ramp down, ramp up.
+const AUTO_VIBRATO_WAVEFORMS: Int16Array[] = [SINE, SQUARE, RAMP_DOWN, RAMP_DOWN.map((v) => -v)];
+
+/** Length of the volume ramp applied to every gain change, in seconds. */
+const RAMP_SECONDS = 0.003;
+
+export interface PlayerState {
+  order: number;
+  pattern: number;
+  row: number;
+  speed: number;
+  tempo: number;
+  playing: boolean;
+  /** Number of times the song wrapped around. */
+  loops: number;
+}
+
+// Envelopes are only evaluated when enabled, which the loaders only allow with at least one point.
+function envelopeValue(env: Envelope, tick: number): number {
+  const pts = env.points;
+  if (tick <= pts[0]!.x) return pts[0]!.y;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    if (tick < b.x) {
+      if (b.x === a.x) return b.y;
+      return a.y + ((b.y - a.y) * (tick - a.x)) / (b.x - a.x);
+    }
+  }
+  return pts[pts.length - 1]!.y;
+}
+
+function envelopeAdvance(env: Envelope, tick: number, keyOn: boolean): number {
+  const pts = env.points;
+  if (env.sustain && keyOn && tick === pts[env.sustainPoint]!.x) return tick;
+  tick++;
+  if (env.loop && tick === pts[env.loopEnd]!.x && !(env.sustain && keyOn && env.loopEnd === env.sustainPoint)) {
+    tick = pts[env.loopStart]!.x;
+  }
+  return Math.min(tick, 0xffff);
+}
+
+class Channel {
+  instrument: Instrument | null = null;
+  sample: Sample | null = null;
+  instrumentNumber = 0;
+  note = 0;
+
+  // Sample playback.
+  active = false;
+  pos = 0;
+  dir = 1;
+  step = 0;
+
+  // Pitch.
+  period = 0;
+  outPeriod = 0;
+  targetPeriod = 0;
+  finetune = 0;
+  relativeNote = 0;
+
+  // Volume and panning (0..64, 0..255).
+  volume = 0;
+  outVolume = 0;
+  panning = 128;
+  outPanning = 128;
+
+  // Instrument envelopes.
+  keyOn = false;
+  fadeout = 32768;
+  volEnvTick = 0;
+  panEnvTick = 0;
+  autoVibPos = 0;
+  autoVibSweep = 0;
+
+  // Effect state and memory.
+  portaUpMem = 0;
+  portaDownMem = 0;
+  tonePortaSpeed = 0;
+  fineUpMem = 0;
+  fineDownMem = 0;
+  extraFineUpMem = 0;
+  extraFineDownMem = 0;
+  volSlideMem = 0;
+  fineVolUpMem = 0;
+  fineVolDownMem = 0;
+  panSlideMem = 0;
+  globalVolSlideMem = 0;
+  offsetMem = 0;
+  retrigMem = 0;
+  multiRetrigMem = 0;
+  tremorMem = 0;
+  vibratoSpeed = 0;
+  vibratoDepth = 0;
+  vibratoPos = 0;
+  vibratoWave = 0;
+  tremoloSpeed = 0;
+  tremoloDepth = 0;
+  tremoloPos = 0;
+  tremoloWave = 0;
+  tremorPos = 0;
+  tremorOn = true;
+  loopRow = 0;
+  loopCount = 0;
+  /** FT2 tone portamento direction: 0 none, 1 towards higher period, 2 towards lower. */
+  portaDirection = 0;
+  /** Vibrato/tremolo offsets computed by this tick's effects. */
+  vibratoOffset = 0;
+  tremoloOffset = 0;
+
+  // Current row.
+  effect = 0;
+  param = 0;
+  volCmd = 0;
+  delayedCell: Uint8Array | null = null;
+
+  // Mixer gains with linear ramping.
+  gainL = 0;
+  gainR = 0;
+  targetL = 0;
+  targetR = 0;
+  rampL = 0;
+  rampR = 0;
+  rampLeft = 0;
+
+  constructor(panning: number) {
+    this.panning = panning;
+  }
+}
+
+export class Player {
+  readonly song: Song;
+  readonly sampleRate: number;
+  private channels: Channel[] = [];
+  private isMod: boolean;
+
+  playing = false;
+  order = 0;
+  row = 0;
+  tick = 0;
+  speed = 6;
+  tempo = 125;
+  globalVolume = 64;
+  loops = 0;
+  /** Repeat the current pattern instead of advancing through the order list. */
+  loopPattern = false;
+  /** Overall output gain applied after mixing. */
+  masterGain: number;
+
+  private samplesLeftInTick = 0;
+  private patternDelay = 0;
+  private repeatingRow = false;
+  private jumpOrder = -1;
+  private breakRow = -1;
+  private loopJumpRow = -1;
+  private rampSamples: number;
+
+  /** Called whenever a new row starts playing. */
+  onRow: ((state: PlayerState) => void) | null = null;
+
+  constructor(song: Song, sampleRate: number) {
+    this.song = song;
+    this.sampleRate = sampleRate;
+    this.isMod = song.format === 'mod';
+    this.rampSamples = Math.max(1, Math.round(sampleRate * RAMP_SECONDS));
+    this.masterGain = 1.0 / Math.sqrt(Math.max(4, song.channels));
+    this.reset();
+  }
+
+  reset(order = 0): void {
+    const song = this.song;
+    this.channels = song.channelPanning.map((p) => new Channel(p));
+    this.order = Math.min(order, song.orders.length - 1);
+    this.row = 0;
+    this.tick = 0;
+    this.speed = song.initialSpeed;
+    this.tempo = song.initialTempo;
+    this.globalVolume = 64;
+    this.samplesLeftInTick = 0;
+    this.patternDelay = 0;
+    this.repeatingRow = false;
+    this.jumpOrder = -1;
+    this.breakRow = -1;
+    this.loopJumpRow = -1;
+    this.loops = 0;
+  }
+
+  getState(): PlayerState {
+    return {
+      order: this.order,
+      pattern: this.song.orders[this.order] ?? 0,
+      row: this.row,
+      speed: this.speed,
+      tempo: this.tempo,
+      playing: this.playing,
+      loops: this.loops,
+    };
+  }
+
+  /** Renders `frames` stereo frames into the given buffers (overwriting them). */
+  process(left: Float32Array, right: Float32Array, frames = left.length): void {
+    left.fill(0, 0, frames);
+    right.fill(0, 0, frames);
+    if (!this.playing) return;
+
+    let offset = 0;
+    while (offset < frames) {
+      if (this.samplesLeftInTick <= 0) {
+        this.doTick();
+        this.samplesLeftInTick += (this.sampleRate * 2.5) / this.tempo;
+      }
+      const n = Math.min(frames - offset, Math.ceil(this.samplesLeftInTick));
+      for (const ch of this.channels) this.mixChannel(ch, left, right, offset, n);
+      this.samplesLeftInTick -= n;
+      offset += n;
+    }
+
+    const g = this.masterGain;
+    for (let i = 0; i < frames; i++) {
+      left[i] = softClip(left[i]! * g);
+      right[i] = softClip(right[i]! * g);
+    }
+  }
+
+  // ---------------------------------------------------------------- sequencing
+
+  private doTick(): void {
+    if (this.tick === 0) {
+      if (this.repeatingRow) {
+        for (const ch of this.channels) this.tickEffects(ch);
+      } else {
+        this.processRow();
+      }
+    } else {
+      for (const ch of this.channels) this.tickEffects(ch);
+    }
+
+    for (const ch of this.channels) this.updateChannel(ch);
+
+    this.tick++;
+    if (this.tick >= this.speed) {
+      this.tick = 0;
+      if (this.patternDelay > 0) {
+        this.patternDelay--;
+        this.repeatingRow = true;
+      } else {
+        this.repeatingRow = false;
+        this.nextRow();
+      }
+    }
+  }
+
+  private nextRow(): void {
+    const song = this.song;
+    if (this.loopJumpRow >= 0) {
+      this.row = this.loopJumpRow;
+      this.loopJumpRow = -1;
+      this.jumpOrder = -1;
+      this.breakRow = -1;
+    } else if (this.jumpOrder >= 0 || this.breakRow >= 0) {
+      const target = this.loopPattern ? this.order : this.jumpOrder >= 0 ? this.jumpOrder : this.order + 1;
+      if (target <= this.order && this.jumpOrder >= 0) this.loops++;
+      this.order = target;
+      this.row = this.breakRow >= 0 ? this.breakRow : 0;
+      this.jumpOrder = -1;
+      this.breakRow = -1;
+      if (this.order >= song.orders.length) {
+        this.order = song.restartPosition;
+        this.loops++;
+      }
+      const pattern = song.patterns[song.orders[this.order] ?? 0];
+      if (pattern && this.row >= pattern.rows) this.row = 0;
+      return;
+    } else {
+      this.row++;
+    }
+
+    const pattern = song.patterns[song.orders[this.order] ?? 0];
+    if (!pattern || this.row >= pattern.rows) {
+      this.row = 0;
+      if (this.loopPattern) return;
+      this.order++;
+      for (const ch of this.channels) ch.loopRow = 0;
+      if (this.order >= song.orders.length) {
+        this.order = song.restartPosition;
+        this.loops++;
+      }
+    }
+  }
+
+  private processRow(): void {
+    const song = this.song;
+    const pattern = song.patterns[song.orders[this.order] ?? 0];
+    this.onRow?.(this.getState());
+    if (!pattern) return;
+    const base = this.row * song.channels * CELL_SIZE;
+    for (let c = 0; c < song.channels; c++) {
+      const cell = pattern.data.subarray(base + c * CELL_SIZE, base + (c + 1) * CELL_SIZE);
+      this.processCell(this.channels[c]!, cell);
+    }
+  }
+
+  // ------------------------------------------------------------------- pitch
+
+  private periodForNote(note: number, finetune: number): number {
+    // note is 0-based including the sample's relative note; 48 = C-4.
+    if (this.song.linearFrequency) return 7680 - note * 64 - finetune / 2;
+    return 428 * Math.pow(2, -(note - 48 + finetune / 128) / 12);
+  }
+
+  private frequency(period: number): number {
+    if (period <= 0) return 0;
+    if (this.song.linearFrequency) return 8363 * Math.pow(2, (4608 - period) / 768);
+    return (8363 * 428) / period;
+  }
+
+  /** Converts a slide amount given in effect units into period units. */
+  private slideUnits(amount: number): number {
+    return this.song.linearFrequency ? amount * 4 : amount;
+  }
+
+  private clampPeriod(period: number): number {
+    if (this.isMod) return Math.max(113, Math.min(856 * 2, period));
+    if (this.song.linearFrequency) return Math.max(1, Math.min(7680, period));
+    return Math.max(1, Math.min(32000, period));
+  }
+
+  // ------------------------------------------------------------------- notes
+
+  private triggerNote(ch: Channel, note: number, finetuneOverride: number | null): void {
+    const ins = ch.instrument;
+    if (!ins) {
+      ch.active = false;
+      return;
+    }
+    const sample = ins.samples[ins.keymap[note - 1] ?? 0] ?? ins.samples[0];
+    if (!sample || sample.data.length === 0) {
+      ch.active = false;
+      return;
+    }
+    const real = note - 1 + sample.relativeNote;
+    if (real < 0 || real > 118) return;
+
+    ch.sample = sample;
+    ch.note = note;
+    ch.relativeNote = sample.relativeNote;
+    ch.finetune = finetuneOverride ?? sample.finetune;
+    ch.period = this.periodForNote(real, ch.finetune);
+    ch.pos = 0;
+    ch.dir = 1;
+    ch.active = true;
+    if (ch.vibratoWave < 4) ch.vibratoPos = 0;
+    if (ch.tremoloWave < 4) ch.tremoloPos = 0;
+    ch.tremorPos = 0;
+    // Start from silence so a retriggered sample does not click.
+    ch.gainL = ch.gainR = 0;
+    ch.targetL = ch.targetR = -1; // forces a new ramp in updateChannel
+    ch.rampLeft = 0;
+  }
+
+  private resetInstrumentState(ch: Channel, ins: Instrument): void {
+    // FT2 takes the defaults from the sample that is playing (which tone portamento
+    // does not change); ProTracker takes them from the new instrument.
+    const sample = this.isMod ? ins.samples[0] : ch.sample;
+    if (sample) {
+      ch.volume = sample.volume;
+      if (!this.isMod) ch.panning = sample.panning;
+    }
+    ch.keyOn = true;
+    ch.fadeout = 32768;
+    ch.volEnvTick = 0;
+    ch.panEnvTick = 0;
+    ch.autoVibPos = 0;
+    ch.autoVibSweep = 0;
+  }
+
+  private keyOff(ch: Channel): void {
+    ch.keyOn = false;
+    if (!ch.instrument || !ch.instrument.volumeEnvelope.enabled) ch.volume = 0;
+  }
+
+  private processCell(ch: Channel, cell: Uint8Array): void {
+    const [note = 0, ins = 0, vol = 0, effect = 0, param = 0] = cell;
+    ch.effect = effect;
+    ch.param = param;
+    ch.volCmd = vol;
+
+    // Note delay: the whole cell is evaluated on a later tick.
+    if (effect === 0x0e && param >> 4 === 0x0d && (param & 0x0f) > 0) {
+      ch.delayedCell = cell;
+      return;
+    }
+    ch.delayedCell = null;
+    this.applyCell(ch, note, ins, vol, effect, param);
+    this.volumeColumnTick0(ch, vol);
+    this.effectTick0(ch, effect, param, note);
+  }
+
+  private applyCell(ch: Channel, note: number, ins: number, vol: number, effect: number, param: number, delayed = false): void {
+    // A delayed note is always triggered, even with a tone portamento in the volume column.
+    const tonePorta = !delayed && (effect === 0x03 || effect === 0x05 || vol >> 4 === 0x0f);
+
+    if (ins > 0) {
+      ch.instrumentNumber = ins;
+      ch.instrument = this.song.instruments[ins - 1] ?? null;
+      if (!ch.instrument && !tonePorta) ch.active = false;
+    }
+
+    if (note === NOTE_KEY_OFF) {
+      this.keyOff(ch);
+      return;
+    }
+
+    if (note > 0) {
+      if (tonePorta && ch.active && ch.sample) {
+        const real = note - 1 + ch.relativeNote;
+        ch.targetPeriod = this.periodForNote(real, ch.finetune);
+        ch.portaDirection = ch.targetPeriod === ch.period ? 0 : ch.targetPeriod > ch.period ? 1 : 2;
+      } else {
+        const finetune = effect === 0x0e && param >> 4 === 0x05 ? ((param & 0x0f) - 8) * 16 : null;
+        this.triggerNote(ch, note, finetune);
+      }
+    }
+
+    if (ins > 0 && ch.instrument) this.resetInstrumentState(ch, ch.instrument);
+  }
+
+  // ----------------------------------------------------------------- effects
+
+  private volumeColumnTick0(ch: Channel, vol: number): void {
+    const cmd = vol >> 4;
+    const x = vol & 0x0f;
+    switch (cmd) {
+      case 0x1: case 0x2: case 0x3: case 0x4:
+        ch.volume = vol - 0x10;
+        break;
+      case 0x5:
+        ch.volume = Math.min(64, vol - 0x10);
+        break;
+      case 0x8:
+        ch.volume = Math.max(0, ch.volume - x);
+        break;
+      case 0x9:
+        ch.volume = Math.min(64, ch.volume + x);
+        break;
+      case 0xa:
+        if (x) ch.vibratoSpeed = x;
+        break;
+      case 0xb:
+        if (x) ch.vibratoDepth = x;
+        break;
+      case 0xc:
+        ch.panning = x << 4;
+        break;
+      case 0xf:
+        if (x) ch.tonePortaSpeed = x << 4;
+        break;
+    }
+  }
+
+  private volumeColumnTick(ch: Channel): void {
+    const vol = ch.volCmd;
+    const cmd = vol >> 4;
+    const x = vol & 0x0f;
+    switch (cmd) {
+      case 0x6:
+        ch.volume = Math.max(0, ch.volume - x);
+        break;
+      case 0x7:
+        ch.volume = Math.min(64, ch.volume + x);
+        break;
+      case 0xb:
+        this.vibrato(ch);
+        break;
+      case 0xd:
+        ch.panning = Math.max(0, ch.panning - x);
+        break;
+      case 0xe:
+        ch.panning = Math.min(255, ch.panning + x);
+        break;
+      case 0xf:
+        this.tonePorta(ch);
+        break;
+    }
+  }
+
+  private effectTick0(ch: Channel, effect: number, param: number, note: number): void {
+    const x = param >> 4;
+    const y = param & 0x0f;
+    switch (effect) {
+      case 0x01:
+        if (param) ch.portaUpMem = param;
+        break;
+      case 0x02:
+        if (param) ch.portaDownMem = param;
+        break;
+      case 0x03:
+        if (param) ch.tonePortaSpeed = param;
+        break;
+      case 0x04:
+        if (x) ch.vibratoSpeed = x;
+        if (y) ch.vibratoDepth = y;
+        break;
+      case 0x05:
+      case 0x06:
+      case 0x0a:
+        if (param) ch.volSlideMem = param;
+        break;
+      case 0x07:
+        if (x) ch.tremoloSpeed = x;
+        if (y) ch.tremoloDepth = y;
+        break;
+      case 0x08:
+        ch.panning = param;
+        break;
+      case 0x09:
+        if (param) ch.offsetMem = param;
+        if (note > 0 && note !== NOTE_KEY_OFF && ch.sample) {
+          ch.pos = ch.offsetMem * 256;
+          if (ch.pos >= ch.sample.data.length) {
+            if (ch.sample.loopType !== LoopType.None) ch.pos = ch.sample.loopStart;
+            else ch.active = false;
+          }
+        }
+        break;
+      case 0x0b:
+        this.jumpOrder = param;
+        break;
+      case 0x0c:
+        ch.volume = Math.min(64, param);
+        break;
+      case 0x0d: {
+        const row = x * 10 + y;
+        this.breakRow = row < 256 ? row : 0;
+        break;
+      }
+      case 0x0e:
+        this.extendedTick0(ch, x, y, note);
+        break;
+      case 0x0f:
+        if (param === 0) break;
+        if (param < 32) this.speed = param;
+        else this.tempo = param;
+        break;
+      case 0x10: // Gxx
+        this.globalVolume = Math.min(64, param);
+        break;
+      case 0x11: // Hxy
+        if (param) ch.globalVolSlideMem = param;
+        break;
+      case 0x14: // Kxx
+        if (param === 0) this.keyOff(ch);
+        break;
+      case 0x15: // Lxx
+        ch.volEnvTick = param;
+        // FT2 bug: the panning envelope only follows when the volume envelope has sustain on.
+        if (ch.instrument?.volumeEnvelope.sustain) ch.panEnvTick = param;
+        break;
+      case 0x19: // Pxy
+        if (param) ch.panSlideMem = param;
+        break;
+      case 0x1b: // Rxy
+        if (param) ch.multiRetrigMem = param;
+        break;
+      case 0x1d: // Txy
+        if (param) ch.tremorMem = param;
+        break;
+      case 0x21: // X1y / X2y
+        if (x === 1) {
+          if (y) ch.extraFineUpMem = y;
+          ch.period = this.clampPeriod(ch.period - (this.song.linearFrequency ? ch.extraFineUpMem : ch.extraFineUpMem / 4));
+        } else if (x === 2) {
+          if (y) ch.extraFineDownMem = y;
+          ch.period = this.clampPeriod(ch.period + (this.song.linearFrequency ? ch.extraFineDownMem : ch.extraFineDownMem / 4));
+        }
+        break;
+    }
+  }
+
+  private extendedTick0(ch: Channel, x: number, y: number, note: number): void {
+    switch (x) {
+      case 0x1:
+        if (y || this.isMod) ch.fineUpMem = y;
+        ch.period = this.clampPeriod(ch.period - this.slideUnits(ch.fineUpMem));
+        break;
+      case 0x2:
+        if (y || this.isMod) ch.fineDownMem = y;
+        ch.period = this.clampPeriod(ch.period + this.slideUnits(ch.fineDownMem));
+        break;
+      case 0x4:
+        ch.vibratoWave = y & 7;
+        break;
+      case 0x5:
+        // Handled when the note is triggered.
+        break;
+      case 0x6:
+        if (y === 0) {
+          ch.loopRow = this.row;
+        } else if (ch.loopCount === 0) {
+          ch.loopCount = y;
+          this.loopJumpRow = ch.loopRow;
+        } else if (--ch.loopCount > 0) {
+          this.loopJumpRow = ch.loopRow;
+        }
+        break;
+      case 0x7:
+        ch.tremoloWave = y & 7;
+        break;
+      case 0x8:
+        ch.panning = y * 17;
+        break;
+      case 0x9:
+        // E90 retriggers on tick 0 when the row has no note of its own.
+        if (y === 0 && note === 0 && !this.isMod) this.retrigger(ch);
+        break;
+      case 0xa:
+        if (y || this.isMod) ch.fineVolUpMem = y;
+        ch.volume = Math.min(64, ch.volume + ch.fineVolUpMem);
+        break;
+      case 0xb:
+        if (y || this.isMod) ch.fineVolDownMem = y;
+        ch.volume = Math.max(0, ch.volume - ch.fineVolDownMem);
+        break;
+      case 0xc:
+        if (y === 0) ch.volume = 0;
+        break;
+      case 0xe:
+        if (this.patternDelay === 0) this.patternDelay = y;
+        break;
+    }
+  }
+
+  private tickEffects(ch: Channel): void {
+    const tick = this.tick;
+
+    if (ch.delayedCell && tick === ((ch.delayedCell[4] ?? 0) & 0x0f)) {
+      const [note = 0, ins = 0, vol = 0] = ch.delayedCell;
+      ch.delayedCell = null;
+      this.applyCell(ch, note, ins, vol, 0, 0, true);
+      this.volumeColumnTick0(ch, vol);
+      return;
+    }
+
+    this.volumeColumnTick(ch);
+
+    const param = ch.param;
+    const x = param >> 4;
+    const y = param & 0x0f;
+    switch (ch.effect) {
+      case 0x00:
+        // Arpeggio is applied in updateChannel.
+        break;
+      case 0x01: {
+        const amount = this.isMod ? param : ch.portaUpMem;
+        ch.period = this.clampPeriod(ch.period - this.slideUnits(amount));
+        break;
+      }
+      case 0x02: {
+        const amount = this.isMod ? param : ch.portaDownMem;
+        ch.period = this.clampPeriod(ch.period + this.slideUnits(amount));
+        break;
+      }
+      case 0x03:
+        this.tonePorta(ch);
+        break;
+      case 0x04:
+        this.vibrato(ch);
+        break;
+      case 0x05:
+        this.tonePorta(ch);
+        this.volumeSlide(ch);
+        break;
+      case 0x06:
+        this.vibrato(ch);
+        this.volumeSlide(ch);
+        break;
+      case 0x07:
+        this.tremolo(ch);
+        break;
+      case 0x0a:
+        this.volumeSlide(ch);
+        break;
+      case 0x0e:
+        this.extendedTick(ch, x, y);
+        break;
+      case 0x11: {
+        const p = ch.globalVolSlideMem;
+        if (p >> 4) this.globalVolume = Math.min(64, this.globalVolume + (p >> 4));
+        else this.globalVolume = Math.max(0, this.globalVolume - (p & 0x0f));
+        break;
+      }
+      case 0x14:
+        if (tick === param) this.keyOff(ch);
+        break;
+      case 0x19: {
+        const p = ch.panSlideMem;
+        if (p >> 4) ch.panning = Math.min(255, ch.panning + (p >> 4));
+        else ch.panning = Math.max(0, ch.panning - (p & 0x0f));
+        break;
+      }
+      case 0x1b: {
+        const interval = ch.multiRetrigMem & 0x0f;
+        if (interval && tick % interval === 0) {
+          ch.volume = multiRetrigVolume(ch.volume, ch.multiRetrigMem >> 4);
+          this.retrigger(ch);
+        }
+        break;
+      }
+      case 0x1d: {
+        const on = (ch.tremorMem >> 4) + 1;
+        const off = (ch.tremorMem & 0x0f) + 1;
+        ch.tremorOn = ch.tremorPos % (on + off) < on;
+        ch.tremorPos++;
+        break;
+      }
+    }
+  }
+
+  private extendedTick(ch: Channel, x: number, y: number): void {
+    switch (x) {
+      case 0x9:
+        if (y && this.tick % y === 0) this.retrigger(ch);
+        break;
+      case 0xc:
+        if (this.tick === y) ch.volume = 0;
+        break;
+    }
+  }
+
+  private retrigger(ch: Channel): void {
+    if (!ch.sample) return;
+    ch.pos = 0;
+    ch.dir = 1;
+    ch.active = true;
+    if (!this.isMod) {
+      ch.keyOn = true;
+      ch.fadeout = 32768;
+      ch.volEnvTick = 0;
+      ch.panEnvTick = 0;
+    }
+  }
+
+  private volumeSlide(ch: Channel): void {
+    const p = this.isMod ? ch.param : ch.volSlideMem;
+    if (p >> 4) ch.volume = Math.min(64, ch.volume + (p >> 4));
+    else ch.volume = Math.max(0, ch.volume - (p & 0x0f));
+  }
+
+  private tonePorta(ch: Channel): void {
+    if (!ch.targetPeriod) return;
+    const speed = this.slideUnits(ch.tonePortaSpeed);
+    if (this.isMod) {
+      // ProTracker forgets the target once it is reached.
+      if (ch.period < ch.targetPeriod) ch.period = Math.min(ch.targetPeriod, ch.period + speed);
+      else if (ch.period > ch.targetPeriod) ch.period = Math.max(ch.targetPeriod, ch.period - speed);
+      if (ch.period === ch.targetPeriod) ch.targetPeriod = 0;
+      return;
+    }
+    // FT2 keeps sliding in the direction chosen when the note was set. After reaching
+    // the target the direction becomes "up in period", so a later 300 snaps back
+    // from below the note but slides back from above it.
+    if (ch.portaDirection === 1) {
+      ch.period += speed;
+      if (ch.period >= ch.targetPeriod) {
+        ch.period = ch.targetPeriod;
+        ch.portaDirection = 1;
+      }
+    } else if (ch.portaDirection === 2) {
+      ch.period -= speed;
+      if (ch.period <= ch.targetPeriod) {
+        ch.period = ch.targetPeriod;
+        ch.portaDirection = 1;
+      }
+    }
+  }
+
+  private vibrato(ch: Channel): void {
+    const v = WAVEFORMS[ch.vibratoWave & 3]![ch.vibratoPos & 63]! * ch.vibratoDepth;
+    // ProTracker: depth/128 periods; FT2 linear: depth/32 units.
+    ch.vibratoOffset = this.song.linearFrequency ? v / 32 : v / 128;
+    ch.vibratoPos = (ch.vibratoPos + ch.vibratoSpeed) & 63;
+  }
+
+  private tremolo(ch: Channel): void {
+    ch.tremoloOffset = (WAVEFORMS[ch.tremoloWave & 3]![ch.tremoloPos & 63]! * ch.tremoloDepth) / 64;
+    ch.tremoloPos = (ch.tremoloPos + ch.tremoloSpeed) & 63;
+  }
+
+  // -------------------------------------------------------- per tick output
+
+  private updateChannel(ch: Channel): void {
+    // Vibrato/tremolo offsets are computed during tickEffects of this tick only.
+    const vibrato = ch.vibratoOffset;
+    const tremolo = ch.tremoloOffset;
+    ch.vibratoOffset = 0;
+    ch.tremoloOffset = 0;
+
+    let period = ch.period;
+
+    if (ch.effect === 0x00 && ch.param !== 0 && ch.delayedCell === null) {
+      const step = this.tick % 3;
+      const semis = step === 1 ? ch.param >> 4 : step === 2 ? ch.param & 0x0f : 0;
+      if (semis) {
+        period = this.song.linearFrequency ? period - semis * 64 : period * Math.pow(2, -semis / 12);
+      }
+    }
+    period += vibrato;
+
+    const ins = ch.instrument;
+    let envVol = 64;
+    let envPan = 32;
+    if (ins && !this.isMod) {
+      const ve = ins.volumeEnvelope;
+      if (ve.enabled) {
+        envVol = envelopeValue(ve, ch.volEnvTick);
+        ch.volEnvTick = envelopeAdvance(ve, ch.volEnvTick, ch.keyOn);
+        // Fadeout only runs with an enabled volume envelope; without one key off cuts the note.
+        if (!ch.keyOn) ch.fadeout = Math.max(0, ch.fadeout - ins.fadeout);
+      }
+      const pe = ins.panningEnvelope;
+      if (pe.enabled) {
+        envPan = envelopeValue(pe, ch.panEnvTick);
+        ch.panEnvTick = envelopeAdvance(pe, ch.panEnvTick, ch.keyOn);
+      }
+
+      if (ins.vibratoDepth && ins.vibratoRate) {
+        let depth = ins.vibratoDepth;
+        if (ins.vibratoSweep && ch.autoVibSweep < ins.vibratoSweep) {
+          depth = (depth * ch.autoVibSweep) / ins.vibratoSweep;
+          ch.autoVibSweep++;
+        }
+        const wave = AUTO_VIBRATO_WAVEFORMS[ins.vibratoType & 3]![(ch.autoVibPos >> 2) & 63]!;
+        const delta = (wave * depth) / 64;
+        period += this.song.linearFrequency ? delta : delta / 4;
+        ch.autoVibPos = (ch.autoVibPos + ins.vibratoRate) & 255;
+      }
+    }
+
+    ch.outPeriod = Math.max(1, period);
+    const freq = this.frequency(ch.outPeriod);
+    ch.step = freq / this.sampleRate;
+
+    let volume = Math.max(0, Math.min(64, ch.volume + tremolo));
+    if (ch.effect === 0x1d && !ch.tremorOn) volume = 0;
+    ch.outVolume = volume;
+    const gain = (volume / 64) * (envVol / 64) * (ch.fadeout / 32768) * (this.globalVolume / 64);
+
+    const pan = ch.panning;
+    ch.outPanning = Math.max(0, Math.min(255, pan + ((envPan - 32) * (128 - Math.abs(pan - 128))) / 32));
+    const p = ch.outPanning / 255;
+    const targetL = ch.active ? gain * Math.sqrt(1 - p) : 0;
+    const targetR = ch.active ? gain * Math.sqrt(p) : 0;
+
+    if (targetL !== ch.targetL || targetR !== ch.targetR || ch.rampLeft > 0) {
+      ch.targetL = targetL;
+      ch.targetR = targetR;
+      ch.rampLeft = this.rampSamples;
+      ch.rampL = (targetL - ch.gainL) / this.rampSamples;
+      ch.rampR = (targetR - ch.gainR) / this.rampSamples;
+    }
+  }
+
+  // ------------------------------------------------------------------ mixing
+
+  private mixChannel(ch: Channel, left: Float32Array, right: Float32Array, offset: number, count: number): void {
+    const sample = ch.sample;
+    if (!ch.active || !sample) return;
+    const data = sample.data;
+    const len = data.length;
+    const looped = sample.loopType !== LoopType.None && sample.loopLength > 0;
+    const loopStart = sample.loopStart;
+    const loopEnd = sample.loopStart + sample.loopLength;
+    const pingPong = sample.loopType === LoopType.PingPong;
+
+    let pos = ch.pos;
+    let dir = ch.dir;
+    let gainL = ch.gainL;
+    let gainR = ch.gainR;
+    const step = ch.step;
+
+    for (let i = offset, end = offset + count; i < end; i++) {
+      const idx = pos | 0;
+      const frac = pos - idx;
+      const a = data[idx]!;
+      let nextIdx = idx + 1;
+      if (looped && nextIdx >= loopEnd) nextIdx = pingPong ? idx : loopStart;
+      const b = nextIdx < len ? data[nextIdx]! : 0;
+      const s = a + (b - a) * frac;
+
+      if (ch.rampLeft > 0) {
+        gainL += ch.rampL;
+        gainR += ch.rampR;
+        if (--ch.rampLeft === 0) {
+          gainL = ch.targetL;
+          gainR = ch.targetR;
+        }
+      }
+      left[i]! += s * gainL;
+      right[i]! += s * gainR;
+
+      pos += step * dir;
+      if (looped) {
+        if (pingPong) {
+          if (dir > 0 && pos >= loopEnd) {
+            pos = loopEnd - (pos - loopEnd) - 1e-6;
+            dir = -1;
+          } else if (dir < 0 && pos < loopStart) {
+            pos = loopStart + (loopStart - pos);
+            dir = 1;
+          }
+          if (pos < loopStart || pos >= loopEnd) pos = loopStart;
+        } else if (pos >= loopEnd) {
+          pos = loopStart + ((pos - loopStart) % sample.loopLength);
+        }
+      } else if (pos >= len) {
+        ch.active = false;
+        break;
+      }
+    }
+
+    ch.pos = pos;
+    ch.dir = dir;
+    ch.gainL = gainL;
+    ch.gainR = gainR;
+  }
+
+  /** Per channel snapshot for UI meters. */
+  channelLevels(): number[] {
+    return this.channels.map((ch) => (ch.active ? Math.max(ch.gainL, ch.gainR) : 0));
+  }
+}
+
+function multiRetrigVolume(volume: number, x: number): number {
+  switch (x) {
+    case 1: return Math.max(0, volume - 1);
+    case 2: return Math.max(0, volume - 2);
+    case 3: return Math.max(0, volume - 4);
+    case 4: return Math.max(0, volume - 8);
+    case 5: return Math.max(0, volume - 16);
+    case 6: return Math.floor((volume * 2) / 3);
+    case 7: return volume >> 1;
+    case 9: return Math.min(64, volume + 1);
+    case 0xa: return Math.min(64, volume + 2);
+    case 0xb: return Math.min(64, volume + 4);
+    case 0xc: return Math.min(64, volume + 8);
+    case 0xd: return Math.min(64, volume + 16);
+    case 0xe: return Math.min(64, Math.floor((volume * 3) / 2));
+    case 0xf: return Math.min(64, volume * 2);
+    default: return volume;
+  }
+}
+
+function softClip(x: number): number {
+  if (x > 1) return 1;
+  if (x < -1) return -1;
+  return x;
+}
