@@ -61,5 +61,7 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | F9–F12 | Zu Zeile 0, ¼, ½ und ¾ des Patterns springen |
 | Shift+M / Shift+U | Kanal unter dem Cursor stumm / alle wieder an |
 | Strg+F | Song folgen an/aus |
+| Shift / Strg / Alt + F3–F5 | Track / Pattern / Auswahl ausschneiden, kopieren, einfügen (Strg+F4 und Alt+F4 gehören dem Browser: Pattern kopieren mit Strg+Shift+F4, Auswahl mit Strg+C) |
+| Alt+Q…I, Alt+A…K | Zu Kanal 1–8 bzw. 9–16 springen |
 
 Unter „Setup“ lässt sich der Klang einstellen: Resampling (Auto spielt MOD über den Amiga-500-Filter, bei dem E00/E01 das LED-Filter schalten, und XM linear interpoliert; dazu Linear, Cubic und ganz ohne Interpolation) sowie die Stereo-Breite von Mono bis 200 %. Der WAV-Export verwendet dieselben Einstellungen.
