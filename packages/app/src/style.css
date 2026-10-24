@@ -413,8 +413,24 @@ output {
   color: var(--label);
   font-size: calc(var(--px) * 6);
   line-height: calc(var(--px) * 10);
-  touch-action: pan-x;
+  touch-action: none;
   cursor: grab;
+}
+
+/* A held key can grab the keyboard; show it, and show it moving. */
+.piano.holding .piano-keys,
+.piano.moving .piano-keys {
+  outline: calc(var(--px) * 2) solid var(--btn-on);
+  outline-offset: calc(var(--px) * -2);
+}
+
+.piano.moving .piano-scroll {
+  scroll-snap-type: none;
+}
+
+.piano.moving .piano-strip {
+  background: var(--btn-on);
+  color: #000;
 }
 
 .piano-strip span {
@@ -522,8 +538,9 @@ output {
   .instruments .list.short { height: calc(var(--px) * 10 * 8 + var(--px) * 4); }
 }
 
-/* Phones: one top panel at a time, chosen with the tab bar. */
-@media (max-width: 639px) {
+/* Phones, upright or on their side: one top panel at a time, chosen with
+   the tab bar; tapping the open tab again folds the panels away. */
+@media (max-width: 639px), (max-height: 500px) and (orientation: landscape) {
   :root {
     --px: 1.5px;
   }
@@ -597,9 +614,34 @@ output {
   }
 }
 
+/* Phones held upright: one big octave, a wide swipe strip and big arrows. */
 @media (pointer: coarse) and (max-width: 639px) {
   .piano {
-    height: calc(var(--px) * 64);
+    height: calc(var(--px) * 96);
+    --piano-visible: 1;
+  }
+  .piano-strip {
+    height: calc(var(--px) * 18);
+    line-height: calc(var(--px) * 18);
+    font-size: calc(var(--px) * 8);
+  }
+  .piano-strip span {
+    padding-left: calc(var(--px) * 4);
+  }
+  .piano-arrow {
+    min-width: calc(var(--px) * 28);
+    font-size: calc(var(--px) * 12);
+  }
+  .piano .key {
+    font-size: calc(var(--px) * 8);
+  }
+}
+
+/* Phones on their side: little height, so a flatter piano with more octaves. */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  .piano {
+    height: calc(var(--px) * 60);
+    --piano-visible: 2;
   }
 }
 
