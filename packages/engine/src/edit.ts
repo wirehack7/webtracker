@@ -212,7 +212,7 @@ export function chipInstruments(): Instrument[] {
 }
 
 /** An empty XM song the way FT2 starts: speed 6, 125 BPM, one 64-row pattern. */
-export function createSong(channels = 8): Song {
+export function createSong(channels = 4): Song {
   return {
     format: 'xm',
     formatName: 'XM 1.04 (webtracker)',

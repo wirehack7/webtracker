@@ -1,12 +1,17 @@
 import { noteFrequency, Player, ToneVoice } from '@webtracker/engine';
 import type { EngineMessage, WorkletMessage } from './messages.ts';
 
+/** Frames per scope snapshot, and snapshots per second. */
+const SCOPE_FRAMES = 1024;
+const SCOPE_RATE = 30;
+
 class EngineProcessor extends AudioWorkletProcessor {
   private readonly voice = new ToneVoice(sampleRate);
   private player: Player | null = null;
   private scratch = new Float32Array(128);
   private songLeft = new Float32Array(128);
   private songRight = new Float32Array(128);
+  private framesToScopes = 0;
 
   constructor() {
     super();
@@ -28,6 +33,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       case 'load': {
         const player = new Player(message.song, sampleRate);
         player.onRow = (state) => this.send({ type: 'row', state, levels: player.channelLevels() });
+        player.enableScopes(SCOPE_FRAMES);
         this.player = player;
         break;
       }
@@ -93,6 +99,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.songRight = new Float32Array(frames);
       }
       player.process(this.songLeft, this.songRight, frames);
+      this.framesToScopes -= frames;
+      if (this.framesToScopes <= 0) {
+        this.framesToScopes += sampleRate / SCOPE_RATE;
+        const channels = player.readScopes();
+        this.port.postMessage({ type: 'scopes', channels } satisfies WorkletMessage, channels.map((c) => c.buffer as ArrayBuffer));
+      }
       if (right === left) {
         for (let i = 0; i < frames; i++) left[i]! += (this.songLeft[i]! + this.songRight[i]!) * 0.5;
       } else {

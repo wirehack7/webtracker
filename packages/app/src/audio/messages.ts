@@ -16,4 +16,6 @@ export type EngineMessage =
 /** Messages from the engine worklet to the main thread. */
 export type WorkletMessage =
   | { type: 'row'; state: PlayerState; levels: number[] }
-  | { type: 'state'; state: PlayerState };
+  | { type: 'state'; state: PlayerState }
+  // Recent output of each channel, oldest frame first, for the scopes.
+  | { type: 'scopes'; channels: Float32Array[] };

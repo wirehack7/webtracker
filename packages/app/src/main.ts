@@ -52,7 +52,7 @@ let engine: EngineNode | null = null;
 let starting: Promise<EngineNode | null> | null = null;
 let sounding: number | null = null;
 
-const editor = new SongEditor(createSong(8), (message) => engine?.send(message));
+const editor = new SongEditor(createSong(), (message) => engine?.send(message));
 
 /** Starts audio on the first key or tap, browsers only allow it from a gesture. */
 function ensureEngine(): Promise<EngineNode | null> {
@@ -317,44 +317,101 @@ function step(key: keyof typeof limits, delta: number): void {
 }
 
 const scopes = $('#scopes');
-
-function drawScope(canvas: HTMLCanvasElement, channel: number, level: number): void {
-  const g = canvas.getContext('2d');
-  if (!g) return;
-  g.clearRect(0, 0, canvas.width, canvas.height);
-  // Until real scopes exist, the line thickens with the channel's output level.
-  const h = Math.max(1, Math.round(Math.min(1, level) * 20));
-  g.fillStyle = '#7fff8f';
-  g.fillRect(0, 12 - (h >> 1), 64, h);
-  g.fillStyle = '#5e7598';
-  g.font = '8px "Press Start 2P"';
-  g.fillText(String(channel + 1), 2, 9);
-}
+/** Latest snapshot per channel from the worklet; empty while stopped. */
+let scopeData: Float32Array[] = [];
+let scopesDirty = true;
+/** Frames shown across one scope, about 11 ms at 44.1 kHz. */
+const SCOPE_WINDOW = 512;
 
 function buildScopes(count: number): void {
-  const canvases = Array.from({ length: count }, (_, c) => {
-    const canvas = document.createElement('canvas');
-    canvas.className = 'scope';
-    canvas.width = 64;
-    canvas.height = 24;
-    drawScope(canvas, c, 0);
-    void document.fonts.ready.then(() => drawScope(canvas, c, 0));
-    return canvas;
+  const boxes = Array.from({ length: count }, (_, c) => {
+    const box = document.createElement('div');
+    box.className = 'scope';
+    const label = document.createElement('span');
+    label.className = 'scope-label';
+    label.textContent = String(c + 1);
+    box.append(document.createElement('canvas'), label);
+    return box;
   });
-  scopes.replaceChildren(...canvases);
+  scopes.replaceChildren(...boxes);
+  scopeData = [];
+  scopesDirty = true;
 }
+
+/** Start of the shown window: the first rising zero crossing, so waves stand still. */
+function scopeTrigger(data: Float32Array): number {
+  const last = data.length - SCOPE_WINDOW;
+  for (let i = 1; i < last; i++) if (data[i - 1]! <= 0 && data[i]! > 0) return i;
+  return Math.max(0, last);
+}
+
+function drawScopes(): void {
+  requestAnimationFrame(drawScopes);
+  if (!scopesDirty) return;
+  scopesDirty = false;
+  const css = getComputedStyle(document.documentElement);
+  const ratio = devicePixelRatio || 1;
+  // Draw on the device pixel grid with lines as thick as one theme pixel.
+  const line = Math.max(1, Math.round(parseFloat(css.getPropertyValue('--px')) * ratio));
+  const color = css.getPropertyValue('--scope-line').trim();
+  scopes.querySelectorAll('canvas').forEach((canvas, c) => {
+    const w = Math.round(canvas.clientWidth * ratio);
+    const h = Math.round(canvas.clientHeight * ratio);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const g = canvas.getContext('2d');
+    if (!g || !w || !h) return;
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = color;
+    const mid = Math.round((h - line) / 2);
+    const data = scopeData[c];
+    if (!data || data.length < SCOPE_WINDOW) {
+      g.fillRect(0, mid, w, line);
+      return;
+    }
+    const start = scopeTrigger(data);
+    const amp = ((h - line) / 2) * 0.85;
+    let prev = mid;
+    for (let x = 0; x < w; x += line) {
+      const v = Math.max(-1, Math.min(1, data[start + Math.floor((x * SCOPE_WINDOW) / w)]!));
+      const y = Math.round(mid - v * amp);
+      // Join to the previous column so steep edges stay connected.
+      const top = Math.min(prev, y);
+      g.fillRect(x, top, line, Math.max(prev, y) - top + line);
+      prev = y;
+    }
+  });
+}
+
+function clearScopes(): void {
+  scopeData = [];
+  scopesDirty = true;
+}
+
+new ResizeObserver(() => (scopesDirty = true)).observe(scopes);
+requestAnimationFrame(drawScopes);
 
 // ---- Playback ------------------------------------------------------------
 
 function handleWorkletMessage(message: WorkletMessage): void {
+  if (message.type === 'scopes') {
+    if (playing) {
+      scopeData = message.channels;
+      scopesDirty = true;
+    }
+    return;
+  }
   showPlayerState(message.state);
-  if (message.type !== 'row') return;
-  scopes.querySelectorAll('canvas').forEach((canvas, c) => drawScope(canvas, c, message.levels[c] ?? 0));
 }
 
 function showPlayerState(state: PlayerState): void {
   playing = state.playing;
-  if (!playing) return;
+  if (!playing) {
+    clearScopes();
+    return;
+  }
   showValue('bpm', state.tempo, true);
   showValue('speed', state.speed);
   if (state.order !== currentOrder) {
@@ -380,6 +437,7 @@ async function play(loopPattern: boolean): Promise<void> {
 function stop(): void {
   engine?.send({ type: 'stop' });
   playing = false;
+  clearScopes();
   showValue('bpm', song().initialTempo, true);
   showValue('speed', song().initialSpeed);
 }
@@ -433,8 +491,8 @@ function saveSong(): void {
 
 $('#new').addEventListener('click', () => {
   if (!confirmDiscard()) return;
-  startSong(createSong(8));
-  status.textContent = 'New song: 8 channels, five chip instruments.';
+  startSong(createSong());
+  status.textContent = 'New song: 4 channels, five chip instruments.';
 });
 $('#load').addEventListener('click', () => fileInput.click());
 $('#save').addEventListener('click', saveSong);
