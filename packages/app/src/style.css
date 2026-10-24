@@ -36,6 +36,7 @@
   --pat-fx: #ff8fdf;
   --pat-param: #ffdf7f;
   --pat-empty: #3a4660;
+  --scope-line: #7fff8f;
   --pat-sel: #3c3f8f;
   --pat-rec: #6a2f3f;
 }
@@ -234,11 +235,27 @@ output {
 }
 
 .scope {
-  display: block;
-  width: 100%;
+  position: relative;
   height: calc(var(--px) * 24);
   background: var(--field-bg);
-  image-rendering: pixelated;
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-hi);
+}
+
+.scope canvas {
+  position: absolute;
+  inset: var(--px);
+  width: calc(100% - var(--px) * 2);
+  height: calc(100% - var(--px) * 2);
+}
+
+.scope-label {
+  position: absolute;
+  top: calc(var(--px) * 2);
+  left: calc(var(--px) * 3);
+  color: var(--dim);
+  pointer-events: none;
 }
 
 .pattern-panel {

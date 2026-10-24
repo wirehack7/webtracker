@@ -186,6 +186,10 @@ export class Player {
   private breakRow = -1;
   private loopJumpRow = -1;
   private rampSamples: number;
+  // Per channel output for scopes: a ring buffer each, filled from a block tap.
+  private scopeRings: Float32Array[] = [];
+  private scopeTaps: Float32Array[] = [];
+  private scopePos = 0;
 
   /** Called whenever a new row starts playing. */
   onRow: ((state: PlayerState) => void) | null = null;
@@ -202,6 +206,7 @@ export class Player {
   reset(order = 0): void {
     const song = this.song;
     this.channels = song.channelPanning.map((p) => new Channel(p));
+    if (this.scopeRings.length) this.enableScopes(this.scopeRings[0]!.length);
     this.order = Math.min(order, song.orders.length - 1);
     this.row = 0;
     this.tick = 0;
@@ -234,6 +239,14 @@ export class Player {
     left.fill(0, 0, frames);
     right.fill(0, 0, frames);
     if (!this.playing) return;
+    const taps = this.scopeTaps;
+    if (taps.length) {
+      if ((taps[0]?.length ?? 0) < frames) {
+        this.scopeTaps = this.channels.map(() => new Float32Array(frames));
+      } else {
+        for (const tap of taps) tap.fill(0, 0, frames);
+      }
+    }
 
     let offset = 0;
     while (offset < frames) {
@@ -242,10 +255,11 @@ export class Player {
         this.samplesLeftInTick += (this.sampleRate * 2.5) / this.tempo;
       }
       const n = Math.min(frames - offset, Math.ceil(this.samplesLeftInTick));
-      for (const ch of this.channels) this.mixChannel(ch, left, right, offset, n);
+      this.channels.forEach((ch, c) => this.mixChannel(ch, left, right, offset, n, this.scopeTaps[c]));
       this.samplesLeftInTick -= n;
       offset += n;
     }
+    if (this.scopeTaps.length) this.pushScopes(frames);
 
     const g = this.masterGain;
     for (let i = 0; i < frames; i++) {
@@ -894,7 +908,14 @@ export class Player {
 
   // ------------------------------------------------------------------ mixing
 
-  private mixChannel(ch: Channel, left: Float32Array, right: Float32Array, offset: number, count: number): void {
+  private mixChannel(
+    ch: Channel,
+    left: Float32Array,
+    right: Float32Array,
+    offset: number,
+    count: number,
+    tap?: Float32Array,
+  ): void {
     const sample = ch.sample;
     if (!ch.active || !sample) return;
     const data = sample.data;
@@ -929,6 +950,7 @@ export class Player {
       }
       left[i]! += s * gainL;
       right[i]! += s * gainR;
+      if (tap) tap[i] = s * (gainL + gainR);
 
       pos += step * dir;
       if (looped) {
@@ -954,6 +976,40 @@ export class Player {
     ch.dir = dir;
     ch.gainL = gainL;
     ch.gainR = gainR;
+  }
+
+  /**
+   * Starts recording what each channel plays, after volume and before
+   * panning, for scopes. `size` is how many recent frames are kept.
+   */
+  enableScopes(size: number): void {
+    this.scopeRings = this.channels.map(() => new Float32Array(size));
+    this.scopeTaps = this.channels.map(() => new Float32Array(128));
+    this.scopePos = 0;
+  }
+
+  /** The kept frames per channel, oldest first. Silent channels read as zeros. */
+  readScopes(): Float32Array[] {
+    return this.scopeRings.map((ring) => {
+      const out = new Float32Array(ring.length);
+      out.set(ring.subarray(this.scopePos));
+      out.set(ring.subarray(0, this.scopePos), ring.length - this.scopePos);
+      return out;
+    });
+  }
+
+  private pushScopes(frames: number): void {
+    const size = this.scopeRings[0]?.length ?? 0;
+    if (!size) return;
+    this.scopeRings.forEach((ring, c) => {
+      const tap = this.scopeTaps[c]!;
+      let pos = this.scopePos;
+      for (let i = 0; i < frames; i++) {
+        ring[pos] = tap[i]!;
+        if (++pos === size) pos = 0;
+      }
+    });
+    this.scopePos = (this.scopePos + frames) % size;
   }
 
   /** Per channel snapshot for UI meters. */
