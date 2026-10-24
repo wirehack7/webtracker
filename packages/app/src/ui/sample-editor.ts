@@ -1,19 +1,27 @@
 import {
   amplifyRange,
   copyRange,
+  crossfadeLoop,
   cropRange,
   deleteRange,
   emptySample,
   fadeIn,
   fadeOut,
+  filterRange,
   fixLoop,
   generateWave,
   insertFrames,
+  invertRange,
   LoopType,
   normalizeRange,
+  quantize8,
+  rateForTuning,
+  removeDcRange,
   resample,
   reverseRange,
   silenceRange,
+  swapBytesRange,
+  toggleSignRange,
   tuningForRate,
   WAVE_SHAPES,
   type Range,
@@ -33,6 +41,8 @@ export interface SampleEditorHost {
   status(text: string): void;
   /** Opens the file picker that imports into the current sample slot. */
   importFile(): void;
+  /** Downloads the current sample as a WAV file. */
+  saveSample(): void;
 }
 
 const WAVE_LABELS: Record<WaveShape, string> = {
@@ -105,6 +115,21 @@ export class SampleEditor {
       button('All', () => this.showAll(), 'Show the whole sample'),
     );
 
+    const extra = el('div', 'tool-row');
+    extra.append(
+      el('span', 'label', 'Tools'),
+      button('Inv', () => this.rangeTool('invert', invertRange), 'Turn the waveform upside down'),
+      button('Sign', () => this.rangeTool('sign', toggleSignRange), 'Toggle signed/unsigned, for samples imported the wrong way'),
+      button('Swap', () => this.rangeTool('byte swap', swapBytesRange), 'Swap the bytes of 16-bit frames, for samples with the wrong byte order'),
+      button('DC', () => this.rangeTool('DC offset', removeDcRange), 'Remove the DC offset'),
+      button('8-Bit', () => this.edit('8-bit', quantize8), 'Reduce to 8 bits; the sample is then saved as 8-bit'),
+      button('LP', () => this.filter('lowpass'), 'Low-pass filter the selection'),
+      button('HP', () => this.filter('highpass'), 'High-pass filter the selection'),
+      button('XFade', () => this.crossfade(), 'Crossfade the loop end into the frames before the loop start'),
+      button('Rsmp', () => this.resampleTo(), 'Resample to any length, same pitch'),
+      button('Save', () => host.saveSample(), 'Save the sample as WAV'),
+    );
+
     const generate = el('div', 'tool-row');
     generate.append(
       el('span', 'label', 'Generate'),
@@ -113,7 +138,7 @@ export class SampleEditor {
       this.info,
     );
 
-    this.root.append(props, tools, generate, this.layers.root);
+    this.root.append(props, tools, extra, generate, this.layers.root);
     this.waveLength.show(this.waveLengthIndex);
     this.bindCanvas();
     new ResizeObserver(() => {
@@ -173,6 +198,43 @@ export class SampleEditor {
     if (!s || s.data.length === 0) return null;
     const sel = this.selection;
     return sel && sel.end > sel.start ? sel : { start: 0, end: s.data.length };
+  }
+
+  /** The rate the sample plays at on C-4, which filter cutoffs refer to. */
+  private sampleRate(): number {
+    const s = this.sample();
+    return s ? rateForTuning(s.relativeNote, s.finetune) : 8363;
+  }
+
+  private filter(kind: 'lowpass' | 'highpass'): void {
+    const rate = Math.round(this.sampleRate());
+    const answer = prompt(`${kind === 'lowpass' ? 'Low' : 'High'}-pass cutoff in Hz (sample plays at ${rate} Hz on C-4):`, kind === 'lowpass' ? '2000' : '100');
+    const cutoff = Number(answer);
+    if (!answer || !(cutoff > 0)) return;
+    this.rangeTool(kind, (s, r) => filterRange(s, r, kind, cutoff, rate));
+  }
+
+  private crossfade(): void {
+    const s = this.sample();
+    if (!s || s.loopType === LoopType.None) {
+      this.host.status('Crossfade needs a loop.');
+      return;
+    }
+    const answer = prompt('Crossfade length in frames:', String(Math.min(256, Math.floor(s.loopLength / 4)) || 1));
+    const frames = Math.floor(Number(answer));
+    if (!answer || !(frames > 0)) return;
+    let done = 0;
+    this.edit('crossfade loop', (sample) => (done = crossfadeLoop(sample, frames)));
+    this.host.status(done ? `Crossfaded ${done} frames into the loop start.` : 'No room before the loop start to crossfade.');
+  }
+
+  private resampleTo(): void {
+    const s = this.sample();
+    if (!s || s.data.length === 0) return;
+    const answer = prompt(`New length in frames (now ${s.data.length}); the pitch stays:`, String(s.data.length));
+    const frames = Math.floor(Number(answer));
+    if (!answer || !(frames > 0) || frames === s.data.length) return;
+    this.edit('resample', (sample) => resample(sample, frames / sample.data.length));
   }
 
   private rangeTool(label: string, op: (s: Sample, r: Range) => void): void {

@@ -14,6 +14,7 @@ import {
   NOTE_KEY_OFF,
   noteName,
   pasteClip,
+  rateForTuning,
   patternBlock,
   readCell,
   remapInstrument,
@@ -29,7 +30,7 @@ import {
   type Resampler,
   type Song,
 } from '@webtracker/engine';
-import { importSample, loadModule, sampleFromChannels, saveMod, saveXi, saveXm, type WavFormat } from '@webtracker/formats';
+import { encodeWav, importSample, loadModule, sampleFromChannels, saveMod, saveXi, saveXm, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
@@ -83,6 +84,7 @@ const host = {
   status: (text: string) => (status.textContent = text),
   importFile: () => $<HTMLInputElement>('#sample-file').click(),
   saveInstrument: () => saveInstrument(),
+  saveSample: () => saveSample(),
 };
 const sampleEditor = new SampleEditor(host);
 const instrumentEditor = new InstrumentEditor(host);
@@ -751,6 +753,18 @@ function download(bytes: Uint8Array, fileName: string, type: string): void {
 }
 
 const safeName = (name: string, fallback: string) => (name.trim() || fallback).replace(/[^\w .-]+/g, '_');
+
+function saveSample(): void {
+  const s = song().instruments[instrument - 1]?.samples[sampleSlot];
+  if (!s || s.data.length === 0) {
+    status.textContent = 'This sample slot is empty.';
+    return;
+  }
+  const name = safeName(s.name, `sample${hex(instrument)}-${hex(sampleSlot)}`);
+  const rate = Math.round(rateForTuning(s.relativeNote, s.finetune));
+  download(encodeWav([s.data], rate, 'pcm16'), `${name}.wav`, 'audio/wav');
+  status.textContent = `Saved ${name}.wav at ${rate} Hz.`;
+}
 
 function saveInstrument(): void {
   const ins = song().instruments[instrument - 1];

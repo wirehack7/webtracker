@@ -64,4 +64,6 @@ Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige T
 | Shift / Strg / Alt + F3–F5 | Track / Pattern / Auswahl ausschneiden, kopieren, einfügen (Strg+F4 und Alt+F4 gehören dem Browser: Pattern kopieren mit Strg+Shift+F4, Auswahl mit Strg+C) |
 | Alt+Q…I, Alt+A…K | Zu Kanal 1–8 bzw. 9–16 springen |
 
+Im Sample-Editor gibt es neben Schneiden, Normalisieren, Fades und Resample auch Werkzeuge zum Reparieren und Formen: Phase umkehren, Vorzeichen und Byte-Reihenfolge tauschen (für falsch importierte Rohdaten), DC-Offset entfernen, auf 8 Bit reduzieren, Tief- und Hochpass, Loop-Crossfade, Resample auf beliebige Länge und „Save“ als WAV.
+
 Unter „Setup“ lässt sich der Klang einstellen: Resampling (Auto spielt MOD über den Amiga-500-Filter, bei dem E00/E01 das LED-Filter schalten, und XM linear interpoliert; dazu Linear, Cubic und ganz ohne Interpolation) sowie die Stereo-Breite von Mono bis 200 %. Der WAV-Export verwendet dieselben Einstellungen.
