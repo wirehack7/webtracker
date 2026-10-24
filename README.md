@@ -4,7 +4,7 @@ A chiptune tracker for the browser, made for the demoscene. Classic tracker inte
 
 **Start it right in your browser: https://wirehack7.github.io/webtracker/**
 
-The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions.
+The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions and keeps a library of named songs. Share puts the whole song, compressed, into a link that opens it again, with no server involved.
 
 ## Development
 
