@@ -14,3 +14,4 @@ export function loadModule(buffer: ArrayBuffer, fileName = ''): Song {
   if (/\.(mod|stk)$|^mod\./i.test(fileName)) return loadMod(buffer);
   throw new Error('Unknown module format (supported: MOD, XM)');
 }
+export { saveXm } from './xm-write.ts';

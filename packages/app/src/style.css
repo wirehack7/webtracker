@@ -36,6 +36,8 @@
   --pat-fx: #ff8fdf;
   --pat-param: #ffdf7f;
   --pat-empty: #3a4660;
+  --pat-sel: #3c3f8f;
+  --pat-rec: #6a2f3f;
 }
 
 *,
@@ -492,4 +494,59 @@ output {
   .piano {
     height: calc(var(--px) * 56);
   }
+}
+
+/* ---- Editing --------------------------------------------------------- */
+
+.pattern-view {
+  position: relative;
+  user-select: none;
+}
+
+.pattern-view .c.sel {
+  background: var(--pat-sel);
+}
+
+.pattern-view .k {
+  background: var(--pat-cell);
+  color: #000000;
+}
+
+.pattern-view.rec .r.cur {
+  background: var(--pat-rec);
+}
+
+.pattern-view.rec .r.cur .rn {
+  background-color: var(--pat-rec);
+}
+
+/* ---- Help ------------------------------------------------------------ */
+
+.help {
+  border: 0;
+  color: var(--text);
+  max-width: min(calc(100vw - 32px), calc(var(--px) * 360));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.help::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.help table {
+  border-collapse: collapse;
+}
+
+.help th,
+.help td {
+  padding: calc(var(--px) * 2) calc(var(--px) * 4) calc(var(--px) * 2) 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.help th {
+  color: var(--pat-param);
+  font-weight: normal;
+  white-space: nowrap;
 }

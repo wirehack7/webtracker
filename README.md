@@ -35,3 +35,18 @@ MODULE_DIR=~/mods pnpm test
 | `packages/app` | Vite-App: UI, AudioWorklet-Wrapper unter `src/audio/`. |
 
 Jeder Push auf `main` wird nach GitHub Pages deployt.
+
+## Bedienung
+
+Die Oberfläche ist auf Englisch und folgt der FT2-Belegung. Die vollständige Tastenliste zeigt der Button „Help“ in der App. Das Wichtigste:
+
+| Taste | Funktion |
+| --- | --- |
+| Leertaste | Stop, sonst Edit-Modus (Rec) an/aus |
+| Enter / Shift+Enter | Song / Pattern abspielen |
+| Z–M, Q–U | Noten (nach physischer Taste), F1–F7 Oktave, 1 oder ` Key-Off |
+| 0–9, A–F | Instrument, Volume, Effekt und Parameter im Edit-Modus |
+| Shift+Pfeile, Maus ziehen | Block markieren; Strg+C/X/V kopieren, ausschneiden, einfügen |
+| Alt+↑/↓ | Transponieren (mit Shift um eine Oktave) |
+| Strg+Z / Strg+Y | Undo / Redo |
+| Strg+S | Als XM speichern |
