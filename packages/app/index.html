@@ -7,15 +7,37 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <main>
+    <header id="toolbar">
       <h1>webtracker</h1>
-      <p class="status" id="status">Audio aus. Klick auf „Audio starten“, dann spielen die Tasten Y–M und Q–U Noten.</p>
-      <button id="start" type="button">Audio starten</button>
-      <p class="note" id="note">---</p>
-      <p class="hint">
-        Untere Reihe ab Y/Z = Oktave 4, obere Reihe ab Q = Oktave 5, F1–F7 wählt die Oktave.
-        Belegung nach physischer Taste, also gleich auf QWERTZ und QWERTY.
-      </p>
+      <label class="button">
+        MOD/XM laden
+        <input id="file" type="file" accept=".mod,.xm,.stk" hidden />
+      </label>
+      <button id="play-song" type="button" disabled>Play Song</button>
+      <button id="play-pattern" type="button" disabled>Play Pattern</button>
+      <button id="stop" type="button" disabled>Stop</button>
+      <button id="prev-order" type="button" disabled title="Vorherige Position">&laquo;</button>
+      <button id="next-order" type="button" disabled title="Nächste Position">&raquo;</button>
+      <span class="status" id="status">Modul hier ablegen oder laden. Ohne Modul spielen Y–M und Q–U Noten (F1–F7 Oktave).</span>
+    </header>
+
+    <main>
+      <aside id="instruments">
+        <dl class="song-info">
+          <dt>Titel</dt><dd id="song-title">-</dd>
+          <dt>Format</dt><dd id="song-format">-</dd>
+          <dt>Kanäle</dt><dd id="song-channels">-</dd>
+          <dt>Position</dt><dd id="song-position">-</dd>
+          <dt>Speed/BPM</dt><dd id="song-speed">-</dd>
+          <dt>Note</dt><dd id="note">---</dd>
+        </dl>
+        <ol id="instrument-list" class="instrument-list"></ol>
+      </aside>
+
+      <section id="pattern">
+        <div id="meters" class="meters"></div>
+        <div id="pattern-view" class="pattern-view"></div>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,12 +1,17 @@
 import workletUrl from './worklet.ts?worker&url';
-import type { EngineMessage } from './messages.ts';
+import type { EngineMessage, WorkletMessage } from './messages.ts';
 
 /** Main-thread handle to the engine running in the AudioWorklet. */
 export class EngineNode {
+  /** Called for every message the worklet sends (row changes, state updates). */
+  onMessage: ((message: WorkletMessage) => void) | null = null;
+
   private constructor(
     readonly context: AudioContext,
     private readonly node: AudioWorkletNode,
-  ) {}
+  ) {
+    node.port.onmessage = (event: MessageEvent<WorkletMessage>) => this.onMessage?.(event.data);
+  }
 
   /** Must be called from a user gesture, browsers block audio otherwise. */
   static async start(): Promise<EngineNode> {

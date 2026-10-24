@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worklet.json"
   },
   "dependencies": {
-    "@webtracker/engine": "workspace:*"
+    "@webtracker/engine": "workspace:*",
+    "@webtracker/formats": "workspace:*"
   },
   "devDependencies": {
     "@types/audioworklet": "^0.0.100",
