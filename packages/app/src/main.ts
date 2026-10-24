@@ -190,6 +190,39 @@ function clearAtCursor(): void {
   advance();
 }
 
+// FT2 block keys: F3 cut, F4 copy, F5 paste; Shift for the track, Ctrl for
+// the pattern, Alt for the selection. Ctrl+F4 and Alt+F4 belong to the
+// browser and the system, so Ctrl+Shift+F4 also copies the pattern.
+const BLOCK_ACTIONS: Record<string, 'cut' | 'copy' | 'paste'> = { F3: 'cut', F4: 'copy', F5: 'paste' };
+// Alt+Q..I jumps to channels 1-8, Alt+A..K to 9-16, as in FT2.
+const CHANNEL_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK'];
+
+function blockKey(event: KeyboardEvent): boolean {
+  if (event.altKey && !event.ctrlKey && !event.shiftKey) {
+    const channel = CHANNEL_KEYS.indexOf(event.code);
+    if (channel >= 0) {
+      if (channel < song().channels) view.moveTo(view.row, channel);
+      return true;
+    }
+  }
+  const action = BLOCK_ACTIONS[event.code];
+  if (!action || !(event.shiftKey || event.ctrlKey || event.altKey)) return false;
+  const scope = event.ctrlKey ? 'pattern' : event.shiftKey ? 'track' : 'block';
+  const block =
+    scope === 'block' ? view.blockOrCursor() : patternBlock(song(), view.pattern, scope === 'track' ? view.channel : undefined);
+  if (action === 'paste') {
+    const clip = clipboard;
+    if (!clip) return true;
+    const [row, channel] = scope === 'block' ? [view.row, view.channel] : [0, scope === 'track' ? view.channel : 0];
+    editor.editPattern(view.patternIndex, `paste ${scope}`, (p) => pasteClip(song(), p, row, channel, clip));
+    return true;
+  }
+  clipboard = copyBlock(song(), view.pattern, block);
+  if (action === 'cut') editor.editPattern(view.patternIndex, `cut ${scope}`, (p) => clearBlock(song(), p, block));
+  status.textContent = `${action === 'cut' ? 'Cut' : 'Copied'} ${scope}: ${clipboard.rows} rows × ${clipboard.channels} channels.`;
+  return true;
+}
+
 function copySelection(cut: boolean): void {
   const block = view.blockOrCursor();
   clipboard = copyBlock(song(), view.pattern, block);
@@ -1126,6 +1159,10 @@ window.addEventListener('keydown', (event) => {
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
   const inPattern = app.dataset.view === 'pattern';
+  if (inPattern && blockKey(event)) {
+    event.preventDefault();
+    return;
+  }
   const ctrlOctave = event.ctrlKey && !event.altKey && !event.shiftKey ? octaveForKey(event.code, settings.octave, true) : null;
   if (ctrlOctave !== null) {
     event.preventDefault();
