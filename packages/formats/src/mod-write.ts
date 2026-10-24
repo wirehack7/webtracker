@@ -83,6 +83,8 @@ export function saveMod(song: Song): SavedMod {
   samples.forEach((s, i) => {
     const o = 20 + i * 30;
     text(o, song.instruments[i]?.name ?? '', 22);
+    // ProTracker writes a one-word repeat length for samples without a loop, empty slots included.
+    word(o + 28, 1);
     if (!s) return;
     const bytes = sampleBytes[i]!;
     word(o + 22, bytes / 2);
@@ -94,13 +96,12 @@ export function saveMod(song: Song): SavedMod {
       const length = Math.min(s.loopLength, bytes - start) & ~1;
       word(o + 26, start / 2);
       word(o + 28, Math.max(1, length / 2));
-    } else {
-      word(o + 28, 1);
     }
   });
 
   out[950] = orders.length;
-  out[951] = song.restartPosition < orders.length ? song.restartPosition : 0;
+  // 127 is what ProTracker stores when the song restarts from the top.
+  out[951] = song.restartPosition > 0 && song.restartPosition < orders.length ? song.restartPosition : 127;
   orders.forEach((p, i) => (out[952 + i] = p < patternCount ? p : 0));
   text(1080, tagFor(channels, patternCount), 4);
 
