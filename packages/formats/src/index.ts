@@ -17,3 +17,6 @@ export function loadModule(buffer: ArrayBuffer, fileName = ''): Song {
 export { saveXm } from './xm-write.ts';
 export { saveXi } from './xm-write.ts';
 export { importSample, sampleFromChannels, type Imported } from './sample-import.ts';
+export { saveMod, type SavedMod } from './mod-write.ts';
+export { encodeWav, type WavFormat } from './wav-write.ts';
+export { createZip, crc32, type ZipEntry } from './zip.ts';

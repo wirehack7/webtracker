@@ -178,6 +178,8 @@ export class Player {
   loops = 0;
   /** Repeat the current pattern instead of advancing through the order list. */
   loopPattern = false;
+  /** Channels that keep playing but are not heard, by channel index. */
+  muted: boolean[] = [];
   /** Overall output gain applied after mixing. */
   masterGain: number;
 
@@ -259,7 +261,9 @@ export class Player {
         this.samplesLeftInTick += (this.sampleRate * 2.5) / this.tempo;
       }
       const n = Math.min(frames - offset, Math.ceil(this.samplesLeftInTick));
-      if (this.playing) this.channels.forEach((ch, c) => this.mixChannel(ch, left, right, offset, n, this.scopeTaps[c]));
+      if (this.playing) {
+        this.channels.forEach((ch, c) => this.mixChannel(ch, left, right, offset, n, this.scopeTaps[c], this.muted[c] === true));
+      }
       // The preview voice is heard but stays out of the scopes.
       this.mixChannel(this.preview, left, right, offset, n);
       this.samplesLeftInTick -= n;
@@ -922,6 +926,7 @@ export class Player {
     offset: number,
     count: number,
     tap?: Float32Array,
+    silent = false,
   ): void {
     const sample = ch.sample;
     if (!ch.active || !sample) return;
@@ -955,9 +960,12 @@ export class Player {
           gainR = ch.targetR;
         }
       }
-      left[i]! += s * gainL;
-      right[i]! += s * gainR;
-      if (tap) tap[i] = s * (gainL + gainR);
+      // A muted channel runs on so it is in step when unmuted, but adds nothing.
+      if (!silent) {
+        left[i]! += s * gainL;
+        right[i]! += s * gainR;
+        if (tap) tap[i] = s * (gainL + gainR);
+      }
 
       pos += step * dir;
       if (looped) {

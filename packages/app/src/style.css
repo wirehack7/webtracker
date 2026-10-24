@@ -692,3 +692,80 @@ output {
     grid-template-columns: repeat(24, minmax(0, 1fr));
   }
 }
+
+/* ---- Song title, mute, save dialog ------------------------------------ */
+
+.song-title {
+  display: flex;
+  margin-bottom: calc(var(--px) * 2);
+}
+
+.song-title .value.text {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+}
+
+.scope {
+  cursor: pointer;
+}
+
+.scope.muted canvas {
+  opacity: 0.25;
+}
+
+.scope.muted .scope-label {
+  color: var(--pat-fx);
+}
+
+.scope.muted .scope-label::after {
+  content: ' MUTE';
+}
+
+.file-dialog .ptitle + .row,
+.file-dialog .ptitle + .export-fields {
+  margin-top: 0;
+}
+
+.file-dialog .ptitle:not(:first-child) {
+  margin-top: calc(var(--px) * 8);
+}
+
+.file-dialog .info {
+  margin: calc(var(--px) * 3) 0 0;
+  max-width: calc(var(--px) * 300);
+  line-height: 1.6;
+}
+
+.export-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--px) * 2) calc(var(--px) * 4);
+  align-items: center;
+}
+
+.export-fields label {
+  display: contents;
+}
+
+select.value {
+  font: inherit;
+  color: var(--field-fg);
+  background: var(--field-bg);
+  border: 0;
+  text-align: left;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.file-dialog progress {
+  flex: 1;
+  min-width: calc(var(--px) * 40);
+  height: calc(var(--px) * 8);
+  accent-color: var(--scope-line);
+}
+
+.file-dialog .list li .idx {
+  margin-right: calc(var(--px) * 2);
+}

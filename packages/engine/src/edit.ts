@@ -8,6 +8,7 @@ import { CELL_SIZE, emptyEnvelope, emptyPattern, LoopType, NOTE_KEY_OFF, type Ce
 export const MAX_ROWS = 256;
 export const MAX_PATTERNS = 256;
 export const MAX_ORDERS = 256;
+export const MAX_CHANNELS = 32;
 
 /** A rectangle of cells, inclusive on all sides, with row0 <= row1 and ch0 <= ch1. */
 export interface Block {
@@ -151,6 +152,26 @@ export function resizePattern(song: Song, pattern: Pattern, rows: number): Patte
   const resized = emptyPattern(length, song.channels);
   resized.data.set(pattern.data.subarray(0, Math.min(pattern.data.length, resized.data.length)));
   return resized;
+}
+
+/**
+ * Changes the channel count of the whole song. Channels past the new count
+ * are dropped from every pattern; new channels start empty and centred.
+ */
+export function setChannelCount(song: Song, channels: number): void {
+  const count = Math.max(1, Math.min(MAX_CHANNELS, Math.floor(channels)));
+  const old = song.channels;
+  if (count === old) return;
+  const keep = Math.min(old, count) * CELL_SIZE;
+  song.patterns = song.patterns.map((p) => {
+    const next = emptyPattern(p.rows, count);
+    for (let r = 0; r < p.rows; r++) {
+      next.data.set(p.data.subarray(r * old * CELL_SIZE, r * old * CELL_SIZE + keep), r * count * CELL_SIZE);
+    }
+    return next;
+  });
+  song.channelPanning = Array.from({ length: count }, (_, c) => song.channelPanning[c] ?? 128);
+  song.channels = count;
 }
 
 /** Returns the pattern at `index`, appending empty 64-row patterns up to it. */

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#3d5578" />
     <title>webtracker</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
   </head>
   <body>
     <div class="app" id="app" data-tab="song" data-view="pattern">
@@ -28,6 +30,7 @@
 
         <div class="panel song" data-panel="song">
           <h2 class="ptitle">Song</h2>
+          <label class="text-field song-title"><span class="label">Title</span><input type="text" class="value text" id="title" maxlength="20" spellcheck="false" /></label>
           <div class="fields">
             <span class="label">BPM</span><output class="value" id="bpm">125</output>
             <button type="button" class="btn sm" data-step="bpm:-1">-</button><button type="button" class="btn sm" data-step="bpm:1">+</button>
@@ -37,6 +40,8 @@
             <button type="button" class="btn sm" data-step="add:-1">-</button><button type="button" class="btn sm" data-step="add:1">+</button>
             <span class="label">Oct</span><output class="value" id="octave">04</output>
             <button type="button" class="btn sm" data-step="octave:-1">-</button><button type="button" class="btn sm" data-step="octave:1">+</button>
+            <span class="label">Chn</span><output class="value" id="channels">04</output>
+            <button type="button" class="btn sm" data-step="channels:-1" title="Fewer channels (Shift: 2)">-</button><button type="button" class="btn sm" data-step="channels:1" title="More channels (Shift: 2)">+</button>
           </div>
         </div>
 
@@ -49,7 +54,7 @@
             <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
             <button type="button" class="btn" id="new" title="New song">New</button>
             <button type="button" class="btn" id="load" title="Load MOD or XM (Ctrl+O)">Load</button>
-            <button type="button" class="btn" id="save" title="Save as XM (Ctrl+S)">Save</button>
+            <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
             <button type="button" class="btn" id="help-open" title="Keyboard shortcuts">Help</button>
             <input type="file" id="file" accept=".mod,.xm,.stk" hidden />
             <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.flac,.mp3,.ogg,.opus,audio/*" hidden />
@@ -113,12 +118,56 @@
           <tr><th>Ctrl+A</th><td>Select the whole pattern; Esc clears the selection</td></tr>
           <tr><th>Alt+Up/Down</th><td>Transpose the selection or cell a semitone (Shift: octave)</td></tr>
           <tr><th>Ctrl+Z / Ctrl+Y</th><td>Undo / redo</td></tr>
-          <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module</td></tr>
+          <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module; the Save button also saves MOD and exports WAV</td></tr>
+          <tr><th>Scopes</th><td>Click to mute a channel, right-click to solo it</td></tr>
           <tr><th>Sample view</th><td>Drag to select, drag the yellow markers to move the loop, double-click selects all</td></tr>
           <tr><th>Instr view</th><td>Click to add envelope points, drag to move, right-click to delete</td></tr>
           <tr><th>Drop a file</th><td>MOD/XM opens as a song; WAV, AIFF, FLAC, MP3, OGG, 8SVX or XI goes into the current sample slot</td></tr>
         </tbody>
       </table>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog" id="file-dialog">
+      <h2 class="ptitle">Save</h2>
+      <div class="row">
+        <button type="button" class="btn" id="save-xm" title="FastTracker 2 module, keeps everything (Ctrl+S)">Save XM</button>
+        <button type="button" class="btn" id="save-mod" title="ProTracker module, converts what fits">Save MOD</button>
+      </div>
+      <p class="info" id="save-info"></p>
+
+      <h2 class="ptitle">Export WAV</h2>
+      <div class="export-fields">
+        <label><span class="label">Format</span>
+          <select class="value" id="export-format">
+            <option value="pcm16">16-bit</option>
+            <option value="pcm24">24-bit</option>
+            <option value="float32">32-bit float</option>
+          </select>
+        </label>
+        <label><span class="label">Rate</span>
+          <select class="value" id="export-rate">
+            <option value="44100">44100 Hz</option>
+            <option value="48000">48000 Hz</option>
+            <option value="96000">96000 Hz</option>
+          </select>
+        </label>
+        <label><span class="label">What</span>
+          <select class="value" id="export-what">
+            <option value="mix">Song</option>
+            <option value="stems">Song + one file per channel (ZIP)</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="export-go">Render</button>
+        <progress id="export-progress" max="1" value="0" hidden></progress>
+      </div>
+      <p class="info" id="export-info">Muted channels stay out of the song mix.</p>
+
+      <h2 class="ptitle">Autosaved versions</h2>
+      <ol class="list short" id="autosave-list"></ol>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>

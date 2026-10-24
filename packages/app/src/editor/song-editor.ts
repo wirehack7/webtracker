@@ -1,4 +1,4 @@
-import { emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
+import { emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, setChannelCount, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
 import type { EngineMessage } from '../audio/messages.ts';
 import { History } from './history.ts';
 
@@ -185,6 +185,42 @@ export class SongEditor {
     this.song.initialTempo = tempo;
     this.sync({ type: 'tempo', speed, tempo });
     this.changed('tempo');
+  }
+
+  /** Song title, at most 20 characters as in XM. */
+  setTitle(title: string): void {
+    const after = title.slice(0, 20);
+    const before = this.song.title;
+    if (after === before) return;
+    const apply = (t: string) => {
+      this.song.title = t;
+      this.changed('title');
+    };
+    this.history.push({ label: 'title', undo: () => apply(before), redo: () => apply(after) });
+    apply(after);
+  }
+
+  /**
+   * Changes the channel count of every pattern. The player is rebuilt for
+   * the new layout, so playback stops.
+   */
+  setChannels(channels: number): void {
+    const song = this.song;
+    const snapshot = () => ({ channels: song.channels, panning: [...song.channelPanning], patterns: song.patterns.map(clonePattern) });
+    const before = snapshot();
+    setChannelCount(song, channels);
+    if (song.channels === before.channels) return;
+    const after = snapshot();
+    const apply = (state: typeof before) => {
+      song.channels = state.channels;
+      song.channelPanning = [...state.panning];
+      song.patterns = state.patterns.map(clonePattern);
+      this.sync({ type: 'load', song });
+      this.changed('channels');
+    };
+    this.history.push({ label: 'channels', undo: () => apply(before), redo: () => apply(after) });
+    this.sync({ type: 'load', song });
+    this.changed('channels');
   }
 
   undo(): string | null {
