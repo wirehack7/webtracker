@@ -7,6 +7,9 @@ export interface RenderOptions {
   maxSeconds?: number;
   /** Channels left out of the mix, by channel index. */
   muted?: boolean[];
+  /** Mixer settings, as on the Player. */
+  interpolation?: boolean;
+  volumeRamps?: boolean;
   /** Called now and then with how far the song has got, 0..1. */
   onProgress?: (fraction: number) => void;
 }
@@ -29,6 +32,8 @@ export function renderSong(song: Song, options: RenderOptions = {}): Rendered {
   const maxFrames = Math.round((options.maxSeconds ?? 20 * 60) * sampleRate);
   const player = new Player(song, sampleRate);
   player.muted = options.muted ?? [];
+  player.interpolation = options.interpolation ?? true;
+  player.volumeRamps = options.volumeRamps ?? true;
   player.playing = true;
 
   const blocks: [Float32Array, Float32Array][] = [];

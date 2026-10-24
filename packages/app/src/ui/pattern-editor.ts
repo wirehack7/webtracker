@@ -74,6 +74,16 @@ export class PatternEditor {
     this.render();
   }
 
+  /** Row highlights: every `beat` rows, and stronger every `bar` rows (0 turns one off). */
+  beat = 4;
+  bar = 16;
+
+  private rowClass(r: number): string {
+    const beat = this.beat > 0 && r % this.beat === 0 ? ' beat' : '';
+    const bar = this.bar > 0 && r % this.bar === 0 ? ' bar' : '';
+    return `r${beat}${bar}${r === this.row ? ' cur' : ''}`;
+  }
+
   /** Redraws every row, after edits or a new pattern. */
   render(): void {
     const song = this.song;
@@ -83,7 +93,7 @@ export class PatternEditor {
     const rows: HTMLDivElement[] = [];
     for (let r = 0; r < pattern.rows; r++) {
       const div = this.rows[r] ?? document.createElement('div');
-      div.className = `r${r % 4 === 0 ? ' beat' : ''}${r === this.row ? ' cur' : ''}`;
+      div.className = this.rowClass(r);
       div.dataset.row = String(r);
       div.innerHTML = rowHtml(song, pattern, r, view);
       rows.push(div);
@@ -96,7 +106,7 @@ export class PatternEditor {
   private renderRow(r: number): void {
     const div = this.rows[r];
     if (!div || !this.song) return;
-    div.className = `r${r % 4 === 0 ? ' beat' : ''}${r === this.row ? ' cur' : ''}`;
+    div.className = this.rowClass(r);
     div.innerHTML = rowHtml(this.song, this.pattern, r, this.view());
   }
 

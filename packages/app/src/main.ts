@@ -35,6 +35,7 @@ import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
 import { listAutosaves, writeAutosave, type Autosave } from './storage/autosave.ts';
+import { loadSettings, midiToNote, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -42,6 +43,8 @@ const app = $<HTMLDivElement>('#app');
 const status = $<HTMLSpanElement>('#status');
 const patternEl = $<HTMLDivElement>('#pattern');
 const view = new PatternEditor(patternEl);
+/** Browser preferences from the Setup dialog. */
+const prefs: Settings = loadSettings();
 
 const settings = { add: 1, octave: 4 };
 const limits = { bpm: [32, 255], speed: [1, 31], add: [0, 16], octave: [0, 7], channels: [1, MAX_CHANNELS] } as const;
@@ -84,6 +87,7 @@ function ensureEngine(): Promise<EngineNode | null> {
       node.onMessage = handleWorkletMessage;
       node.send({ type: 'load', song: editor.song });
       node.send({ type: 'mute', muted });
+      node.send({ type: 'mixer', interpolation: prefs.interpolation, volumeRamps: prefs.volumeRamps });
       status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
       return node;
     },
@@ -110,9 +114,9 @@ function previewOff(note: number): void {
 }
 
 /** A note from the keyboard or piano: sounds it, and writes it in edit mode. */
-function playNote(note: number): void {
+function playNote(note: number, volume = 0): void {
   if (recording && view.column === Column.Note) {
-    editCell('note', { note, instrument });
+    editCell('note', volume ? { note, instrument, volume } : { note, instrument });
     advance();
   }
   void previewOn(note);
@@ -702,6 +706,8 @@ function exportWav(): void {
     sampleRate: Number($<HTMLSelectElement>('#export-rate').value),
     stems: $<HTMLSelectElement>('#export-what').value === 'stems',
     muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
+    interpolation: prefs.interpolation,
+    volumeRamps: prefs.volumeRamps,
     name: safeName(s.title, 'untitled'),
   };
   const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
@@ -864,7 +870,7 @@ $('#help-open').addEventListener('click', () => help.showModal());
 // Buttons hand focus back to the pattern, so Space and Enter never press them twice.
 document.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest('.btn');
-  if (button && !help.contains(button) && !fileDialog.contains(button)) patternEl.focus({ preventScroll: true });
+  if (button && !(button.closest('dialog'))) patternEl.focus({ preventScroll: true });
 });
 
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-tab-target]')) {
@@ -976,7 +982,7 @@ function handleMove(event: KeyboardEvent): boolean {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (help.open || fileDialog.open) return;
+  if (document.querySelector('dialog[open]')) return;
   const target = event.target as HTMLElement;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
@@ -1020,7 +1026,10 @@ window.addEventListener('keydown', (event) => {
       return;
     case 'Space':
       event.preventDefault();
-      if (playing) stop();
+      if (prefs.space === 'play' && !event.shiftKey) {
+        if (playing) stop();
+        else void play(false);
+      } else if (playing && prefs.space === 'ft2') stop();
       else setRecording(!recording);
       return;
     case 'Enter':
@@ -1084,6 +1093,7 @@ function previewKeys(event: KeyboardEvent): void {
   if (event.code === 'Space') {
     event.preventDefault();
     if (playing) stop();
+    else if (prefs.space === 'play') void play(false);
     return;
   }
   if (event.code === 'Enter') {
@@ -1110,6 +1120,93 @@ view.onCursor = () => {
   status.textContent = `Row ${hex(view.row)}  Channel ${view.channel + 1}`;
 };
 
+// ---- Setup: colours, mixer, highlights, keys, MIDI -----------------------
+
+const setup = $<HTMLDialogElement>('#setup');
+const themeSelect = $<HTMLSelectElement>('#set-theme');
+themeSelect.replaceChildren(
+  ...Object.entries(THEMES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })),
+);
+const checkbox = (id: string) => $<HTMLInputElement>(id);
+
+function applySettings(): void {
+  document.documentElement.dataset.theme = prefs.theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
+  view.beat = prefs.beat;
+  view.bar = prefs.bar;
+  view.render();
+  engine?.send({ type: 'mixer', interpolation: prefs.interpolation, volumeRamps: prefs.volumeRamps });
+  scopesDirty = true;
+  renderEditors();
+  void connectMidi(prefs.midi);
+}
+
+function showSettings(): void {
+  themeSelect.value = prefs.theme;
+  checkbox('#set-interpolation').checked = prefs.interpolation;
+  checkbox('#set-ramps').checked = prefs.volumeRamps;
+  $<HTMLSelectElement>('#set-beat').value = String(prefs.beat);
+  $<HTMLSelectElement>('#set-bar').value = String(prefs.bar);
+  $<HTMLSelectElement>('#set-space').value = prefs.space;
+  checkbox('#set-midi').checked = prefs.midi;
+  checkbox('#set-velocity').checked = prefs.midiVelocity;
+}
+
+setup.addEventListener('change', () => {
+  prefs.theme = themeSelect.value as Theme;
+  prefs.interpolation = checkbox('#set-interpolation').checked;
+  prefs.volumeRamps = checkbox('#set-ramps').checked;
+  prefs.beat = Number($<HTMLSelectElement>('#set-beat').value);
+  prefs.bar = Number($<HTMLSelectElement>('#set-bar').value);
+  prefs.space = $<HTMLSelectElement>('#set-space').value as Settings['space'];
+  prefs.midi = checkbox('#set-midi').checked;
+  prefs.midiVelocity = checkbox('#set-velocity').checked;
+  saveSettings(prefs);
+  applySettings();
+});
+$('#setup-open').addEventListener('click', () => {
+  showSettings();
+  setup.showModal();
+});
+
+// Web MIDI: note on plays and records like the keyboard, note off releases.
+let midiAccess: MIDIAccess | null = null;
+
+function onMidi(event: MIDIMessageEvent): void {
+  const [status = 0, data1 = 0, data2 = 0] = event.data ?? [];
+  const kind = status & 0xf0;
+  const note = midiToNote(data1);
+  if (note === null) return;
+  if (kind === 0x90 && data2 > 0) playNote(note, prefs.midiVelocity ? velocityToVolume(data2) : 0);
+  else if (kind === 0x80 || kind === 0x90) previewOff(note);
+}
+
+function listenToInputs(): void {
+  midiAccess?.inputs.forEach((input) => (input.onmidimessage = prefs.midi ? onMidi : null));
+}
+
+async function connectMidi(on: boolean): Promise<void> {
+  if (!on) {
+    listenToInputs();
+    return;
+  }
+  const info = $('#setup-info');
+  if (!('requestMIDIAccess' in navigator)) {
+    info.textContent = 'This browser has no Web MIDI.';
+    return;
+  }
+  try {
+    midiAccess ??= await navigator.requestMIDIAccess();
+    midiAccess.onstatechange = listenToInputs;
+    listenToInputs();
+    const names = [...midiAccess.inputs.values()].map((i) => i.name ?? 'MIDI input');
+    info.textContent = names.length ? `MIDI: ${names.join(', ')}` : 'MIDI is on; no input device connected yet.';
+  } catch (error) {
+    info.textContent = `MIDI not allowed: ${(error as Error).message}`;
+  }
+}
+
+applySettings();
 showSong();
 void restoreLastSession();
 

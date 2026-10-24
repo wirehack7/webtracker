@@ -53,3 +53,14 @@ describe('setChannelCount', () => {
     expect(readCell(s, s.patterns[0]!, 0, 2).note).toBe(0);
   });
 });
+
+describe('mixer options', () => {
+  it('holds each frame without interpolation', () => {
+    const s = song();
+    const smooth = renderSong(s, { sampleRate: RATE, maxSeconds: 0.2 });
+    const raw = renderSong(s, { sampleRate: RATE, maxSeconds: 0.2, interpolation: false });
+    // Without interpolation the output only has as many distinct levels as the sample has.
+    const levels = (a: Float32Array) => new Set(Array.from(a.subarray(2000, 4000), (v) => v.toFixed(5))).size;
+    expect(levels(raw.left)).toBeLessThan(levels(smooth.left));
+  });
+});
