@@ -444,6 +444,11 @@ requestAnimationFrame(drawScopes);
 // ---- Playback ------------------------------------------------------------
 
 function handleWorkletMessage(message: WorkletMessage): void {
+  if (message.type === 'voices') {
+    sampleEditor.showVoices(message.voices);
+    instrumentEditor.showVoices(message.voices);
+    return;
+  }
   if (message.type === 'scopes') {
     if (playing) {
       scopeData = message.channels;

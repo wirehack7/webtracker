@@ -62,6 +62,31 @@ export function textInput(label: string, maxLength: number, onChange: (value: st
   return { root, input };
 }
 
+/**
+ * A canvas with a transparent overlay on top, so fast-changing marks such as
+ * play positions redraw without repainting what is underneath.
+ */
+export function layeredCanvas(className: string): { root: HTMLDivElement; base: HTMLCanvasElement; overlay: HTMLCanvasElement } {
+  const root = el('div', `layered ${className}`);
+  const base = el('canvas');
+  const overlay = el('canvas', 'overlay');
+  root.append(base, overlay);
+  return { root, base, overlay };
+}
+
+/** Draws one-pixel-wide vertical play markers at the given x positions (0..1). */
+export function drawMarkers(canvas: HTMLCanvasElement, positions: number[]): void {
+  const g = fitCanvas(canvas);
+  if (!g) return;
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.fillStyle = cssColor('--play-marker', '#ffffff');
+  const width = Math.max(1, Math.round(window.devicePixelRatio || 1));
+  for (const t of positions) {
+    if (t < 0 || t > 1) continue;
+    g.fillRect(Math.min(canvas.width - width, Math.round(t * canvas.width)), 0, width, canvas.height);
+  }
+}
+
 /** Sizes a canvas to its CSS box at device resolution and returns the 2D context. */
 export function fitCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   const dpr = window.devicePixelRatio || 1;

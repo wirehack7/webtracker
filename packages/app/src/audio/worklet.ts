@@ -10,6 +10,9 @@ class EngineProcessor extends AudioWorkletProcessor {
   private songLeft = new Float32Array(128);
   private songRight = new Float32Array(128);
   private framesToScopes = 0;
+  private framesToVoices = 0;
+  /** Whether the last 'voices' message listed any, so silence is sent once. */
+  private hadVoices = false;
 
   constructor() {
     super();
@@ -96,6 +99,13 @@ class EngineProcessor extends AudioWorkletProcessor {
       }
       player.process(this.songLeft, this.songRight, frames);
       for (let i = 0; i < frames; i++) left[i] = (this.songLeft[i]! + this.songRight[i]!) * 0.5;
+    }
+    this.framesToVoices -= frames;
+    if (this.framesToVoices <= 0) {
+      this.framesToVoices += sampleRate / SCOPE_RATE;
+      const voices = player.voices();
+      if (voices.length || this.hadVoices) this.send({ type: 'voices', voices });
+      this.hadVoices = voices.length > 0;
     }
     if (player.playing) {
       this.framesToScopes -= frames;

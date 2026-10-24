@@ -18,11 +18,12 @@ import {
   WAVE_SHAPES,
   type Range,
   type Sample,
+  type VoiceState,
   type WaveShape,
 } from '@webtracker/engine';
 import type { SongEditor } from '../editor/song-editor.ts';
 import { hex } from './pattern-view.ts';
-import { button, cssColor, el, fitCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
+import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
 
 export interface SampleEditorHost {
   editor: SongEditor;
@@ -48,7 +49,9 @@ const WAVE_LENGTHS = [16, 32, 64, 128, 256, 1024];
 /** Waveform view with selection, loop markers and the FT2-style tools. */
 export class SampleEditor {
   readonly root = el('div', 'editor-view sample-editor');
-  private readonly canvas = el('canvas', 'wave');
+  private readonly layers = layeredCanvas('wave');
+  private readonly canvas = this.layers.base;
+  private voices: VoiceState[] = [];
   private readonly name;
   private readonly fields: Record<'volume' | 'panning' | 'finetune' | 'relativeNote', Stepper>;
   private readonly loopButtons: HTMLButtonElement[];
@@ -110,10 +113,30 @@ export class SampleEditor {
       this.info,
     );
 
-    this.root.append(props, tools, generate, this.canvas);
+    this.root.append(props, tools, generate, this.layers.root);
     this.waveLength.show(this.waveLengthIndex);
     this.bindCanvas();
-    new ResizeObserver(() => this.draw()).observe(this.canvas);
+    new ResizeObserver(() => {
+      this.draw();
+      this.drawVoices();
+    }).observe(this.canvas);
+  }
+
+  /** Shows where the voices playing this sample are, as moving play markers. */
+  showVoices(voices: VoiceState[]): void {
+    this.voices = voices;
+    this.drawVoices();
+  }
+
+  private drawVoices(): void {
+    const s = this.sample();
+    const ins = this.host.instrumentIndex() + 1;
+    const slot = this.host.sampleIndex();
+    const v = s && s.data.length ? this.visible(s) : null;
+    const positions = v
+      ? this.voices.filter((voice) => voice.instrument === ins && voice.sample === slot).map((voice) => (voice.pos - v.start) / (v.end - v.start))
+      : [];
+    drawMarkers(this.layers.overlay, positions);
   }
 
   private sample(): Sample | null {
@@ -328,6 +351,7 @@ export class SampleEditor {
   }
 
   private draw(): void {
+    this.drawVoices();
     const s = this.sample();
     const g = fitCanvas(this.canvas);
     if (!g) return;
