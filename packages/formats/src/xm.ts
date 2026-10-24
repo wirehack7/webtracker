@@ -16,7 +16,7 @@ export function isXm(bytes: Uint8Array): boolean {
   return bytes.length >= 60 && readString(bytes, 0, 17) === XM_ID.trimEnd();
 }
 
-class Reader {
+export class Reader {
   private view: DataView;
   constructor(readonly bytes: Uint8Array) {
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -51,6 +51,89 @@ function readEnvelope(r: Reader, pointsAt: number, count: number, sustain: numbe
     loopStart: Math.min(loopStart, Math.max(0, n - 1)),
     loopEnd: Math.min(loopEnd, Math.max(0, n - 1)),
   };
+}
+
+/**
+ * Reads the instrument fields that XM and XI share, starting at the keymap.
+ * Offsets from there: keymap 0, envelopes 96 and 144, envelope settings 192..201,
+ * auto-vibrato 202..205, fadeout 206.
+ */
+export function readInstrumentFields(r: Reader, ins: Instrument, base: number): void {
+  for (let k = 0; k < 96; k++) ins.keymap[k] = r.u8(base + k);
+  ins.volumeEnvelope = readEnvelope(r, base + 96, r.u8(base + 192), r.u8(base + 194), r.u8(base + 195), r.u8(base + 196), r.u8(base + 200));
+  ins.panningEnvelope = readEnvelope(r, base + 144, r.u8(base + 193), r.u8(base + 197), r.u8(base + 198), r.u8(base + 199), r.u8(base + 201));
+  ins.vibratoType = r.u8(base + 202);
+  ins.vibratoSweep = r.u8(base + 203);
+  ins.vibratoDepth = r.u8(base + 204);
+  ins.vibratoRate = r.u8(base + 205);
+  ins.fadeout = r.u16(base + 206);
+}
+
+/** Reads `count` XM sample headers at `o`, then their delta-encoded data. */
+export function readSamples(r: Reader, o: number, count: number, headerSize: number): { samples: Sample[]; end: number } {
+  const samples: Sample[] = [];
+  const headers = [];
+  for (let s = 0; s < count; s++) {
+    const h = o + s * headerSize;
+    headers.push({
+      length: r.u32(h),
+      loopStart: r.u32(h + 4),
+      loopLength: r.u32(h + 8),
+      volume: Math.min(64, r.u8(h + 12)),
+      finetune: r.s8(h + 13),
+      type: r.u8(h + 14),
+      panning: r.u8(h + 15),
+      relativeNote: r.s8(h + 16),
+      name: readString(r.bytes, h + 18, 22),
+    });
+  }
+  o += count * headerSize;
+
+  for (const h of headers) {
+    const is16 = (h.type & 0x10) !== 0;
+    const bytesAvail = Math.max(0, Math.min(h.length, r.length - o));
+    const frames = is16 ? bytesAvail >> 1 : bytesAvail;
+    const data = new Float32Array(frames);
+    // Sample data is delta encoded.
+    let acc = 0;
+    if (is16) {
+      for (let k = 0; k < frames; k++) {
+        acc = (acc + r.u16(o + k * 2)) & 0xffff;
+        data[k] = ((acc << 16) >> 16) / 32768;
+      }
+    } else {
+      for (let k = 0; k < frames; k++) {
+        acc = (acc + r.u8(o + k)) & 0xff;
+        data[k] = ((acc << 24) >> 24) / 128;
+      }
+    }
+    o += h.length;
+
+    const div = is16 ? 2 : 1;
+    const loopBits = h.type & 3;
+    let loopType: LoopType = loopBits === 2 ? LoopType.PingPong : loopBits ? LoopType.Forward : LoopType.None;
+    let loopStart = Math.min(Math.floor(h.loopStart / div), frames);
+    let loopLength = Math.min(Math.floor(h.loopLength / div), frames - loopStart);
+    if (loopType === LoopType.None || loopLength < 1) {
+      loopType = LoopType.None;
+      loopStart = 0;
+      loopLength = 0;
+    }
+
+    const sample: Sample = {
+      name: h.name,
+      data,
+      loopStart,
+      loopLength,
+      loopType,
+      volume: h.volume,
+      finetune: h.finetune,
+      panning: h.panning,
+      relativeNote: h.relativeNote,
+    };
+    samples.push(sample);
+  }
+  return { samples, end: o };
 }
 
 export function loadXm(buffer: ArrayBuffer): Song {
@@ -138,77 +221,11 @@ export function loadXm(buffer: ArrayBuffer): Song {
     }
 
     const sampleHeaderSize = r.u32(o + 29) || 40;
-    for (let k = 0; k < 96; k++) ins.keymap[k] = r.u8(o + 33 + k);
-    ins.volumeEnvelope = readEnvelope(r, o + 129, r.u8(o + 225), r.u8(o + 227), r.u8(o + 228), r.u8(o + 229), r.u8(o + 233));
-    ins.panningEnvelope = readEnvelope(r, o + 177, r.u8(o + 226), r.u8(o + 230), r.u8(o + 231), r.u8(o + 232), r.u8(o + 234));
-    ins.vibratoType = r.u8(o + 235);
-    ins.vibratoSweep = r.u8(o + 236);
-    ins.vibratoDepth = r.u8(o + 237);
-    ins.vibratoRate = r.u8(o + 238);
-    ins.fadeout = r.u16(o + 239);
+    readInstrumentFields(r, ins, o + 33);
     o = start + insHeaderSize;
-
-    const headers = [];
-    for (let s = 0; s < numSamples; s++) {
-      const h = o + s * sampleHeaderSize;
-      headers.push({
-        length: r.u32(h),
-        loopStart: r.u32(h + 4),
-        loopLength: r.u32(h + 8),
-        volume: Math.min(64, r.u8(h + 12)),
-        finetune: r.s8(h + 13),
-        type: r.u8(h + 14),
-        panning: r.u8(h + 15),
-        relativeNote: r.s8(h + 16),
-        name: readString(r.bytes, h + 18, 22),
-      });
-    }
-    o += numSamples * sampleHeaderSize;
-
-    for (const h of headers) {
-      const is16 = (h.type & 0x10) !== 0;
-      const bytesAvail = Math.max(0, Math.min(h.length, r.length - o));
-      const frames = is16 ? bytesAvail >> 1 : bytesAvail;
-      const data = new Float32Array(frames);
-      // Sample data is delta encoded.
-      let acc = 0;
-      if (is16) {
-        for (let k = 0; k < frames; k++) {
-          acc = (acc + r.u16(o + k * 2)) & 0xffff;
-          data[k] = ((acc << 16) >> 16) / 32768;
-        }
-      } else {
-        for (let k = 0; k < frames; k++) {
-          acc = (acc + r.u8(o + k)) & 0xff;
-          data[k] = ((acc << 24) >> 24) / 128;
-        }
-      }
-      o += h.length;
-
-      const div = is16 ? 2 : 1;
-      const loopBits = h.type & 3;
-      let loopType: LoopType = loopBits === 2 ? LoopType.PingPong : loopBits ? LoopType.Forward : LoopType.None;
-      let loopStart = Math.min(Math.floor(h.loopStart / div), frames);
-      let loopLength = Math.min(Math.floor(h.loopLength / div), frames - loopStart);
-      if (loopType === LoopType.None || loopLength < 1) {
-        loopType = LoopType.None;
-        loopStart = 0;
-        loopLength = 0;
-      }
-
-      const sample: Sample = {
-        name: h.name,
-        data,
-        loopStart,
-        loopLength,
-        loopType,
-        volume: h.volume,
-        finetune: h.finetune,
-        panning: h.panning,
-        relativeNote: h.relativeNote,
-      };
-      ins.samples.push(sample);
-    }
+    const read = readSamples(r, o, numSamples, sampleHeaderSize);
+    ins.samples = read.samples;
+    o = read.end;
     instruments.push(ins);
   }
 

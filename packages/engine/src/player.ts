@@ -164,6 +164,8 @@ export class Player {
   readonly song: Song;
   readonly sampleRate: number;
   private channels: Channel[] = [];
+  /** Extra voice for notes played on the keyboard outside the song. */
+  private preview = new Channel(128);
   private isMod: boolean;
 
   playing = false;
@@ -233,16 +235,19 @@ export class Player {
   process(left: Float32Array, right: Float32Array, frames = left.length): void {
     left.fill(0, 0, frames);
     right.fill(0, 0, frames);
-    if (!this.playing) return;
+    if (!this.playing && !this.preview.active) return;
 
     let offset = 0;
     while (offset < frames) {
       if (this.samplesLeftInTick <= 0) {
-        this.doTick();
+        // Stopped, only the preview voice runs its envelopes on the tick clock.
+        if (this.playing) this.doTick();
+        else this.updateChannel(this.preview);
         this.samplesLeftInTick += (this.sampleRate * 2.5) / this.tempo;
       }
       const n = Math.min(frames - offset, Math.ceil(this.samplesLeftInTick));
-      for (const ch of this.channels) this.mixChannel(ch, left, right, offset, n);
+      if (this.playing) for (const ch of this.channels) this.mixChannel(ch, left, right, offset, n);
+      this.mixChannel(this.preview, left, right, offset, n);
       this.samplesLeftInTick -= n;
       offset += n;
     }
@@ -268,6 +273,7 @@ export class Player {
     }
 
     for (const ch of this.channels) this.updateChannel(ch);
+    this.updateChannel(this.preview);
 
     this.tick++;
     if (this.tick >= this.speed) {
@@ -954,6 +960,23 @@ export class Player {
     ch.dir = dir;
     ch.gainL = gainL;
     ch.gainR = gainR;
+  }
+
+  /** Plays `note` on instrument `ins` (1-based) through the preview voice, with envelopes. */
+  previewNote(ins: number, note: number): void {
+    const ch = this.preview;
+    ch.instrumentNumber = ins;
+    ch.instrument = this.song.instruments[ins - 1] ?? null;
+    ch.effect = 0;
+    ch.param = 0;
+    ch.delayedCell = null;
+    this.triggerNote(ch, note, null);
+    if (ch.instrument && ch.active) this.resetInstrumentState(ch, ch.instrument);
+  }
+
+  /** Releases the preview note: envelopes go past sustain and fade out. */
+  previewOff(): void {
+    this.keyOff(this.preview);
   }
 
   /** Per channel snapshot for UI meters. */

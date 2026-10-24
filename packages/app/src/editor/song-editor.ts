@@ -1,8 +1,41 @@
-import { ensurePattern, MAX_ORDERS, MAX_PATTERNS, type Pattern, type Song } from '@webtracker/engine';
+import { emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
 import type { EngineMessage } from '../audio/messages.ts';
 import { History } from './history.ts';
 
 const clonePattern = (p: Pattern): Pattern => ({ rows: p.rows, data: p.data.slice() });
+
+export const MAX_INSTRUMENTS = 128;
+
+const cloneSample = (s: Sample): Sample => ({ ...s, data: s.data.slice() });
+
+export function cloneInstrument(ins: Instrument): Instrument {
+  const env = (e: Instrument['volumeEnvelope']) => ({ ...e, points: e.points.map((p) => ({ ...p })) });
+  return {
+    ...ins,
+    samples: ins.samples.map(cloneSample),
+    keymap: ins.keymap.slice(),
+    volumeEnvelope: env(ins.volumeEnvelope),
+    panningEnvelope: env(ins.panningEnvelope),
+  };
+}
+
+function sameArray(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function sameInstrument(a: Instrument, b: Instrument): boolean {
+  const { samples: sa, keymap: ka, ...ra } = a;
+  const { samples: sb, keymap: kb, ...rb } = b;
+  if (JSON.stringify(ra) !== JSON.stringify(rb) || !sameArray(ka, kb) || sa.length !== sb.length) return false;
+  return sa.every((s, i) => {
+    const t = sb[i]!;
+    const { data: da, ...xa } = s;
+    const { data: db, ...xb } = t;
+    return JSON.stringify(xa) === JSON.stringify(xb) && sameArray(da, db);
+  });
+}
 
 function samePattern(a: Pattern, b: Pattern): boolean {
   if (a.rows !== b.rows || a.data.length !== b.data.length) return false;
@@ -57,7 +90,8 @@ export class SongEditor {
     const current = ensurePattern(this.song, index);
     const before = clonePattern(current);
     const replacement = edit(current);
-    if (replacement) this.song.patterns[index] = replacement;
+    // Only a returned pattern replaces it; edits written as one-line arrows may return other values.
+    if (replacement && typeof replacement === 'object' && 'data' in replacement) this.song.patterns[index] = replacement;
     const after = clonePattern(this.song.patterns[index]!);
     if (samePattern(before, after)) return;
 
@@ -68,6 +102,58 @@ export class SongEditor {
     };
     this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
     this.sendPattern(index);
+    this.changed(label);
+  }
+
+  /** The instrument at 0-based `index`, adding empty instruments up to it. */
+  instrument(index: number): Instrument {
+    const list = this.song.instruments;
+    while (list.length <= index && list.length < MAX_INSTRUMENTS) list.push(emptyInstrument());
+    return list[index]!;
+  }
+
+  private sendInstrument(index: number): void {
+    const instrument = this.song.instruments[index];
+    if (instrument) this.sync({ type: 'instrument', index, instrument });
+  }
+
+  /** Runs `edit` on instrument `index` (0-based), in place, and records it. */
+  editInstrument(index: number, label: string, edit: (instrument: Instrument) => unknown): void {
+    const before = cloneInstrument(this.instrument(index));
+    edit(this.song.instruments[index]!);
+    this.recordInstrument(index, label, before);
+  }
+
+  /** Puts a whole new instrument at `index`, for example one loaded from an XI file. */
+  replaceInstrument(index: number, label: string, instrument: Instrument): void {
+    const before = cloneInstrument(this.instrument(index));
+    this.song.instruments[index] = instrument;
+    this.recordInstrument(index, label, before);
+  }
+
+  /**
+   * Sends the instrument to the player without recording, for changes made
+   * while dragging. `recordInstrument` with the state from before the drag
+   * then makes the whole drag one undo step.
+   */
+  previewInstrument(index: number): void {
+    this.sendInstrument(index);
+  }
+
+  snapshotInstrument(index: number): Instrument {
+    return cloneInstrument(this.instrument(index));
+  }
+
+  recordInstrument(index: number, label: string, before: Instrument): void {
+    const after = cloneInstrument(this.song.instruments[index]!);
+    if (sameInstrument(before, after)) return;
+    const apply = (ins: Instrument) => {
+      this.song.instruments[index] = cloneInstrument(ins);
+      this.sendInstrument(index);
+      this.changed(label);
+    };
+    this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
+    this.sendInstrument(index);
     this.changed(label);
   }
 

@@ -15,3 +15,5 @@ export function loadModule(buffer: ArrayBuffer, fileName = ''): Song {
   throw new Error('Unknown module format (supported: MOD, XM)');
 }
 export { saveXm } from './xm-write.ts';
+export { saveXi } from './xm-write.ts';
+export { importSample, sampleFromChannels, type Imported } from './sample-import.ts';
