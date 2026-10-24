@@ -1,6 +1,6 @@
 # webtracker
 
-Ein Chiptune-Tracker für den Browser, für die Demoscene. Ziel: mindestens der Funktionsumfang von MilkyTracker, mit XM als Hausformat.
+Ein Chiptune-Tracker für den Browser, für die Demoscene. Klassische Tracker-Oberfläche, responsive für Desktop, Tablet und Handy, mit XM als Hausformat.
 
 ## Entwicklung
 

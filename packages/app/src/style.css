@@ -1,51 +1,495 @@
+/*
+ * Classic tracker look: blue-grey bevelled panels, black LCD fields and an
+ * 8x8 pixel font. Everything is sized in multiples of --px so the font stays
+ * on its pixel grid; the media queries at the end only change --px and the
+ * layout.
+ */
 :root {
   color-scheme: dark;
-  --bg: #10141c;
-  --fg: #d8e0ec;
-  --accent: #6fc3ff;
-  --muted: #7d8899;
-  font-family: ui-monospace, 'Cascadia Mono', 'DejaVu Sans Mono', monospace;
+  --px: 2px;
+  --font: 'Press Start 2P', ui-monospace, monospace;
+
+  --desk: #3d5578;
+  --desk-hi: #8fa6c8;
+  --desk-lo: #1b2638;
+  --btn: #5e7598;
+  --btn-hi: #b0c2de;
+  --btn-lo: #1f2b40;
+  --btn-on: #c9a447;
+  --text: #ffffff;
+  --label: #dce6f8;
+  --dim: #8496b4;
+  --field-bg: #000000;
+  --field-fg: #ffffff;
+  --list-sel: #2f4f9c;
+
+  /* Pattern editor, also used by the pattern view in src/ui/. */
+  --pat-bg: #000000;
+  --pat-rowhl: #121a2a;
+  --pat-cursor: #2f4f9c;
+  --pat-cell: #ffd84a;
+  --pat-rn: #8ca0c0;
+  --pat-sep: #22304a;
+  --pat-note: #ffffff;
+  --pat-instr: #7fdfff;
+  --pat-vol: #7fff8f;
+  --pat-fx: #ff8fdf;
+  --pat-param: #ffdf7f;
+  --pat-empty: #3a4660;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--desk-lo);
+  color: var(--text);
 }
 
 body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--bg);
-  color: var(--fg);
-  display: grid;
-  place-items: center;
+  font-family: var(--font);
+  font-size: calc(var(--px) * 8);
+  line-height: calc(var(--px) * 10);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-main {
-  max-width: 40rem;
-  padding: 2rem 1rem;
-}
-
-h1 {
-  color: var(--accent);
-  letter-spacing: 0.1em;
-}
-
-button {
+button,
+output {
   font: inherit;
-  padding: 0.5rem 1rem;
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  color: inherit;
+}
+
+/* ---- Bevels ---------------------------------------------------------- */
+
+.panel {
+  background: var(--desk);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-lo);
+  padding: calc(var(--px) * 4);
+  min-width: 0;
+}
+
+.btn {
+  background: var(--btn);
+  border: 0;
+  padding: calc(var(--px) * 3) calc(var(--px) * 5);
+  min-height: calc(var(--px) * 14);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-lo);
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.btn:active,
+.btn[aria-pressed='true'],
+.btn[aria-selected='true'] {
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-hi);
+  padding: calc(var(--px) * 4) calc(var(--px) * 4) calc(var(--px) * 2) calc(var(--px) * 6);
+}
+
+.btn[aria-pressed='true'] {
+  color: var(--btn-on);
+}
+
+.btn.sm {
+  padding-inline: calc(var(--px) * 3);
+  min-width: calc(var(--px) * 14);
+}
+
+.btn:focus-visible,
+.pattern-view:focus-visible {
+  outline: var(--px) dotted var(--text);
+  outline-offset: calc(var(--px) * -3);
+}
+
+.value,
+.list {
+  background: var(--field-bg);
+  color: var(--field-fg);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-hi);
+}
+
+.value {
+  display: inline-block;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  min-width: calc(var(--px) * 30);
+  text-align: right;
+}
+
+.ptitle {
+  margin: 0 0 calc(var(--px) * 3);
+  font-size: inherit;
+  font-weight: normal;
+  color: var(--label);
+  text-transform: uppercase;
+}
+
+.label {
+  color: var(--label);
+  text-transform: uppercase;
+}
+
+.row,
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2);
+  margin-top: calc(var(--px) * 3);
+}
+
+/* ---- Lists ----------------------------------------------------------- */
+
+.list {
+  margin: 0;
+  padding: calc(var(--px) * 2);
+  list-style: none;
+  height: calc(var(--px) * 10 * 8 + var(--px) * 4);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--btn) var(--field-bg);
+}
+
+.list.short {
+  height: calc(var(--px) * 10 * 4 + var(--px) * 4);
+}
+
+.list li {
+  padding-inline: calc(var(--px) * 2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
-button:disabled {
-  opacity: 0.4;
-  cursor: default;
+.list li[aria-selected='true'] {
+  background: var(--list-sel);
 }
 
-.note {
-  font-size: 3rem;
-  margin: 1.5rem 0;
+.list .idx {
+  color: var(--pat-param);
 }
 
-.status,
-.hint {
-  color: var(--muted);
+/* ---- Layout ---------------------------------------------------------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  background: var(--desk);
+}
+
+.tabs {
+  display: none;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) auto auto minmax(0, 1.4fr);
+  flex: none;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: calc(var(--px) * 2);
+  align-items: center;
+}
+
+.transport .buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0;
+}
+
+.instruments .list + .ptitle {
+  margin-top: calc(var(--px) * 4);
+}
+
+.scopes {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--px) * 48), 1fr));
+  gap: calc(var(--px) * 2);
+}
+
+.scope {
+  display: block;
+  width: 100%;
+  height: calc(var(--px) * 24);
+  background: var(--field-bg);
+  image-rendering: pixelated;
+}
+
+.pattern-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(var(--px) * 80);
+}
+
+.pattern-head {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--px) * 8);
+  margin-bottom: calc(var(--px) * 3);
+}
+
+.pattern-head .ptitle {
+  margin: 0;
+}
+
+.keys-toggle {
+  margin-left: auto;
+}
+
+/* ---- Pattern editor -------------------------------------------------- */
+
+.pattern-view {
+  flex: 1 1 auto;
+  overflow: auto;
+  background: var(--pat-bg);
+  color: var(--pat-note);
+  white-space: pre;
+  scrollbar-width: thin;
+  scrollbar-color: var(--btn) var(--pat-bg);
+  touch-action: pan-x pan-y;
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-hi);
+}
+
+.pattern-view .r {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+
+.pattern-view .r.beat {
+  background: var(--pat-rowhl);
+}
+
+.pattern-view .r.cur {
+  background: var(--pat-cursor);
+}
+
+.pattern-view .rn {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding: 0 calc(var(--px) * 3);
+  background: inherit;
+  background-color: var(--pat-bg);
+  color: var(--pat-rn);
+}
+
+.pattern-view .r.beat .rn {
+  background-color: var(--pat-rowhl);
+}
+
+.pattern-view .r.cur .rn {
+  background-color: var(--pat-cursor);
+  color: var(--text);
+}
+
+.pattern-view .c {
+  display: flex;
+  gap: var(--px);
+  padding: 0 calc(var(--px) * 3);
+  border-left: var(--px) solid var(--pat-sep);
+}
+
+.pattern-view .n { color: var(--pat-note); }
+.pattern-view .i { color: var(--pat-instr); }
+.pattern-view .v { color: var(--pat-vol); }
+.pattern-view .e { color: var(--pat-fx); }
+.pattern-view .x { color: var(--pat-param); }
+.pattern-view .empty { color: var(--pat-empty); }
+
+.pattern-view .c.at {
+  box-shadow: inset 0 0 0 var(--px) var(--pat-cell);
+}
+
+/* ---- Piano ----------------------------------------------------------- */
+
+.piano {
+  display: none;
+  position: relative;
+  flex: none;
+  height: calc(var(--px) * 44);
+  background: var(--desk-lo);
+  touch-action: none;
+  user-select: none;
+}
+
+.app.show-piano .piano {
+  display: block;
+}
+
+.piano .key {
+  position: absolute;
+  top: 0;
+  border: 0;
+  padding: 0 0 calc(var(--px) * 2);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font: inherit;
+  font-size: calc(var(--px) * 6);
+}
+
+.piano .key.white {
+  height: 100%;
+  background: #e8ecf4;
+  color: #5e7598;
+  box-shadow: inset calc(var(--px) * -1) 0 0 #8090a8;
+}
+
+.piano .key.black {
+  height: 60%;
+  z-index: 1;
+  background: #10141c;
+  color: #5e7598;
+}
+
+.piano .key.down {
+  background: var(--btn-on);
+  color: #000;
+}
+
+/* ---- Status bar ------------------------------------------------------ */
+
+.statusbar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  background: var(--desk);
+  box-shadow: inset 0 var(--px) 0 var(--desk-hi);
+  color: var(--label);
+  overflow: hidden;
+}
+
+.statusbar #status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand {
+  color: var(--dim);
+  flex: none;
+}
+
+/* ---- Responsive ------------------------------------------------------ */
+
+/* Medium screens: smaller pixels, instruments move under the song panels. */
+@media (max-width: 1279px) {
+  :root {
+    --px: 1.5px;
+  }
+}
+
+@media (max-width: 899px) {
+  .top {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .instruments {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: calc(var(--px) * 4);
+  }
+  .instruments .ptitle { grid-row: 1; }
+  .instruments .list { grid-row: 2; }
+  .instruments .list + .ptitle { margin-top: 0; }
+  .instruments .list.short { height: calc(var(--px) * 10 * 8 + var(--px) * 4); }
+}
+
+/* Phones: one top panel at a time, chosen with the tab bar. */
+@media (max-width: 639px) {
+  :root {
+    --px: 1.5px;
+  }
+  .tabs {
+    display: flex;
+    gap: calc(var(--px) * 2);
+    padding: calc(var(--px) * 2);
+    background: var(--desk);
+  }
+  .tabs .btn {
+    flex: 1;
+    min-height: calc(var(--px) * 20);
+  }
+  .top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .transport {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+  .transport .ptitle {
+    display: none;
+  }
+  .transport .buttons {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .transport .btn,
+  .orders .btn,
+  .song .btn {
+    min-height: calc(var(--px) * 20);
+  }
+  .list {
+    height: calc(var(--px) * 10 * 5 + var(--px) * 4);
+  }
+  .instruments .list.short {
+    height: calc(var(--px) * 10 * 5 + var(--px) * 4);
+  }
+  .app:not([data-tab='song']) [data-panel='song']:not(.transport),
+  .app:not([data-tab='instruments']) [data-panel='instruments'],
+  .app:not([data-tab='scopes']) [data-panel='scopes'] {
+    display: none;
+  }
+  .scope {
+    height: calc(var(--px) * 32);
+  }
+  .brand {
+    display: none;
+  }
+}
+
+/* Touch devices get the on-screen piano by default. */
+@media (pointer: coarse) {
+  .piano {
+    display: block;
+  }
+}
+
+.app.hide-piano .piano {
+  display: none;
+}
+
+@media (pointer: coarse) and (max-width: 639px) {
+  .piano {
+    height: calc(var(--px) * 56);
+  }
 }
