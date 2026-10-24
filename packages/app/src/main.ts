@@ -42,6 +42,7 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
+import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
@@ -751,8 +752,13 @@ function download(bytes: Uint8Array, fileName: string, type: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = fileName;
+  // Safari and some phone browsers only follow a link that is in the page.
+  a.hidden = true;
+  document.body.append(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  a.remove();
+  // Phones may start reading the file long after the click.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 const safeName = (name: string, fallback: string) => (name.trim() || fallback).replace(/[^\w .-]+/g, '_');
@@ -781,7 +787,7 @@ function saveSong(): void {
   const s = song();
   const bytes = saveXm(s);
   const name = safeName(s.title, 'untitled');
-  download(bytes, `${name}.xm`, 'audio/xm');
+  download(bytes, `${name}.xm`, 'application/octet-stream');
   editor.dirty = false;
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
 }
@@ -790,7 +796,7 @@ function saveSongAsMod(): void {
   const s = song();
   const { bytes, warnings } = saveMod(s);
   const name = safeName(s.title, 'untitled');
-  download(bytes, `${name}.mod`, 'audio/mod');
+  download(bytes, `${name}.mod`, 'application/octet-stream');
   status.textContent = `Saved ${name}.mod (${bytes.length} bytes)${warnings.length ? `, ${warnings.length} things changed` : ''}.`;
   $('#save-info').textContent = warnings.length ? `MOD can't hold everything: ${warnings.join(' ')}` : 'Saved as MOD with nothing lost.';
 }
@@ -895,8 +901,8 @@ async function showAutosaves(): Promise<void> {
   let versions: Autosave[] = [];
   try {
     versions = await listAutosaves();
-  } catch {
-    list.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Not available in this browser.' }));
+  } catch (error) {
+    list.replaceChildren(listNote(storageProblem(error)));
     return;
   }
   const items = versions.map((v) => {
@@ -958,7 +964,16 @@ let libraryEntry: { id: number; name: string } | null = null;
 let librarySongs: LibrarySong[] = [];
 let librarySelected = -1;
 
-const listNote = (text: string) => Object.assign(document.createElement('li'), { textContent: text });
+function listNote(text: string): HTMLLIElement {
+  const li = Object.assign(document.createElement('li'), { textContent: text });
+  li.style.whiteSpace = 'normal';
+  return li;
+}
+
+/** Why the browser storage failed, in words for the user. */
+function storageProblem(error: unknown): string {
+  return (error as Error).message === BLOCKED ? BLOCKED : 'Not available in this browser.';
+}
 
 function openSongsDialog(): void {
   libraryName.value = libraryEntry?.name ?? (song().title.trim() || 'untitled');
@@ -969,9 +984,10 @@ function openSongsDialog(): void {
 async function showLibrary(): Promise<void> {
   try {
     librarySongs = await listSongs();
-  } catch {
+  } catch (error) {
     librarySongs = [];
-    libraryList.replaceChildren(listNote('Not available in this browser.'));
+    libraryList.replaceChildren(listNote(storageProblem(error)));
+    selectLibrarySong(-1);
     return;
   }
   const items = librarySongs.map((entry, i) => {
@@ -1067,7 +1083,7 @@ let sharePacking = 0;
 
 function openShareDialog(): void {
   shareSend.hidden = !('share' in navigator);
-  shareFile.hidden = !navigator.canShare?.({ files: [new File([], 'song.xm')] });
+  shareFile.hidden = !('share' in navigator);
   void updateShareLink();
   shareDialog.showModal();
 }
@@ -1108,14 +1124,28 @@ async function copyShareLink(): Promise<void> {
 async function sendShare(withFile: boolean): Promise<void> {
   const s = song();
   const title = s.title.trim() || 'untitled';
-  const data: ShareData = withFile
-    ? { title, files: [new File([saveXm(s) as BlobPart], `${safeName(s.title, 'untitled')}.xm`, { type: 'application/octet-stream' })] }
-    : { title, url: shareUrl.value };
-  try {
-    await navigator.share(data);
-  } catch (error) {
-    if ((error as Error).name !== 'AbortError') shareInfo.textContent = `Could not share: ${(error as Error).message}`;
+  const name = `${safeName(s.title, 'untitled')}.xm`;
+  const bytes = saveXm(s);
+  const file = new File([bytes as BlobPart], name, { type: 'application/octet-stream' });
+  // Phone share sheets take only some file types (pictures, common audio, PDF); XM is not
+  // one of them on Android, so the file is downloaded instead, to be sent from there.
+  if (withFile && !navigator.canShare?.({ files: [file] })) {
+    downloadForSending(bytes, name);
+    return;
   }
+  try {
+    await navigator.share(withFile ? { title, files: [file] } : { title, url: shareUrl.value });
+  } catch (error) {
+    const reason = (error as Error).name;
+    if (reason === 'AbortError') return;
+    if (withFile && reason === 'NotAllowedError') downloadForSending(bytes, name);
+    else shareInfo.textContent = `Could not share: ${(error as Error).message}`;
+  }
+}
+
+function downloadForSending(bytes: Uint8Array, name: string): void {
+  download(bytes, name, 'application/octet-stream');
+  shareInfo.textContent = `This browser can't send ${name} directly, so it was downloaded; send it from your downloads.`;
 }
 
 /** Opens the song in a `#song=…` link; returns the error, if any. */

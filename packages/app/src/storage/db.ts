@@ -6,23 +6,55 @@ const VERSION = 2;
 export const AUTOSAVE_STORE = 'autosave';
 export const LIBRARY_STORE = 'songs';
 
-let opening: Promise<IDBDatabase> | null = null;
+export const BLOCKED = 'Another webtracker tab or window with an older version is open. Close it (or reload it) and try again.';
+
+let db: IDBDatabase | null = null;
+let request: IDBOpenDBRequest | null = null;
+/** An older version of the tracker in another tab holds the database open. */
+let blocked = false;
+let waiting: { resolve: (db: IDBDatabase) => void; reject: (error: Error) => void }[] = [];
+
+function settle(result: IDBDatabase | Error): void {
+  const all = waiting;
+  waiting = [];
+  for (const w of all) result instanceof Error ? w.reject(result) : w.resolve(result);
+}
 
 export function openDb(): Promise<IDBDatabase> {
-  opening ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(NAME, VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(AUTOSAVE_STORE)) db.createObjectStore(AUTOSAVE_STORE, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(LIBRARY_STORE)) db.createObjectStore(LIBRARY_STORE, { keyPath: 'id', autoIncrement: true });
+  if (db) return Promise.resolve(db);
+  // The upgrade waits until the other tab closes; later calls get the database then.
+  if (blocked) return Promise.reject(new Error(BLOCKED));
+  const promise = new Promise<IDBDatabase>((resolve, reject) => waiting.push({ resolve, reject }));
+  if (!request) {
+    const opening = indexedDB.open(NAME, VERSION);
+    request = opening;
+    opening.onupgradeneeded = () => {
+      const upgrading = opening.result;
+      if (!upgrading.objectStoreNames.contains(AUTOSAVE_STORE)) upgrading.createObjectStore(AUTOSAVE_STORE, { keyPath: 'id' });
+      if (!upgrading.objectStoreNames.contains(LIBRARY_STORE)) upgrading.createObjectStore(LIBRARY_STORE, { keyPath: 'id', autoIncrement: true });
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => {
-      opening = null;
-      reject(request.error ?? new Error('IndexedDB is not available'));
+    opening.onsuccess = () => {
+      const opened = opening.result;
+      // Let a newer version of the tracker in another tab upgrade the database.
+      opened.onversionchange = () => {
+        opened.close();
+        db = request = null;
+      };
+      db = opened;
+      blocked = false;
+      settle(opened);
     };
-  });
-  return opening;
+    opening.onblocked = () => {
+      blocked = true;
+      settle(new Error(BLOCKED));
+    };
+    opening.onerror = () => {
+      request = null;
+      blocked = false;
+      settle(opening.error ?? new Error('IndexedDB is not available'));
+    };
+  }
+  return promise;
 }
 
 export function done(tx: IDBTransaction): Promise<void> {
