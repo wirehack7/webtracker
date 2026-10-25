@@ -1870,3 +1870,28 @@ canvas.drawing {
 .help-entry a {
   color: var(--pat-cell);
 }
+
+/* ---- Questions (ui/ask.ts) -------------------------------------------- */
+
+.ask-dialog {
+  width: min(calc(100vw - 32px), calc(var(--px) * 240));
+}
+
+.ask-message {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ask-dialog .ask-field {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin-top: calc(var(--px) * 4);
+}
+
+.ask-dialog .ask-buttons {
+  justify-content: flex-end;
+  margin-top: calc(var(--px) * 6);
+}
