@@ -12,7 +12,7 @@ function serviceWorker(): Plugin {
     generateBundle: {
       order: 'post',
       handler(_options, bundle) {
-        const files = ['./', ...Object.keys(bundle).map((f) => `./${f}`), './manifest.webmanifest', './icon.svg'];
+        const files = ['./', ...Object.keys(bundle).map((f) => `./${f}`), './manifest.webmanifest', './icon.svg', './favicon.ico'];
         const version = Object.keys(bundle).sort().join('|');
         let hash = 0;
         for (let i = 0; i < version.length; i++) hash = (Math.imul(hash, 31) + version.charCodeAt(i)) | 0;
