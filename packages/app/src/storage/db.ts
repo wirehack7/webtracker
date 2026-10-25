@@ -6,7 +6,7 @@ const VERSION = 2;
 export const AUTOSAVE_STORE = 'autosave';
 export const LIBRARY_STORE = 'songs';
 
-export const BLOCKED = 'Another webtracker tab or window with an older version is open. Close it (or reload it) and try again.';
+export const BLOCKED = 'Another chiptrackr tab or window with an older version is open. Close it (or reload it) and try again.';
 
 let db: IDBDatabase | null = null;
 let request: IDBOpenDBRequest | null = null;

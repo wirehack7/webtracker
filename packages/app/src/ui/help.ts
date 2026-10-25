@@ -28,6 +28,7 @@ export function mountHelp(dialog: HTMLDialogElement): Help {
   const search = dialog.querySelector<HTMLInputElement>('.help-search')!;
   const context = dialog.querySelector<HTMLElement>('.help-context')!;
   const empty = dialog.querySelector<HTMLElement>('.help-empty')!;
+  const manual = dialog.querySelector<HTMLAnchorElement>('.help-manual');
 
   tabs.innerHTML = HELP_SECTIONS.map(
     (s) => `<button type="button" class="btn sm" role="tab" data-section="${s.id}">${escape(s.title)}</button>`,
@@ -75,6 +76,8 @@ export function mountHelp(dialog: HTMLDialogElement): Help {
       matches += sectionMatches;
     }
     for (const tab of tabEls) tab.setAttribute('aria-selected', String(!query && tab.dataset.section === active));
+    // The manual opens at the topic shown here; Workflow is covered by its chapters.
+    manual?.setAttribute('href', `./manual.html#${active === 'workflow' ? 'start' : `ref-${active}`}`);
     empty.hidden = matches > 0;
   }
 
@@ -105,6 +108,7 @@ export function mountHelp(dialog: HTMLDialogElement): Help {
       if (!dialog.open) dialog.showModal();
       const el = target && body.querySelector<HTMLElement>(`[data-id="${target.id}"]`);
       if (el) {
+        manual?.setAttribute('href', `./manual.html#${target!.id}`);
         el.classList.add('hit');
         // The entry itself has no box on wide screens (display: contents), its code does.
         el.firstElementChild!.scrollIntoView({ block: 'center' });
