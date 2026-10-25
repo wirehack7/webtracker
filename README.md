@@ -68,4 +68,4 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 
 Besides cutting, normalizing, fades and resampling, the sample editor has tools to repair and shape samples: invert the phase, swap sign and byte order (for wrongly imported raw data), remove DC offset, reduce to 8 bits, low-pass and high-pass, loop crossfade, resample to any length and Save as WAV.
 
-Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, where E00/E01 switch the LED filter, and XM with linear interpolation; also Linear, Cubic and no interpolation at all) and the stereo width from mono to 200 %. WAV export uses the same settings.
+Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, where E00/E01 switch the LED filter, and XM with linear interpolation; also Linear, Cubic, an 8-tap Sinc and no interpolation at all) and the stereo width from mono to 200 %. WAV export uses the same settings.
