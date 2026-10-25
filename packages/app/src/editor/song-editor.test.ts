@@ -66,6 +66,25 @@ describe('SongEditor', () => {
     expect(editor.song.orders).toEqual([0]);
   });
 
+  it('parks a song with its own history and brings it back', () => {
+    const { editor } = setup();
+    editor.setTitle('first');
+    const first = editor.detach();
+    editor.replaceSong(createSong(4));
+    editor.setTitle('second');
+    const second = editor.detach();
+    editor.attach(first);
+    expect(editor.song.title).toBe('first');
+    expect(editor.dirty).toBe(true);
+    expect(editor.undo()).toBe('title');
+    expect(editor.song.title).toBe('');
+    editor.attach(second);
+    expect(editor.song.title).toBe('second');
+    expect(editor.undo()).toBe('title');
+    expect(editor.song.title).toBe('');
+    expect(editor.undo()).toBeNull();
+  });
+
   it('a new song clears the history', () => {
     const { editor, sent } = setup();
     editor.editPattern(0, 'note', (p) => writeCell(editor.song, p, 0, 0, { note: 49 }));

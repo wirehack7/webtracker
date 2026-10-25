@@ -81,6 +81,8 @@
         <section class="panel scopes" id="scopes" data-panel="scopes" aria-label="Channel scopes"></section>
       </div>
 
+      <nav class="song-tabs" id="song-tabs" role="tablist" aria-label="Open songs" hidden></nav>
+
       <section class="panel pattern-panel">
         <div class="pattern-head">
           <span class="view-tabs" role="tablist" aria-label="Editor">
@@ -150,6 +152,7 @@
           <tr><th>F9 – F12</th><td>Jump to row 0, 1/4, 1/2, 3/4 of the pattern</td></tr>
           <tr><th>Shift+M / Shift+U</th><td>Mute or unmute the cursor channel / unmute all</td></tr>
           <tr><th>Ctrl+F</th><td>Follow song on or off</td></tr>
+          <tr><th>Alt+PgUp / PgDn</th><td>Previous / next song tab</td></tr>
           <tr><th>Shift+F3 / F4 / F5</th><td>Cut / copy / paste the track</td></tr>
           <tr><th>Ctrl+F3 / Ctrl+Shift+F4 / Ctrl+F5</th><td>Cut / copy / paste the pattern (Ctrl+F4 belongs to the browser)</td></tr>
           <tr><th>Alt+F3 / Alt+F5</th><td>Cut / paste the selection (copy is Ctrl+C)</td></tr>
@@ -281,6 +284,7 @@
         </label>
         <label><span class="label">MIDI input</span><input type="checkbox" id="set-midi" /></label>
         <label><span class="label">MIDI velocity</span><input type="checkbox" id="set-velocity" title="Write the velocity into the volume column while recording" /></label>
+        <label><span class="label">Song tabs</span><input type="checkbox" id="set-tabs" title="New, loaded and shared songs open in a new tab instead of replacing the current song" /></label>
       </div>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
       <form method="dialog" class="row">

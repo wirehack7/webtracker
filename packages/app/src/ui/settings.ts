@@ -25,6 +25,8 @@ export interface Settings {
   midi: boolean;
   /** Write the MIDI velocity into the volume column while recording. */
   midiVelocity: boolean;
+  /** New, loaded and shared songs open beside the current one instead of replacing it. */
+  songTabs: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULTS: Settings = {
   space: 'ft2',
   midi: false,
   midiVelocity: false,
+  songTabs: true,
 };
 
 const KEY = 'webtracker.settings';

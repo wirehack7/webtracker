@@ -43,12 +43,19 @@ function samePattern(a: Pattern, b: Pattern): boolean {
   return true;
 }
 
+/** A song with its own undo history, parked while another tab is in the editor. */
+export interface SongDocument {
+  song: Song;
+  history: History;
+  dirty: boolean;
+}
+
 /**
  * Owns the song being edited. Every change goes through here so it lands in
  * the undo history and reaches the copy of the song playing in the worklet.
  */
 export class SongEditor {
-  readonly history = new History();
+  history = new History();
   /** True once the song differs from what was loaded or last saved. */
   dirty = false;
   /** Called after every change, undo and redo, so the UI can redraw. */
@@ -62,9 +69,23 @@ export class SongEditor {
   /** Starts over with another song; history does not carry across. */
   replaceSong(song: Song): void {
     this.song = song;
-    this.history.clear();
+    // A new history, so a parked tab keeps its own.
+    this.history = new History();
     this.dirty = false;
     this.sync({ type: 'load', song });
+  }
+
+  /** The song, its history and dirty flag, for parking it in a tab. */
+  detach(): SongDocument {
+    return { song: this.song, history: this.history, dirty: this.dirty };
+  }
+
+  /** Brings back a parked song with its undo history. */
+  attach(doc: SongDocument): void {
+    this.song = doc.song;
+    this.history = doc.history;
+    this.dirty = doc.dirty;
+    this.sync({ type: 'load', song: doc.song });
   }
 
   private sendPattern(index: number): void {

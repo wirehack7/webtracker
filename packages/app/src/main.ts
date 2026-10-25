@@ -39,7 +39,7 @@ import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
-import { SongEditor } from './editor/song-editor.ts';
+import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
@@ -397,6 +397,8 @@ function showSong(): void {
 
 editor.onChange = (label) => {
   scheduleAutosave();
+  blankTab = false;
+  renderTabs();
   if (label === 'channels') {
     // The worklet rebuilt its player for the new layout, so playback has stopped.
     stop();
@@ -707,15 +709,22 @@ function setRecording(on: boolean): void {
 const fileInput = $<HTMLInputElement>('#file');
 
 function confirmDiscard(): boolean {
-  return !editor.dirty || confirm('Discard the changes to the current song?');
+  // With tabs the next song gets its own, so nothing is discarded.
+  return opensNewTab() || !editor.dirty || confirm('Discard the changes to the current song?');
 }
 
 function startSong(next: Song): void {
   stop();
+  if (opensNewTab()) {
+    tabs[activeTab] = parkTab();
+    activeTab = tabs.length;
+    tabs.push(parkTab());
+  }
   currentOrder = 0;
   muted = [];
   engine?.send({ type: 'mute', muted });
   editor.replaceSong(next);
+  blankTab = false;
   scheduleAutosave(true);
   libraryEntry = null;
   sampleSlot = 0;
@@ -724,6 +733,121 @@ function startSong(next: Song): void {
   setView('pattern');
   sampleEditor.resetView();
   renderEditors();
+  renderTabs();
+}
+
+// ---- Song tabs -------------------------------------------------------------
+
+/** A song that is open but not in the editor, with where the editor was in it. */
+interface Tab {
+  doc: SongDocument;
+  order: number;
+  row: number;
+  channel: number;
+  instrument: number;
+  sampleSlot: number;
+  library: { id: number; name: string } | null;
+}
+
+const tabBar = $('#song-tabs');
+/** Every open song; the entry at `activeTab` is stale while that song is in the editor. */
+let tabs: Tab[] = [];
+let activeTab = 0;
+/** True while the editor holds an untouched new song, which the next song may replace. */
+let blankTab = true;
+
+function opensNewTab(): boolean {
+  return prefs.songTabs && !blankTab;
+}
+
+function parkTab(): Tab {
+  return { doc: editor.detach(), order: currentOrder, row: view.row, channel: view.channel, instrument, sampleSlot, library: libraryEntry };
+}
+
+function showTab(index: number): void {
+  stop();
+  activeTab = index;
+  const tab = tabs[index]!;
+  editor.attach(tab.doc);
+  blankTab = false;
+  currentOrder = tab.order;
+  instrument = tab.instrument;
+  sampleSlot = tab.sampleSlot;
+  libraryEntry = tab.library;
+  muted = [];
+  engine?.send({ type: 'mute', muted });
+  // Autosave keeps a version per song, so the next save must not overwrite the other song's.
+  freshVersion = true;
+  showSong();
+  view.moveTo(tab.row, Math.min(tab.channel, song().channels - 1), Column.Note);
+  sampleEditor.resetView();
+  renderEditors();
+  renderTabs();
+}
+
+function switchTab(index: number): void {
+  if (index === activeTab || !tabs[index]) return;
+  tabs[activeTab] = parkTab();
+  showTab(index);
+  status.textContent = `Song ${index + 1} of ${tabs.length}: ${tabName(song(), libraryEntry)}.`;
+}
+
+function closeTab(index: number): void {
+  if (index !== activeTab) {
+    const tab = tabs[index]!;
+    if (tab.doc.dirty && !confirm(`Close "${tabName(tab.doc.song, tab.library)}" and discard its changes?`)) return;
+    tabs.splice(index, 1);
+    if (index < activeTab) activeTab--;
+    renderTabs();
+    return;
+  }
+  if (editor.dirty && !confirm('Close this song and discard its changes?')) return;
+  tabs.splice(index, 1);
+  if (tabs.length === 0) {
+    // The last song makes way for a new one.
+    activeTab = 0;
+    blankTab = true;
+    startSong(createSong());
+    blankTab = true;
+    return;
+  }
+  showTab(Math.min(index, tabs.length - 1));
+}
+
+function tabName(s: Song, library: Tab['library']): string {
+  return s.title.trim() || library?.name || 'untitled';
+}
+
+/** The tab strip only shows while more than one song is open. */
+function renderTabs(): void {
+  if (tabs.length === 0) tabs = [parkTab()];
+  tabBar.hidden = tabs.length < 2;
+  if (tabBar.hidden) return;
+  const buttons = tabs.map((tab, i) => {
+    const active = i === activeTab;
+    const s = active ? song() : tab.doc.song;
+    const dirty = active ? editor.dirty : tab.doc.dirty;
+    const item = document.createElement('span');
+    item.className = 'song-tab';
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'btn sm';
+    pick.setAttribute('role', 'tab');
+    pick.setAttribute('aria-selected', String(active));
+    pick.textContent = `${tabName(s, active ? libraryEntry : tab.library)}${dirty ? '*' : ''}`;
+    pick.title = `Song ${i + 1} (Alt+PageUp/PageDown switch songs)`;
+    pick.addEventListener('click', () => switchTab(i));
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn sm';
+    close.textContent = 'x';
+    close.title = 'Close this song';
+    close.setAttribute('aria-label', `Close ${pick.textContent}`);
+    close.addEventListener('click', () => closeTab(i));
+    item.append(pick, close);
+    return item;
+  });
+  tabBar.replaceChildren(...buttons);
 }
 
 async function openModule(file: File): Promise<void> {
@@ -813,6 +937,7 @@ function saveSong(): void {
   const name = safeName(s.title, 'untitled');
   download(bytes, `${name}.xm`, 'application/octet-stream');
   editor.dirty = false;
+  renderTabs();
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
 }
 
@@ -1046,6 +1171,7 @@ async function saveToLibrary(): Promise<void> {
     const id = await putSong({ id: same?.id, name, savedAt: Date.now(), bytes: saveXm(s), origin: originOf(s) });
     libraryEntry = { id, name };
     editor.dirty = false;
+    renderTabs();
     status.textContent = `Saved ${name} in this browser.`;
     libraryInfo.textContent = status.textContent;
     await showLibrary();
@@ -1060,6 +1186,7 @@ function openLibrarySong(): void {
   try {
     startSong(applyOrigin(loadModule(entry.bytes.slice().buffer, `${entry.name}.xm`), entry.origin));
     libraryEntry = { id: entry.id, name: entry.name };
+    renderTabs();
     songsDialog.close();
     status.textContent = `Opened ${entry.name}.`;
   } catch (error) {
@@ -1210,6 +1337,8 @@ async function startUp(): Promise<void> {
 $('#new').addEventListener('click', () => {
   if (!confirmDiscard()) return;
   startSong(createSong());
+  // A new song stays replaceable until it is edited.
+  blankTab = true;
   status.textContent = 'New song: 4 channels, five chip instruments.';
 });
 $('#load').addEventListener('click', () => fileInput.click());
@@ -1237,7 +1366,7 @@ window.addEventListener('drop', (event) => {
   else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
-  if (editor.dirty) event.preventDefault();
+  if (editor.dirty || tabs.some((tab, i) => i !== activeTab && tab.doc.dirty)) event.preventDefault();
 });
 
 // ---- Buttons and layout --------------------------------------------------
@@ -1500,6 +1629,11 @@ window.addEventListener('keydown', (event) => {
   const target = event.target as HTMLElement;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
+  if (event.altKey && !event.ctrlKey && !event.shiftKey && (event.code === 'PageUp' || event.code === 'PageDown')) {
+    event.preventDefault();
+    if (tabs.length > 1) switchTab((activeTab + (event.code === 'PageDown' ? 1 : tabs.length - 1)) % tabs.length);
+    return;
+  }
   const inPattern = app.dataset.view === 'pattern';
   if (inPattern && blockKey(event)) {
     event.preventDefault();
@@ -1694,6 +1828,7 @@ function showSettings(): void {
   $<HTMLSelectElement>('#set-space').value = prefs.space;
   checkbox('#set-midi').checked = prefs.midi;
   checkbox('#set-velocity').checked = prefs.midiVelocity;
+  checkbox('#set-tabs').checked = prefs.songTabs;
 }
 
 setup.addEventListener('change', () => {
@@ -1707,6 +1842,7 @@ setup.addEventListener('change', () => {
   prefs.space = $<HTMLSelectElement>('#set-space').value as Settings['space'];
   prefs.midi = checkbox('#set-midi').checked;
   prefs.midiVelocity = checkbox('#set-velocity').checked;
+  prefs.songTabs = checkbox('#set-tabs').checked;
   saveSettings(prefs);
   applySettings();
 });
