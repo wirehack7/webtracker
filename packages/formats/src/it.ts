@@ -56,7 +56,9 @@ export function convertEffect(command: number, info: number, oldEffects = false)
     case 'X': // full range panning
       return [0x08, info];
     case 'M': // channel volume
+      return [0x16, Math.min(64, info)];
     case 'N': // channel volume slide
+      return [0x17, info];
     case 'Y': // panbrello
     case 'Z': // MIDI macro
       return [0, 0];
@@ -496,6 +498,7 @@ export function loadIt(buffer: ArrayBuffer): Song {
     initialSpeed,
     initialTempo,
     channelPanning,
+    channelVolume: Array.from({ length: channels }, (_, c) => Math.min(64, u8(0x80 + c))),
     initialGlobalVolume: globalVolume || 64,
   };
 }
