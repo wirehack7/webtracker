@@ -38,11 +38,13 @@ const inlineWorklet: Plugin = {
 
 await mkdir(dist, { recursive: true });
 const sizes: string[] = [];
+// The MIT License asks for the notice to stay with every copy.
+const banner = '/*! chiptrackr replayer | (c) Markus Fritz | MIT License | github.com/wirehack7/webtracker */\n';
 for (const [name, entry] of [
   ['webtracker-replayer', 'src/full.ts'],
   ['webtracker-replayer-lite', 'src/lite.ts'],
 ] as const) {
-  const code = output(
+  const code = banner + output(
     await build({
       root,
       configFile: false,
