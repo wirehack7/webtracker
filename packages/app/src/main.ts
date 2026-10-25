@@ -34,7 +34,7 @@ import {
   type Resampler,
   type Song,
 } from '@webtracker/engine';
-import { applyTrack, encodeWav, importSample, loadModule, loadXp, loadXt, sampleFromChannels, saveMod, saveXi, saveXm, saveXp, saveXt, type WavFormat } from '@webtracker/formats';
+import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
@@ -861,6 +861,10 @@ async function openModule(file: File): Promise<void> {
   }
 }
 
+/** Headerless sample files; anything else that nothing can decode is read as raw too. */
+const RAW_NAME = /\.(raw|smp|sam|pcm|bin)$/i;
+const RAW_LABELS: Record<RawFormat, string> = { s8: '8-bit signed', u8: '8-bit unsigned', s16le: '16-bit little endian', s16be: '16-bit big endian' };
+
 /** Puts a sample or XI instrument file into the current slot. */
 async function importIntoSlot(file: File): Promise<void> {
   const index = instrument - 1;
@@ -868,12 +872,23 @@ async function importIntoSlot(file: File): Promise<void> {
   try {
     const buffer = await file.arrayBuffer();
     let imported = importSample(buffer, file.name);
+    let raw = false;
+    if (!imported && RAW_NAME.test(file.name)) {
+      imported = loadRaw(buffer, file.name, prefs.rawFormat);
+      raw = true;
+    }
     if (!imported) {
       // MP3, OGG, FLAC and the rest: the browser decodes them, resampled to 44.1 kHz.
       const rate = 44100;
-      const audio = await new OfflineAudioContext(1, 1, rate).decodeAudioData(buffer);
-      const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
-      imported = { kind: 'sample', sample: sampleFromChannels(channels, rate, file.name), rate };
+      try {
+        const audio = await new OfflineAudioContext(1, 1, rate).decodeAudioData(buffer.slice(0));
+        const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
+        imported = { kind: 'sample', sample: sampleFromChannels(channels, rate, file.name), rate };
+      } catch {
+        // Nothing the browser knows either: take the bytes as raw PCM, as trackers do.
+        imported = loadRaw(buffer, file.name, prefs.rawFormat);
+        raw = true;
+      }
     }
     if (imported.kind === 'instrument') {
       const ins = imported.instrument;
@@ -886,7 +901,7 @@ async function importIntoSlot(file: File): Promise<void> {
         ins.samples[slot] = sample;
         if (!ins.name) ins.name = sample.name;
       });
-      status.textContent = `${file.name}: ${sample.data.length} frames at ${imported.rate} Hz in ${hex(instrument)}/${hex(slot, 1)}.`;
+      status.textContent = `${file.name}: ${sample.data.length} frames at ${imported.rate} Hz in ${hex(instrument)}/${hex(slot, 1)}${raw ? `, read as raw ${RAW_LABELS[prefs.rawFormat]} (Setup changes the format)` : ''}.`;
     }
     sampleEditor.resetView();
     if (app.dataset.view === 'pattern') setView('sample');
@@ -1397,7 +1412,7 @@ window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
   if (!file) return;
-  if (/\.(mod|xm|s3m|it|mtm|669|okt|stk|zip|gz|mdz|xmz|s3z|itz|mdgz|xmgz|s3gz|itgz)$/i.test(file.name)) void openModule(file);
+  if (/\.(mod|xm|s3m|it|mtm|669|okt|stk|zip|gz|mdz|xmz|s3z|itz|mdgz|xmgz|s3gz|itgz|umx)$/i.test(file.name)) void openModule(file);
   else if (/\.x[pt]$/i.test(file.name)) void importPatternFile(file);
   else void importIntoSlot(file);
 });
@@ -1865,6 +1880,7 @@ function showSettings(): void {
   checkbox('#set-midi').checked = prefs.midi;
   checkbox('#set-velocity').checked = prefs.midiVelocity;
   checkbox('#set-tabs').checked = prefs.songTabs;
+  $<HTMLSelectElement>('#set-raw').value = prefs.rawFormat;
 }
 
 setup.addEventListener('change', () => {
@@ -1879,6 +1895,7 @@ setup.addEventListener('change', () => {
   prefs.midi = checkbox('#set-midi').checked;
   prefs.midiVelocity = checkbox('#set-velocity').checked;
   prefs.songTabs = checkbox('#set-tabs').checked;
+  prefs.rawFormat = $<HTMLSelectElement>('#set-raw').value as RawFormat;
   saveSettings(prefs);
   applySettings();
 });

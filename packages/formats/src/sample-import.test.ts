@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { chipInstruments, LoopType } from '@webtracker/engine';
-import { importSample } from './sample-import.ts';
+import { chipInstruments, LoopType, rateForTuning, type Instrument, type Sample } from '@webtracker/engine';
+import { importSample, loadRaw } from './sample-import.ts';
 import { saveXi } from './xm-write.ts';
 
 class Bytes {
@@ -102,5 +102,59 @@ describe('importSample', () => {
 
   it('returns null for formats it leaves to the browser', () => {
     expect(importSample(new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0]).buffer)).toBeNull();
+  });
+});
+
+describe('raw and PAT import', () => {
+  it('reads raw PCM in each format', () => {
+    const bytes = new Uint8Array([0x80, 0x00, 0x7f, 0xff]);
+    expect(Array.from((loadRaw(bytes.buffer, 'x.raw', 's8') as { sample: Sample }).sample.data)).toEqual([-1, 0, 127 / 128, -1 / 128]);
+    expect(Array.from((loadRaw(bytes.buffer, 'x.raw', 'u8') as { sample: Sample }).sample.data)).toEqual([0, -1, -1 / 128, 127 / 128]);
+    expect(Array.from((loadRaw(bytes.buffer, 'x.raw', 's16le') as { sample: Sample }).sample.data)).toEqual([128 / 32768, -129 / 32768]);
+    expect(Array.from((loadRaw(bytes.buffer, 'x.raw', 's16be') as { sample: Sample }).sample.data)).toEqual([-32768 / 32768, 32767 / 32768]);
+  });
+
+  it('reads a two-wave Gravis patch with key ranges and loops', () => {
+    const waves = [
+      { frames: 100, low: 0, high: 300000, root: 261626, rate: 44100, modes: 1 | 4 },
+      { frames: 60, low: 300001, high: 20000000, root: 523251, rate: 22050, modes: 2 | 4 | 8 },
+    ];
+    const size = 239 + waves.reduce((n, w) => n + 96 + w.frames * (w.modes & 1 ? 2 : 1), 0);
+    const b = new Uint8Array(size);
+    const v = new DataView(b.buffer);
+    b.set(new TextEncoder().encode('GF1PATCH110\0ID#000002\0'));
+    b.set(new TextEncoder().encode('Piano'), 131);
+    b[198] = waves.length;
+    let o = 239;
+    for (const w of waves) {
+      const bytes = w.frames * (w.modes & 1 ? 2 : 1);
+      v.setUint32(o + 8, bytes, true);
+      v.setUint32(o + 12, 10 * (w.modes & 1 ? 2 : 1), true);
+      v.setUint32(o + 16, 50 * (w.modes & 1 ? 2 : 1), true);
+      v.setUint16(o + 20, w.rate, true);
+      v.setUint32(o + 22, w.low, true);
+      v.setUint32(o + 26, w.high, true);
+      v.setUint32(o + 30, w.root, true);
+      b[o + 55] = w.modes;
+      if (!(w.modes & 1)) b.fill(0xc0, o + 96, o + 96 + bytes);
+      o += 96 + bytes;
+    }
+    const imported = importSample(b.buffer, 'piano.pat');
+    expect(imported?.kind).toBe('instrument');
+    const ins = (imported as { instrument: Instrument }).instrument;
+    expect(ins.name).toBe('Piano');
+    expect(ins.samples.map((s) => s.data.length)).toEqual([100, 60]);
+    expect(ins.samples[0]!.loopType).toBe(LoopType.Forward);
+    expect(ins.samples[1]!.loopType).toBe(LoopType.PingPong);
+    expect([ins.samples[0]!.loopStart, ins.samples[0]!.loopLength]).toEqual([10, 40]);
+    // Unsigned 0xc0 is +64.
+    expect(ins.samples[1]!.data[0]).toBeCloseTo(0.5);
+    // C-4 (index 48) is below 300 Hz, C-5 above.
+    expect(ins.keymap[48]).toBe(0);
+    expect(ins.keymap[60]).toBe(1);
+    // Wave 1 plays its root at 44.1 kHz, so C-4 needs 44.1 kHz: no transpose.
+    expect(rateForTuning(ins.samples[0]!.relativeNote, ins.samples[0]!.finetune) / 44100).toBeCloseTo(1, 2);
+    // Wave 2 has C-5 as root at 22.05 kHz, so C-4 plays at half that.
+    expect(rateForTuning(ins.samples[1]!.relativeNote, ins.samples[1]!.finetune) / 11025).toBeCloseTo(1, 2);
   });
 });

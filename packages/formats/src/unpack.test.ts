@@ -111,3 +111,18 @@ describe('module containers', () => {
     expect(unpacked.bytes).toBe(mod);
   });
 });
+
+describe('UMX packages', () => {
+  it('finds the module after the package header', () => {
+    const header = new Uint8Array(200);
+    header.set([0xc1, 0x83, 0x2a, 0x9e]);
+    const umx = new Uint8Array(header.length + mod.length + 50);
+    umx.set(header);
+    umx.set(mod, header.length);
+    const unpacked = unpackModule(umx, 'Mech8.umx');
+    expect(unpacked.containers).toEqual(['UMX']);
+    expect(unpacked.fileName).toBe('Mech8.mod');
+    expect(unpacked.bytes.subarray(0, mod.length)).toEqual(mod);
+    expect(loadModule(umx.slice().buffer, 'Mech8.umx').formatName).toMatch(/\(UMX\)$/);
+  });
+});

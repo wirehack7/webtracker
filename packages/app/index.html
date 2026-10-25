@@ -57,7 +57,7 @@
               <button type="button" class="btn" id="stop" title="Stop (Space)">Stop</button>
               <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
               <button type="button" class="btn" id="new" title="New song">New</button>
-              <button type="button" class="btn" id="load" title="Load a module: MOD, XM, S3M, IT, MTM, 669 or OKT, also packed as ZIP, gzip, MMCMP or PowerPacker; or an XP pattern / XT track into the current pattern (Ctrl+O)">Load</button>
+              <button type="button" class="btn" id="load" title="Load a module: MOD, XM, S3M, IT, MTM, 669 or OKT, also packed as ZIP, gzip, MMCMP, PowerPacker or UMX; or an XP pattern / XT track into the current pattern (Ctrl+O)">Load</button>
               <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
@@ -65,8 +65,8 @@
               <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
               <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
               <button type="button" class="btn phone-only" data-proxy="keys-toggle" id="keys-proxy" aria-pressed="false">Keys</button>
-              <input type="file" id="file" accept=".mod,.xm,.s3m,.it,.mtm,.669,.okt,.stk,.xp,.xt,.zip,.gz,.mdz,.xmz,.s3z,.itz,.mdgz,.xmgz,.s3gz,.itgz" hidden />
-              <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.flac,.mp3,.ogg,.opus,audio/*" hidden />
+              <input type="file" id="file" accept=".mod,.xm,.s3m,.it,.mtm,.669,.okt,.stk,.xp,.xt,.zip,.gz,.mdz,.xmz,.s3z,.itz,.mdgz,.xmgz,.s3gz,.itgz,.umx" hidden />
+              <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.pat,.raw,.smp,.sam,.pcm,.flac,.mp3,.ogg,.opus,audio/*" hidden />
             </div>
           </div>
 
@@ -286,6 +286,12 @@
         </label>
         <label><span class="label">MIDI input</span><input type="checkbox" id="set-midi" /></label>
         <label><span class="label">MIDI velocity</span><input type="checkbox" id="set-velocity" title="Write the velocity into the volume column while recording" /></label>
+        <label><span class="label">Raw samples</span>
+          <select class="value" id="set-raw" title="How sample files without a header (.raw, .smp, ...) are read">
+            <option value="s8">8-bit signed</option><option value="u8">8-bit unsigned</option>
+            <option value="s16le">16-bit little endian</option><option value="s16be">16-bit big endian</option>
+          </select>
+        </label>
         <label><span class="label">Song tabs</span><input type="checkbox" id="set-tabs" title="New, loaded and shared songs open in a new tab instead of replacing the current song" /></label>
       </div>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
