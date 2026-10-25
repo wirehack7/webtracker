@@ -11,6 +11,7 @@ export interface RenderOptions {
   resampler?: Resampler;
   stereoSeparation?: number;
   volumeRamps?: boolean;
+  amplify?: number;
   /** Called now and then with how far the song has got, 0..1. */
   onProgress?: (fraction: number) => void;
 }
@@ -36,6 +37,7 @@ export function renderSong(song: Song, options: RenderOptions = {}): Rendered {
   player.resampler = options.resampler ?? 'auto';
   player.stereoSeparation = options.stereoSeparation ?? 100;
   player.volumeRamps = options.volumeRamps ?? true;
+  player.amplify = options.amplify ?? 100;
   player.playing = true;
 
   const blocks: [Float32Array, Float32Array][] = [];

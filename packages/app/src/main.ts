@@ -34,7 +34,7 @@ import {
   type Resampler,
   type Song,
 } from '@webtracker/engine';
-import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat, type WavFormat } from '@webtracker/formats';
+import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, save8svx, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
@@ -52,7 +52,7 @@ import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
-import { loadSettings, midiToNote, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
+import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -100,7 +100,7 @@ const host = {
   status: (text: string) => (status.textContent = text),
   importFile: () => $<HTMLInputElement>('#sample-file').click(),
   saveInstrument: () => saveInstrument(),
-  saveSample: () => saveSample(),
+  saveSample: (format: 'wav' | 'iff') => saveSample(format),
 };
 const sampleEditor = new SampleEditor(host);
 const instrumentEditor = new InstrumentEditor(host);
@@ -777,6 +777,15 @@ async function play(loopPattern: boolean, row = 0): Promise<void> {
   showPlaying(true);
 }
 
+/** Plays just the cursor row, then moves the cursor down, to step through a pattern by ear. */
+async function playRow(): Promise<void> {
+  if (playing) stop();
+  const node = engine ?? (await ensureEngine());
+  if (!node) return;
+  node.send({ type: 'playRow', order: currentOrder, row: view.row });
+  view.moveTo(view.row + 1, view.channel, view.column);
+}
+
 function stop(): void {
   engine?.send({ type: 'stop' });
   showPlaying(false);
@@ -1014,7 +1023,7 @@ function download(bytes: Uint8Array, fileName: string, type: string): void {
 
 const safeName = (name: string, fallback: string) => (name.trim() || fallback).replace(/[^\w .-]+/g, '_');
 
-function saveSample(): void {
+function saveSample(format: 'wav' | 'iff'): void {
   const s = song().instruments[instrument - 1]?.samples[sampleSlot];
   if (!s || s.data.length === 0) {
     status.textContent = 'This sample slot is empty.';
@@ -1022,6 +1031,11 @@ function saveSample(): void {
   }
   const name = safeName(s.name, `sample${hex(instrument)}-${hex(sampleSlot)}`);
   const rate = Math.round(rateForTuning(s.relativeNote, s.finetune));
+  if (format === 'iff') {
+    download(save8svx(s, rate), `${name}.8svx`, 'audio/x-8svx');
+    status.textContent = `Saved ${name}.8svx (8-bit) at ${rate} Hz.`;
+    return;
+  }
   download(encodeWav([s.data], rate, 'pcm16'), `${name}.wav`, 'audio/wav');
   status.textContent = `Saved ${name}.wav at ${rate} Hz.`;
 }
@@ -1083,6 +1097,7 @@ function exportWav(): void {
     resampler: prefs.resampler,
     stereoSeparation: prefs.stereoSeparation,
     volumeRamps: prefs.volumeRamps,
+    amplify: prefs.amplify,
     name: safeName(s.title, 'untitled'),
   };
   const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
@@ -1852,7 +1867,8 @@ window.addEventListener('keydown', (event) => {
     case 'Enter':
     case 'NumpadEnter':
       event.preventDefault();
-      void play(event.shiftKey);
+      if (event.altKey) void playRow();
+      else void play(event.shiftKey);
       return;
   }
 
@@ -1946,11 +1962,89 @@ themeSelect.replaceChildren(
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
 function mixerMessage(): EngineMessage {
-  return { type: 'mixer', resampler: prefs.resampler, stereoSeparation: prefs.stereoSeparation, volumeRamps: prefs.volumeRamps };
+  return { type: 'mixer', resampler: prefs.resampler, stereoSeparation: prefs.stereoSeparation, volumeRamps: prefs.volumeRamps, amplify: prefs.amplify };
 }
+
+// ---- Colour scheme editor -------------------------------------------------
+
+const colourInputs = new Map<string, HTMLInputElement>();
+$('#colour-grid').replaceChildren(
+  ...COLOR_VARS.map(([name, label]) => {
+    const row = document.createElement('label');
+    const input = Object.assign(document.createElement('input'), { type: 'color', title: name });
+    input.addEventListener('input', () => {
+      prefs.colors[name] = input.value;
+      saveSettings(prefs);
+      applySettings();
+    });
+    // The setup dialog's change handler would otherwise re-apply everything for each colour.
+    input.addEventListener('change', (event) => event.stopPropagation());
+    colourInputs.set(name, input);
+    row.append(input, Object.assign(document.createElement('span'), { className: 'label', textContent: label }));
+    return row;
+  }),
+);
+
+/** Any CSS colour as #rrggbb, which colour inputs need. */
+function hexColour(css: string): string {
+  const g = document.createElement('canvas').getContext('2d');
+  if (!g) return '#000000';
+  g.fillStyle = '#000000';
+  g.fillStyle = css;
+  return /^#[0-9a-f]{6}$/i.test(g.fillStyle) ? g.fillStyle : '#000000';
+}
+
+function applyColours(): void {
+  const root = document.documentElement.style;
+  for (const [name] of COLOR_VARS) {
+    const value = prefs.colors[name];
+    if (value) root.setProperty(name, value);
+    else root.removeProperty(name);
+  }
+}
+
+function showColours(): void {
+  const style = getComputedStyle(document.documentElement);
+  for (const [name, input] of colourInputs) input.value = hexColour(style.getPropertyValue(name).trim());
+}
+
+$('#colours-reset').addEventListener('click', () => {
+  prefs.colors = {};
+  saveSettings(prefs);
+  applySettings();
+  showColours();
+  status.textContent = 'Colours reset to the scheme.';
+});
+
+$('#colours-export').addEventListener('click', () => {
+  const style = getComputedStyle(document.documentElement);
+  const colors = Object.fromEntries(COLOR_VARS.map(([name]) => [name, hexColour(style.getPropertyValue(name).trim())]));
+  download(new TextEncoder().encode(JSON.stringify({ theme: prefs.theme, colors }, null, 2)), 'colours.json', 'application/json');
+});
+
+const colourFile = $<HTMLInputElement>('#colours-file');
+$('#colours-import').addEventListener('click', () => colourFile.click());
+colourFile.addEventListener('change', async (event) => {
+  event.stopPropagation();
+  const file = colourFile.files?.[0];
+  colourFile.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text()) as { theme?: unknown; colors?: unknown };
+    if (typeof data.theme === 'string' && data.theme in THEMES) prefs.theme = data.theme as Theme;
+    prefs.colors = parseColors(data.colors);
+    saveSettings(prefs);
+    applySettings();
+    showSettings();
+    status.textContent = `Loaded colours from ${file.name}.`;
+  } catch {
+    status.textContent = `${file.name} is not a colour file.`;
+  }
+});
 
 function applySettings(): void {
   document.documentElement.dataset.theme = prefs.theme;
+  applyColours();
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
   view.beat = prefs.beat;
   view.bar = prefs.bar;
@@ -1969,6 +2063,9 @@ function showSettings(): void {
   $<HTMLInputElement>('#set-separation').value = String(prefs.stereoSeparation);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   checkbox('#set-ramps').checked = prefs.volumeRamps;
+  $<HTMLInputElement>('#set-amplify').value = String(prefs.amplify);
+  $('#set-amplify-value').textContent = `${prefs.amplify}%`;
+  showColours();
   $<HTMLSelectElement>('#set-beat').value = String(prefs.beat);
   $<HTMLSelectElement>('#set-bar').value = String(prefs.bar);
   $<HTMLSelectElement>('#set-space').value = prefs.space;
@@ -1986,6 +2083,8 @@ setup.addEventListener('change', () => {
   prefs.stereoSeparation = Number($<HTMLInputElement>('#set-separation').value);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   prefs.volumeRamps = checkbox('#set-ramps').checked;
+  prefs.amplify = Number($<HTMLInputElement>('#set-amplify').value);
+  $('#set-amplify-value').textContent = `${prefs.amplify}%`;
   prefs.beat = Number($<HTMLSelectElement>('#set-beat').value);
   prefs.bar = Number($<HTMLSelectElement>('#set-bar').value);
   prefs.space = $<HTMLSelectElement>('#set-space').value as Settings['space'];
@@ -1997,6 +2096,7 @@ setup.addEventListener('change', () => {
   prefs.rawFormat = $<HTMLSelectElement>('#set-raw').value as RawFormat;
   saveSettings(prefs);
   applySettings();
+  showColours();
 });
 $('#setup-open').addEventListener('click', () => {
   showSettings();

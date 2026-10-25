@@ -12,7 +12,9 @@ class EngineProcessor extends AudioWorkletProcessor {
   private framesToScopes = 0;
   /** Kept here so a reloaded song keeps the muted channels. */
   private muted: boolean[] = [];
-  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean } = { resampler: 'auto', stereoSeparation: 100, volumeRamps: true };
+  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; amplify: number } = { resampler: 'auto', stereoSeparation: 100, volumeRamps: true, amplify: 100 };
+  /** Rows a row-by-row play still lets start; the next one stops it. */
+  private rowsToPlay = 0;
   private framesToVoices = 0;
   /** Whether the last 'voices' message listed any, so silence is sent once. */
   private hadVoices = false;
@@ -36,7 +38,18 @@ class EngineProcessor extends AudioWorkletProcessor {
         return;
       case 'load': {
         const player = new Player(message.song, sampleRate);
-        player.onRow = (state) => this.send({ type: 'row', state, levels: player.channelLevels() });
+        this.rowsToPlay = 0;
+        player.onRow = (state) => {
+          if (this.rowsToPlay > 0) {
+            // Row-by-row play stays quiet towards the main thread, which moves the cursor itself.
+            if (--this.rowsToPlay === 0) {
+              player.playing = false;
+              this.send({ type: 'state', state: player.getState() });
+            }
+            return;
+          }
+          this.send({ type: 'row', state, levels: player.channelLevels() });
+        };
         player.enableScopes(SCOPE_FRAMES);
         player.muted = this.muted;
         Object.assign(player, this.mixer);
@@ -48,10 +61,20 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (this.player) this.player.muted = this.muted;
         break;
       case 'mixer':
-        this.mixer = { resampler: message.resampler, stereoSeparation: message.stereoSeparation, volumeRamps: message.volumeRamps };
+        this.mixer = { resampler: message.resampler, stereoSeparation: message.stereoSeparation, volumeRamps: message.volumeRamps, amplify: message.amplify };
         if (this.player) Object.assign(this.player, this.mixer);
         break;
+      case 'playRow':
+        if (this.player) {
+          this.player.reset(message.order, message.row);
+          this.player.loopPattern = true;
+          this.player.playing = true;
+          // The first call is this row starting, the second the next one.
+          this.rowsToPlay = 2;
+        }
+        return;
       case 'play':
+        this.rowsToPlay = 0;
         if (this.player) {
           if (message.order !== undefined) this.player.reset(message.order, message.row ?? 0);
           this.player.loopPattern = message.loopPattern;
@@ -59,6 +82,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         }
         break;
       case 'stop':
+        this.rowsToPlay = 0;
         if (this.player) {
           // Stop keeps the position so play continues from there, like FT2.
           this.player.playing = false;
