@@ -21,7 +21,7 @@ chiptrackr is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([Gi
 
 ## Development
 
-Requirements: Node 22 and pnpm 10 (`corepack enable` is enough).
+Requirements: Node 22 and pnpm 12 (`corepack enable` is enough).
 
 ```sh
 pnpm install
