@@ -80,14 +80,16 @@ describe('FT2 replayer', () => {
     expect(rms(left, 1000)).toBe(0);
   });
 
-  it('gives the first note on a channel the sample volume, even after an instrument-only row', () => {
+  it('keeps the volume of an instrument-only row for the first note on a channel', () => {
     const cells = [];
+    // No sample has played yet, so the instrument resets the volume to 0 and
+    // the volume column sets it to 16. The note without instrument keeps it.
     cells[0] = [{ ins: 1, vol: 0x20 }];
     cells[2] = [{ note: C4 }];
     const ins = looped();
-    ins.samples[0]!.volume = 48;
+    ins.samples[0]!.volume = 64;
     const { left } = play(cells, 0.4, [ins]);
-    const ref = play([[{ note: C4, ins: 1 }]], 0.1, [ins]).left;
+    const ref = play([[{ note: C4, ins: 1, vol: 0x20 }]], 0.1, [ins]).left;
     expect(rms(left, 13 * TICK, 15 * TICK)).toBeCloseTo(rms(ref, TICK, 3 * TICK), 2);
   });
 
@@ -97,5 +99,28 @@ describe('FT2 replayer', () => {
     const ins = { samples: [{ data, loop: 'pingpong' as const, loopStart: 2000, loopLength: 2000 }] };
     const { left } = play([[{ note: C4, ins: 1 }]], 0.2, [ins]);
     expect(estimateFrequency(left, 1000, 5000)).toBeCloseTo(8363 / 32, -1);
+  });
+  it('never releases a panning envelope that sits on its sustain point at key off', () => {
+    const cells = [];
+    cells[0] = [{ note: C4, ins: 1 }];
+    cells[2] = [{ note: 97 }];
+    const song = loadModule(buildXm({ channels: 1, orders: [0], patterns: [{ rows: 16, cells }], instruments: [looped({ volumeEnvelope: { points: [[0, 64], [10, 64]] } })] }));
+    // Hard left at tick 2 and held there, then hard right after release.
+    song.instruments[0]!.panningEnvelope = { enabled: true, points: [{ x: 0, y: 32 }, { x: 2, y: 0 }, { x: 4, y: 64 }], sustain: true, sustainPoint: 1, loop: false, loopStart: 0, loopEnd: 0 };
+    const { left, right } = render(song, 0.6, (p) => (p.resampler = 'linear'));
+    expect(rms(left, 20 * TICK, 25 * TICK)).toBeGreaterThan(0.05);
+    expect(rms(right, 20 * TICK, 25 * TICK)).toBeLessThan(0.001);
+  });
+
+  it('keeps the fadeout of the old instrument when a note switches instruments after key off', () => {
+    const env = { points: [[0, 64], [10, 64]] as [number, number][] };
+    const cells = [];
+    cells[0] = [{ note: C4, ins: 2 }];
+    cells[1] = [{ note: 97, ins: 1 }];
+    cells[2] = [{ note: C4 }];
+    // Instrument 1 never fades out by itself, instrument 2 is gone in 8 ticks.
+    const instruments = [looped({ volumeEnvelope: env }), looped({ volumeEnvelope: env, fadeout: 4096 })];
+    const { left } = play(cells, 0.6, instruments);
+    expect(rms(left, 16 * TICK, 18 * TICK)).toBe(0);
   });
 });

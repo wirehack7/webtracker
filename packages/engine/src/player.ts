@@ -203,6 +203,8 @@ class Channel {
   // Instrument envelopes.
   keyOn = false;
   fadeout = 32768;
+  /** Fadeout step of the instrument that was triggered last (FT2). */
+  fadeoutSpeed = 0;
   volEnvTick = 0;
   panEnvTick = 0;
   autoVibPos = 0;
@@ -1272,11 +1274,8 @@ export class Player {
       this.ft2TickZero(ch);
       return;
     }
-    // The first note on a channel takes the instrument's defaults even
-    // without an instrument number of its own.
-    const first = ch.sample === null;
     this.ft2TriggerNote(ch, note, effect, param);
-    if (ins || (first && ch.sample)) {
+    if (ins) {
       this.ft2ResetVolumes(ch);
       this.ft2TriggerInstrument(ch);
     }
@@ -1375,6 +1374,7 @@ export class Player {
     }
     ch.fading = true;
     ch.fadeout = 32768;
+    ch.fadeoutSpeed = ins.fadeout;
     if (ins.vibratoDepth > 0) {
       ch.autoVibPos = 0;
       if (ins.vibratoSweep > 0) {
@@ -1397,11 +1397,8 @@ export class Player {
     } else {
       ch.volume = ch.outVolume = 0;
     }
-    const pe = ins?.panningEnvelope;
-    if (pe?.enabled && pe.points.length) {
-      const x = pe.points[Math.min(ch.panEnv.pos, pe.points.length - 1)]!.x;
-      if (ch.panEnv.tick >= x) ch.panEnv.tick = x - 1;
-    }
+    // FT2 bug: the panning envelope is not rewound to its current point, so
+    // one that already sits on its sustain point is never released.
   }
 
   private ft2SetVolume(ch: Channel, volume: number): void {
@@ -1867,8 +1864,13 @@ export class Player {
         st.delta = 0;
       }
     }
-    if (!interpolated) st.value = Math.max(0, Math.min(64 * 256, st.value + st.delta));
-    return st.value / 256;
+    if (interpolated) return st.value / 256;
+    st.value = (((st.value + st.delta) << 16) >> 16);
+    // FT2 tests the unsigned upper byte, and only clamps the output.
+    const hi = (st.value >> 8) & 0xff;
+    if (hi <= 64) return st.value / 256;
+    st.delta = 0;
+    return hi <= 160 ? 64 : 0;
   }
 
   private ft2Update(ch: Channel): void {
@@ -1878,9 +1880,9 @@ export class Player {
     let envPan = 32;
     if (ins) {
       const ve = ins.volumeEnvelope;
-      // The fadeout speed comes from the instrument that plays now, which a
-      // note without instrument number can change after key off.
-      if (!ch.keyOn && ch.fading && ins.fadeout > 0) ch.fadeout = Math.max(0, ch.fadeout - ins.fadeout);
+      // The fadeout speed is kept from the last instrument trigger, even when a
+      // note without instrument number switches to another instrument.
+      if (!ch.keyOn && ch.fading) ch.fadeout = Math.max(0, ch.fadeout - ch.fadeoutSpeed);
       if (ve.enabled) envVol = this.ft2Envelope(ve, ch.volEnv, ch.keyOn);
       if (ins.panningEnvelope.enabled) envPan = this.ft2Envelope(ins.panningEnvelope, ch.panEnv, ch.keyOn);
 
