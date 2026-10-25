@@ -1,0 +1,43 @@
+name: Replayer vs libopenmpt
+
+# Plays the OpenMPT test modules (from libxmp's test-dev folder) through the
+# replayer and through libopenmpt, and fails if fewer modules match than before.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'packages/engine/**'
+      - 'packages/formats/**'
+      - '.github/workflows/reference.yml'
+  workflow_dispatch:
+
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Fetch the OpenMPT test modules
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/libxmp/libxmp "$RUNNER_TEMP/libxmp"
+          git -C "$RUNNER_TEMP/libxmp" sparse-checkout set test-dev/openmpt
+      - name: XM (FastTracker 2)
+        run: pnpm --filter @webtracker/formats reference-check "$RUNNER_TEMP/libxmp/test-dev/openmpt/xm" "$RUNNER_TEMP/xm.md" --min-ref 76
+      - name: MOD (ProTracker 2)
+        run: pnpm --filter @webtracker/formats reference-check "$RUNNER_TEMP/libxmp/test-dev/openmpt/mod" "$RUNNER_TEMP/mod.md" --min-sides 22
+      - name: Report
+        if: always()
+        run: |
+          for f in xm mod; do
+            [ -f "$RUNNER_TEMP/$f.md" ] || continue
+            echo "## ${f^^}" >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/$f.md" >> "$GITHUB_STEP_SUMMARY"
+          done

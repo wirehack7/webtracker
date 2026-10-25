@@ -10,7 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "render": "tsx scripts/render.ts"
+    "render": "tsx scripts/render.ts",
+    "reference-check": "tsx scripts/reference-check.ts"
   },
   "dependencies": {
     "@webtracker/engine": "workspace:*"

@@ -1,5 +1,7 @@
 # chiptrackr
 
+[![CI](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml/badge.svg)](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml) [![Replayer vs libopenmpt](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml/badge.svg)](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml) [Testing and coverage](docs/TESTING.md)
+
 A chiptune tracker for the browser, made for the demoscene. Classic tracker interface, responsive on desktop, tablet and phone, with XM as its native format.
 
 **Start it right in your browser: https://chiptrackr.com/**
@@ -30,6 +32,8 @@ pnpm test       # Vitest
 pnpm typecheck  # TypeScript for all packages
 pnpm build      # production build into packages/app/dist
 ```
+
+How the project is tested, the measured code coverage, the replayer comparison with libopenmpt and what is not verified are written up in [docs/TESTING.md](docs/TESTING.md).
 
 Render a module offline (same replayer as in the browser, output as WAV):
 
