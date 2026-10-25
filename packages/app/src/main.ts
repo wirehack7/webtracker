@@ -60,6 +60,7 @@ import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
+import { track } from './track.ts';
 import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, uiPixel, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -870,7 +871,11 @@ async function play(loopPattern: boolean, row = 0): Promise<void> {
   if (!node) return;
   node.send({ type: 'play', loopPattern, order: currentOrder, row });
   showPlaying(true);
+  // Once per visit is enough to tell that music was made or heard.
+  if (!trackedPlay) track('play');
+  trackedPlay = true;
 }
+let trackedPlay = false;
 
 /** Plays just the cursor row, then moves the cursor down, to step through a pattern by ear. */
 async function playRow(): Promise<void> {
@@ -1149,6 +1154,7 @@ async function openModule(file: File): Promise<void> {
     const loaded = loadModule(await file.arrayBuffer(), file.name);
     startSong(loaded);
     status.textContent = `${file.name}: ${loaded.title || 'untitled'}, ${loaded.formatName}, ${loaded.channels} channels.`;
+    track('open-module', { format: loaded.formatName });
   } catch (error) {
     status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
   }
@@ -1252,6 +1258,7 @@ function saveSong(): void {
   editor.dirty = false;
   renderTabs();
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
+  track('save-xm');
 }
 
 /** Browsers refuse longer addresses (Chrome stops at 2 MB). */
@@ -1282,6 +1289,7 @@ async function openInReplayer(): Promise<void> {
     }
     tab.location.href = url;
     info.textContent = `${fileName} opened in the replayer.`;
+    track('open-in-replayer');
   } catch (error) {
     tab?.close();
     info.textContent = `Could not open the replayer: ${(error as Error).message}`;
@@ -1293,6 +1301,7 @@ function saveSongAsMod(): void {
   const { bytes, warnings } = saveMod(s);
   const name = safeName(s.title, 'untitled');
   download(bytes, `${name}.mod`, 'application/octet-stream');
+  track('save-mod');
   status.textContent = `Saved ${name}.mod (${bytes.length} bytes)${warnings.length ? `, ${warnings.length} things changed` : ''}.`;
   $('#save-info').textContent = warnings.length ? `MOD can't hold everything: ${warnings.join(' ')}` : 'Saved as MOD with nothing lost.';
 }
@@ -1353,6 +1362,7 @@ function exportAudio(): void {
     }
     const extension = reply.fileName.slice(reply.fileName.lastIndexOf('.') + 1);
     download(reply.bytes, reply.fileName, MIME_TYPES[extension] ?? 'application/octet-stream');
+    track('export-audio', { format: request.format.kind, stems: request.stems });
     const took = ((performance.now() - started) / 1000).toFixed(1);
     exportDone(`${reply.fileName}: ${formatTime(reply.seconds)} of audio, ${(reply.bytes.length / 1e6).toFixed(1)} MB, rendered in ${took} s.`);
   };
@@ -1524,6 +1534,7 @@ async function saveToLibrary(): Promise<void> {
     editor.dirty = false;
     renderTabs();
     status.textContent = `Saved ${name} in this browser.`;
+    track('library-save');
     libraryInfo.textContent = status.textContent;
     await showLibrary();
   } catch (error) {
@@ -1617,6 +1628,7 @@ async function copyShareLink(): Promise<void> {
   try {
     await navigator.clipboard.writeText(shareUrl.value);
     shareInfo.textContent = 'Link copied.';
+    track('share-copy');
   } catch {
     shareUrl.select();
     shareInfo.textContent = 'Select the link and copy it.';
@@ -1637,6 +1649,7 @@ async function sendShare(withFile: boolean): Promise<void> {
   }
   try {
     await navigator.share(withFile ? { title, files: [file] } : { title, url: shareUrl.value });
+    track('share-send', { file: withFile });
   } catch (error) {
     const reason = (error as Error).name;
     if (reason === 'AbortError') return;
@@ -1659,6 +1672,7 @@ async function openSharedSong(text: string): Promise<string | null> {
     const loaded = applyOrigin(loadModule(xm.slice().buffer, 'shared.xm'), origin);
     startSong(loaded);
     status.textContent = `Opened the shared song ${loaded.title.trim() || 'untitled'}.`;
+    track('open-shared');
     return null;
   } catch (error) {
     return `Could not open the shared song: ${(error as Error).message}.`;
@@ -1795,6 +1809,7 @@ function startJam(): void {
   stopTabs = listenInTabs(jamRoom, (link) => session.addGuest(link));
   jamInfo.textContent = 'The jam is on. Invite people with a link, one link per person.';
   status.textContent = 'Jam started.';
+  track('jam-start');
   view.onMoved?.();
   renderJam();
 }
@@ -1857,6 +1872,7 @@ function openJamInvite(invite: { kind: 'rtc' | 'tab'; value: string }): void {
 
 function joinWith(link: Link): void {
   wireJam(JamSession.join(jamDoc, jamPersonName(), link));
+  track('jam-join');
   jamInfo.textContent = 'Waiting for the song…';
   renderJam();
 }
