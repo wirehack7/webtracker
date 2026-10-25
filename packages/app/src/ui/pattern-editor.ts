@@ -1,5 +1,5 @@
 import { blockBetween, emptyPattern, type Block, type Pattern, type Song } from '@webtracker/engine';
-import { COLUMNS, rowHtml, type ViewState } from './pattern-view.ts';
+import { COLUMNS, rowHtml, type PeerMark, type ViewState } from './pattern-view.ts';
 
 /** Rows of each neighbouring pattern the prospective view shows. */
 const GHOST_ROWS = 32;
@@ -27,6 +27,10 @@ export class PatternEditor {
   neighbours: (() => [Pattern | null, Pattern | null]) | null = null;
   /** False stops the cursor at the first and last row instead of wrapping around. */
   wrap = true;
+  /** Called whenever the cursor or the pattern shown changes, however it happened. */
+  onMoved: (() => void) | null = null;
+  /** Other people's cursors in a jam, in any pattern. */
+  private peers: PeerMark[] = [];
 
   constructor(readonly container: HTMLElement) {
     container.addEventListener('pointerdown', (event) => {
@@ -60,7 +64,15 @@ export class PatternEditor {
   }
 
   private view(): ViewState {
-    return { row: this.row, channel: this.channel, column: this.column, selection: this.selection };
+    const peers = this.peers.filter((m) => m.pattern === this.patternIndex);
+    return { row: this.row, channel: this.channel, column: this.column, selection: this.selection, peers };
+  }
+
+  /** Shows where the others in a jam are; only the rows that change are redrawn. */
+  setPeers(peers: PeerMark[]): void {
+    const rows = new Set([...this.peers, ...peers].filter((m) => m.pattern === this.patternIndex).map((m) => m.row));
+    this.peers = peers;
+    for (const r of rows) this.renderRow(r);
   }
 
   private hitTest(target: EventTarget | null): { row: number; channel: number; column: number | null } | null {
@@ -81,6 +93,7 @@ export class PatternEditor {
     this.row = Math.min(this.row, this.pattern.rows - 1);
     this.channel = Math.min(this.channel, song.channels - 1);
     this.render();
+    this.onMoved?.();
   }
 
   /** Row highlights: every `beat` rows, and stronger every `bar` rows (0 turns one off). */
@@ -165,6 +178,7 @@ export class PatternEditor {
       this.renderRow(this.row);
       this.scrollToCursor();
     }
+    this.onMoved?.();
   }
 
   /** Steps through the columns, crossing into the next or previous channel. */
@@ -189,6 +203,7 @@ export class PatternEditor {
       this.row = row;
       this.selection = null;
       this.render();
+      this.onMoved?.();
       return;
     }
     if (row !== this.row) this.moveTo(row, this.channel, this.column, false);

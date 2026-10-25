@@ -24,13 +24,26 @@ export function formatEffect(effect: number, param: number): string {
 export const COLUMNS = 8;
 export const Column = { Note: 0, InsHi: 1, InsLo: 2, VolHi: 3, VolLo: 4, Effect: 5, ParamHi: 6, ParamLo: 7 } as const;
 
+/** Someone else's cursor in a jam. */
+export interface PeerMark {
+  pattern: number;
+  row: number;
+  channel: number;
+  colour: string;
+  name: string;
+}
+
 /** Where the cursor and selection are, for drawing. */
 export interface ViewState {
   row: number;
   channel: number;
   column: number;
   selection: Block | null;
+  /** Other people's cursors in this pattern. */
+  peers?: PeerMark[];
 }
+
+const escapeAttr = (text: string) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /** First column of each field, and how many characters it has. */
 const FIELDS = [
@@ -67,9 +80,11 @@ export function rowHtml(song: Song, pattern: Pattern, row: number, view: ViewSta
     const at = view !== null && view.row === row && view.channel === ch;
     const selected = rowSelected && ch >= sel.ch0 && ch <= sel.ch1;
     const cursorColumn = at ? view.column : -1;
+    const peer = view?.peers?.find((m) => m.row === row && m.channel === ch);
+    const mark = peer ? ` peer" style="--peer: ${escapeAttr(peer.colour)}" title="${escapeAttr(peer.name)}` : '';
     const texts = [note ? noteName(note) : '---', ins ? hex(ins, 2) : '..', formatVolume(vol), fx.slice(0, 1), fx.slice(1)];
     const empties = [!note, !ins, vol < 0x10, noFx, noFx];
-    html += `<span class="c${at ? ' at' : ''}${selected ? ' sel' : ''}" data-channel="${ch}">`;
+    html += `<span class="c${at ? ' at' : ''}${selected ? ' sel' : ''}${mark}" data-channel="${ch}">`;
     FIELDS.forEach((f, i) => {
       html += field(f.cls, f.column, texts[i]!, empties[i]!, cursorColumn);
     });

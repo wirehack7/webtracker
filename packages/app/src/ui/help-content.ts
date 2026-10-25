@@ -288,6 +288,17 @@ const WORKFLOWS: HelpSection = {
       ],
     },
     {
+      title: 'Jamming',
+      intro: 'Several people edit one song at the same time. Edits go straight from browser to browser; nothing is uploaded.',
+      entries: [
+        { code: 'Start a jam', text: 'Jam > Start a jam makes this song the shared one. You host: everyone gets your song.' },
+        { code: 'Invite link', text: 'New invite link makes a link for one person. They open it, press Join and send you their answer code; paste it and press Connect.' },
+        { code: 'New tab', text: 'Opens the jam in another tab of this browser, to try it out or to edit two patterns side by side.' },
+        { code: 'Cursors', text: 'A coloured frame in the pattern shows where each of the others is. Undo only takes back your own edits.' },
+        { code: 'Leave', text: 'Everyone keeps the song as it was. When the host leaves, the jam ends for all.' },
+      ],
+    },
+    {
       title: 'On a phone',
       entries: [
         { code: 'Menu', text: 'Opens the sheet with the Song, Instr and Scopes panels and every button of the toolbar.' },

@@ -1,4 +1,4 @@
-import { emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, setChannelCount, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
+import { CELL_SIZE, emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, setChannelCount, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
 import type { EngineMessage } from '../audio/messages.ts';
 import { History } from './history.ts';
 
@@ -43,6 +43,54 @@ function samePattern(a: Pattern, b: Pattern): boolean {
   return true;
 }
 
+/**
+ * The cells that one pattern edit changed, so undo and redo touch only
+ * those and leave the rest of the pattern (for example a jam partner's
+ * edits made since) alone. Null when the pattern changed size.
+ */
+interface PatternPatch {
+  cells: number[];
+  before: Uint8Array;
+  after: Uint8Array;
+}
+
+function patternPatch(before: Pattern, after: Pattern): PatternPatch | null {
+  if (before.rows !== after.rows || before.data.length !== after.data.length) return null;
+  const cells: number[] = [];
+  for (let o = 0; o < before.data.length; o += CELL_SIZE) {
+    for (let b = 0; b < CELL_SIZE; b++) {
+      if (before.data[o + b] !== after.data[o + b]) {
+        cells.push(o / CELL_SIZE);
+        break;
+      }
+    }
+  }
+  const pick = (p: Pattern) => {
+    const out = new Uint8Array(cells.length * CELL_SIZE);
+    cells.forEach((c, i) => out.set(p.data.subarray(c * CELL_SIZE, (c + 1) * CELL_SIZE), i * CELL_SIZE));
+    return out;
+  };
+  return { cells, before: pick(before), after: pick(after) };
+}
+
+function applyPatch(pattern: Pattern, patch: PatternPatch, side: 'before' | 'after'): void {
+  const bytes = patch[side];
+  patch.cells.forEach((c, i) => {
+    // Another edit may have shortened the pattern since.
+    if ((c + 1) * CELL_SIZE <= pattern.data.length) pattern.data.set(bytes.subarray(i * CELL_SIZE, (i + 1) * CELL_SIZE), c * CELL_SIZE);
+  });
+}
+
+/** What a change touched, for passing local edits on to a jam session and remote ones to the player. */
+export type SongEdit =
+  | { kind: 'pattern'; index: number }
+  | { kind: 'instrument'; index: number }
+  | { kind: 'orders' }
+  | { kind: 'tempo' }
+  | { kind: 'title' }
+  /** Channel count or a song-wide tool: the whole song. */
+  | { kind: 'song' };
+
 /** A song with its own undo history, parked while another tab is in the editor. */
 export interface SongDocument {
   song: Song;
@@ -60,6 +108,9 @@ export class SongEditor {
   dirty = false;
   /** Called after every change, undo and redo, so the UI can redraw. */
   onChange: ((label: string) => void) | null = null;
+  /** Called for every change made here (not for `applyRemote`), for sharing it in a jam. */
+  onEdit: ((edit: SongEdit) => void) | null = null;
+  private remote = false;
 
   constructor(
     public song: Song,
@@ -88,14 +139,54 @@ export class SongEditor {
     this.sync({ type: 'load', song: doc.song });
   }
 
+  private edited(edit: SongEdit): void {
+    if (!this.remote) this.onEdit?.(edit);
+  }
+
   private sendPattern(index: number): void {
     const pattern = this.song.patterns[index];
     if (pattern) this.sync({ type: 'pattern', index, pattern });
+    this.edited({ kind: 'pattern', index });
   }
 
   private sendOrders(): void {
     const { orders, restartPosition } = this.song;
     this.sync({ type: 'orders', orders: [...orders], restartPosition });
+    this.edited({ kind: 'orders' });
+  }
+
+  private sendTempo(): void {
+    this.sync({ type: 'tempo', speed: this.song.initialSpeed, tempo: this.song.initialTempo });
+    this.edited({ kind: 'tempo' });
+  }
+
+  private sendSong(): void {
+    this.sync({ type: 'load', song: this.song });
+    this.edited({ kind: 'song' });
+  }
+
+  /**
+   * Passes on changes someone else made to the song (already applied to
+   * it) to the player and the UI. They stay out of the undo history; a
+   * whole new song clears it, as the steps in it no longer fit.
+   */
+  applyRemote(edits: SongEdit[], label: string): void {
+    this.remote = true;
+    try {
+      for (const edit of edits) {
+        if (edit.kind === 'pattern') this.sendPattern(edit.index);
+        else if (edit.kind === 'instrument') this.sendInstrument(edit.index);
+        else if (edit.kind === 'orders') this.sendOrders();
+        else if (edit.kind === 'tempo') this.sendTempo();
+        else if (edit.kind === 'song') {
+          this.sendSong();
+          this.history.clear();
+        }
+      }
+    } finally {
+      this.remote = false;
+    }
+    this.changed(label);
   }
 
   private changed(label: string): void {
@@ -116,29 +207,33 @@ export class SongEditor {
     const after = clonePattern(this.song.patterns[index]!);
     if (samePattern(before, after)) return;
 
-    const apply = (p: Pattern) => {
-      this.song.patterns[index] = clonePattern(p);
+    const patch = patternPatch(before, after);
+    const apply = (side: 'before' | 'after') => {
+      if (patch) applyPatch(ensurePattern(this.song, index), patch, side);
+      else this.song.patterns[index] = clonePattern(side === 'before' ? before : after);
       this.sendPattern(index);
       this.changed(label);
     };
-    this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
+    this.history.push({ label, undo: () => apply('before'), redo: () => apply('after') });
     this.sendPattern(index);
     this.changed(label);
   }
 
   /** Edits several patterns in place as one undo step, e.g. a song-wide transpose. */
   editPatterns(indices: number[], label: string, edit: (pattern: Pattern) => void): void {
-    const changes: { index: number; before: Pattern; after: Pattern }[] = [];
+    const changes: { index: number; patch: PatternPatch }[] = [];
     for (const index of new Set(indices)) {
       const current = ensurePattern(this.song, index);
       const before = clonePattern(current);
       edit(current);
-      if (!samePattern(before, current)) changes.push({ index, before, after: clonePattern(current) });
+      // In-place edits keep the size, so there is always a patch.
+      const patch = patternPatch(before, current);
+      if (patch?.cells.length) changes.push({ index, patch });
     }
     if (!changes.length) return;
     const apply = (side: 'before' | 'after') => {
       for (const change of changes) {
-        this.song.patterns[change.index] = clonePattern(change[side]);
+        applyPatch(ensurePattern(this.song, change.index), change.patch, side);
         this.sendPattern(change.index);
       }
       this.changed(label);
@@ -158,6 +253,7 @@ export class SongEditor {
   private sendInstrument(index: number): void {
     const instrument = this.song.instruments[index];
     if (instrument) this.sync({ type: 'instrument', index, instrument });
+    this.edited({ kind: 'instrument', index });
   }
 
   /** Runs `edit` on instrument `index` (0-based), in place, and records it. */
@@ -226,7 +322,7 @@ export class SongEditor {
     if (speed === this.song.initialSpeed && tempo === this.song.initialTempo) return;
     this.song.initialSpeed = speed;
     this.song.initialTempo = tempo;
-    this.sync({ type: 'tempo', speed, tempo });
+    this.sendTempo();
     this.changed('tempo');
   }
 
@@ -237,6 +333,7 @@ export class SongEditor {
     if (after === before) return;
     const apply = (t: string) => {
       this.song.title = t;
+      this.edited({ kind: 'title' });
       this.changed('title');
     };
     this.history.push({ label: 'title', undo: () => apply(before), redo: () => apply(after) });
@@ -258,11 +355,11 @@ export class SongEditor {
       song.channels = state.channels;
       song.channelPanning = [...state.panning];
       song.patterns = state.patterns.map(clonePattern);
-      this.sync({ type: 'load', song });
+      this.sendSong();
       this.changed('channels');
     };
     this.history.push({ label: 'channels', undo: () => apply(before), redo: () => apply(after) });
-    this.sync({ type: 'load', song });
+    this.sendSong();
     this.changed('channels');
   }
 
@@ -281,11 +378,11 @@ export class SongEditor {
       song.patterns = state.patterns.map(clonePattern);
       song.instruments = state.instruments.map(cloneInstrument);
       if (song.restartPosition >= song.orders.length) song.restartPosition = 0;
-      this.sync({ type: 'load', song });
+      this.sendSong();
       this.changed(label);
     };
     this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
-    this.sync({ type: 'load', song });
+    this.sendSong();
     this.changed(label);
   }
 
