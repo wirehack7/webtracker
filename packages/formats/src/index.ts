@@ -48,6 +48,7 @@ export { saveXi } from './xm-write.ts';
 export { importSample, loadRaw, sampleFromChannels, type Imported, type RawFormat } from './sample-import.ts';
 export { saveMod, type SavedMod } from './mod-write.ts';
 export { encodeWav, type WavFormat } from './wav-write.ts';
+export { encodeFlac, type FlacDepth } from './flac-write.ts';
 export { save8svx } from './iff-write.ts';
 export { createZip, crc32, type ZipEntry } from './zip.ts';
 export { unpackModule, type Unpacked } from './unpack.ts';

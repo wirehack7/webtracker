@@ -55,4 +55,6 @@ self.addEventListener('fetch', (event) => {
 export default defineConfig({
   base: './',
   plugins: [serviceWorker()],
+  // ES module workers can split off chunks, so the MP3 encoder loads only when needed.
+  worker: { format: 'es' },
 });

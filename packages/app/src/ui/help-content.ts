@@ -87,7 +87,7 @@ const KEYS: HelpSection = {
     {
       title: 'Files and panels',
       entries: [
-        { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV' },
+        { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV, FLAC or MP3' },
         { code: 'Setup', text: 'Colours and the colour editor, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
         { code: 'Sample view', text: 'Drag to select, drag the yellow markers to move the loop, double-click selects all' },
         { code: 'Instr view', text: 'Click to add envelope points, drag to move, right-click to delete' },
@@ -282,7 +282,7 @@ const WORKFLOWS: HelpSection = {
     {
       title: 'Saving and sharing',
       entries: [
-        { code: 'Save', text: 'Download as XM or MOD, export a WAV, or go back to one of the autosaved versions.' },
+        { code: 'Save', text: 'Download as XM or MOD, export WAV, FLAC or MP3, or go back to one of the autosaved versions.' },
         { code: 'Songs', text: 'Keeps songs in this browser so you can come back to them offline.' },
         { code: 'Share', text: 'Packs the song into a link; whoever opens it gets the song in their tracker.' },
       ],

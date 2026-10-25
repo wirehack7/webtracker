@@ -34,9 +34,10 @@ import {
   type Resampler,
   type Song,
 } from '@webtracker/engine';
-import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, save8svx, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat, type WavFormat } from '@webtracker/formats';
+import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, save8svx, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
+import { parseAudioFormat } from './audio/audio-format.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
@@ -1186,7 +1187,7 @@ function saveSongAsMod(): void {
   $('#save-info').textContent = warnings.length ? `MOD can't hold everything: ${warnings.join(' ')}` : 'Saved as MOD with nothing lost.';
 }
 
-// ---- Save dialog: XM, MOD, WAV export, autosaved versions ----------------
+// ---- Save dialog: XM, MOD, audio export, autosaved versions ----------------
 
 const fileDialog = $<HTMLDialogElement>('#file-dialog');
 const exportGo = $<HTMLButtonElement>('#export-go');
@@ -1200,7 +1201,9 @@ function openFileDialog(): void {
   fileDialog.showModal();
 }
 
-function exportWav(): void {
+const MIME_TYPES: Record<string, string> = { zip: 'application/zip', wav: 'audio/wav', flac: 'audio/flac', mp3: 'audio/mpeg' };
+
+function exportAudio(): void {
   if (exporting) {
     exporting.terminate();
     exportDone('Export cancelled.');
@@ -1209,7 +1212,7 @@ function exportWav(): void {
   const s = song();
   const request: ExportRequest = {
     song: s,
-    format: $<HTMLSelectElement>('#export-format').value as WavFormat,
+    format: parseAudioFormat($<HTMLSelectElement>('#export-format').value),
     sampleRate: Number($<HTMLSelectElement>('#export-rate').value),
     stems: $<HTMLSelectElement>('#export-what').value === 'stems',
     muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
@@ -1238,8 +1241,8 @@ function exportWav(): void {
       exportDone(`Export failed: ${reply.message}`);
       return;
     }
-    const zip = reply.fileName.endsWith('.zip');
-    download(reply.bytes, reply.fileName, zip ? 'application/zip' : 'audio/wav');
+    const extension = reply.fileName.slice(reply.fileName.lastIndexOf('.') + 1);
+    download(reply.bytes, reply.fileName, MIME_TYPES[extension] ?? 'application/octet-stream');
     const took = ((performance.now() - started) / 1000).toFixed(1);
     exportDone(`${reply.fileName}: ${formatTime(reply.seconds)} of audio, ${(reply.bytes.length / 1e6).toFixed(1)} MB, rendered in ${took} s.`);
   };
@@ -1855,7 +1858,7 @@ $('#load').addEventListener('click', () => fileInput.click());
 $('#save').addEventListener('click', openFileDialog);
 $('#save-xm').addEventListener('click', saveSong);
 $('#save-mod').addEventListener('click', saveSongAsMod);
-exportGo.addEventListener('click', exportWav);
+exportGo.addEventListener('click', exportAudio);
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
   if (file) void (/\.x[pt]$/i.test(file.name) ? importPatternFile(file) : openModule(file));
