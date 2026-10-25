@@ -41,6 +41,8 @@ import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
+import { cellHelpTarget } from './ui/help-content.ts';
+import { mountHelp } from './ui/help.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, hex } from './ui/pattern-view.ts';
@@ -1597,8 +1599,13 @@ $('#cu-go').addEventListener('click', () => {
   status.textContent = editInfo.textContent;
 });
 
-const help = $<HTMLDialogElement>('#help');
-$('#help-open').addEventListener('click', () => help.showModal());
+// Help opened with the cursor on a volume or effect jumps to its explanation.
+const help = mountHelp($<HTMLDialogElement>('#help'));
+$('#help-open').addEventListener('click', () => {
+  const field = view.column >= Column.Effect ? 'effect' : view.column >= Column.VolHi ? 'volume' : null;
+  setSheet(false);
+  help.open(app.dataset.view === 'pattern' && field ? cellHelpTarget(field, cursorCell()) : null);
+});
 
 // Buttons hand focus back to the pattern, so Space and Enter never press them twice.
 document.addEventListener('click', (event) => {

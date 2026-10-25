@@ -61,7 +61,7 @@
               <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
-              <button type="button" class="btn" id="help-open" title="Keyboard shortcuts">Help</button>
+              <button type="button" class="btn" id="help-open" title="Keys, effects and workflows">Help</button>
               <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
               <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
               <button type="button" class="btn phone-only" data-proxy="keys-toggle" id="keys-proxy" aria-pressed="false">Keys</button>
@@ -130,51 +130,19 @@
       </footer>
     </div>
 
-    <dialog class="panel help" id="help">
-      <h2 class="ptitle">Keyboard</h2>
-      <table>
-        <tbody>
-          <tr><th>Z S X … M</th><td>Notes, lower octave (physical keys, any layout)</td></tr>
-          <tr><th>Q 2 W … U</th><td>Notes, upper octave</td></tr>
-          <tr><th>F1 – F7</th><td>Choose octave</td></tr>
-          <tr><th>Numpad / *, Ctrl+Up/Down</th><td>Octave down / up</td></tr>
-          <tr><th>Piano</th><td>Hold a key and drag, drag the octave strip, swipe with two fingers, tap a C label or use the arrows to reach other octaves</td></tr>
-          <tr><th>1 or `</th><td>Key off</td></tr>
-          <tr><th>Space</th><td>Stop, or toggle edit mode (Rec); Setup can switch it to play/stop with Shift+Space for edit mode</td></tr>
-          <tr><th>Enter</th><td>Play song from the current position</td></tr>
-          <tr><th>Shift+Enter</th><td>Play the current pattern</td></tr>
-          <tr><th>Arrows</th><td>Move the cursor; PgUp/PgDn 16 rows, Home/End</td></tr>
-          <tr><th>Tab</th><td>Next channel, Shift+Tab previous</td></tr>
-          <tr><th>0-9 A-F</th><td>Instrument, volume, effect and parameter digits in edit mode</td></tr>
-          <tr><th>Del</th><td>Clear the field under the cursor, or the selection</td></tr>
-          <tr><th>Ins / Backspace</th><td>Insert a row / delete the row above (Shift: all channels)</td></tr>
-          <tr><th>Shift+Arrows</th><td>Select a block, also by dragging with the mouse</td></tr>
-          <tr><th>Ctrl+C X V</th><td>Copy, cut, paste; Ctrl+Shift+V pastes into empty fields only</td></tr>
-          <tr><th>Ctrl+A</th><td>Select the whole pattern; Esc clears the selection</td></tr>
-          <tr><th>Alt+Up/Down</th><td>Transpose the selection or cell a semitone (Shift: octave)</td></tr>
-          <tr><th>Ctrl+I</th><td>Interpolate the volume column or effect under the cursor across the selection</td></tr>
-          <tr><th>Ctrl+E</th><td>Advanced Edit: transpose with instrument filter, remap instruments, scale volume, clean up the song</td></tr>
-          <tr><th>Ctrl+Enter</th><td>Play the pattern from the cursor row (Shift: the song)</td></tr>
-          <tr><th>F9 – F12</th><td>Jump to row 0, 1/4, 1/2, 3/4 of the pattern</td></tr>
-          <tr><th>Shift+M / Shift+U</th><td>Mute or unmute the cursor channel / unmute all</td></tr>
-          <tr><th>Ctrl+F</th><td>Follow song on or off</td></tr>
-          <tr><th>Alt+PgUp / PgDn</th><td>Previous / next song tab</td></tr>
-          <tr><th>Shift+F3 / F4 / F5</th><td>Cut / copy / paste the track</td></tr>
-          <tr><th>Ctrl+F3 / Ctrl+Shift+F4 / Ctrl+F5</th><td>Cut / copy / paste the pattern (Ctrl+F4 belongs to the browser)</td></tr>
-          <tr><th>Alt+F3 / Alt+F5</th><td>Cut / paste the selection (copy is Ctrl+C)</td></tr>
-          <tr><th>Alt+Q … I, Alt+A … K</th><td>Jump to channel 1–8, 9–16</td></tr>
-          <tr><th>Ctrl+Z / Ctrl+Y</th><td>Undo / redo</td></tr>
-          <tr><th>Ctrl+S / Ctrl+O</th><td>Save as XM / load a module; the Save button also saves MOD and exports WAV</td></tr>
-          <tr><th>Setup</th><td>Colours, resampling, stereo width, volume ramps, row highlights, Space key, MIDI keyboard input</td></tr>
-          <tr><th>Scopes</th><td>Click to mute a channel, right-click to solo it</td></tr>
-          <tr><th>Sample view</th><td>Drag to select, drag the yellow markers to move the loop, double-click selects all</td></tr>
-          <tr><th>Instr view</th><td>Click to add envelope points, drag to move, right-click to delete</td></tr>
-          <tr><th>Drop a file</th><td>A module (MOD, XM, S3M, IT, MTM, 669, OKT, also zipped or packed) opens as a song; XP/XT goes into the pattern; WAV, AIFF, FLAC, MP3, OGG, 8SVX, XI or PAT goes into the current sample slot</td></tr>
-        </tbody>
-      </table>
-      <form method="dialog" class="row">
-        <button type="submit" class="btn">Close</button>
-      </form>
+    <dialog class="panel help help-dialog" id="help" aria-label="Help">
+      <div class="help-head">
+        <h2 class="ptitle">Help</h2>
+        <input type="search" class="value text help-search" placeholder="Search keys and effects" aria-label="Search help" spellcheck="false" />
+        <form method="dialog">
+          <button type="submit" class="btn" autofocus>Close</button>
+        </form>
+      </div>
+      <nav class="help-tabs" role="tablist" aria-label="Help topics"></nav>
+      <p class="help-context" hidden></p>
+      <div class="help-body">
+        <p class="help-empty" hidden>Nothing found.</p>
+      </div>
     </dialog>
     <dialog class="panel help file-dialog" id="file-dialog">
       <h2 class="ptitle">Save</h2>
