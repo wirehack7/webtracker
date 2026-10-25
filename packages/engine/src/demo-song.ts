@@ -78,81 +78,137 @@ function drum(length: number, frame: (t: number, random: () => number) => number
 
 function kick(): Float32Array {
   let phase = 0;
-  return drum(0.22, (t) => {
-    // Pitch falls from 150 Hz to 45 Hz; a short click on top.
-    phase += (45 + 105 * Math.exp(-t * 28)) / DRUM_RATE;
-    const body = Math.sin(2 * Math.PI * phase) * Math.exp(-t * 11);
-    return Math.max(-1, Math.min(1, body * 1.3 + (t < 0.004 ? 0.6 : 0)));
+  return drum(0.2, (t) => {
+    // A soft sine thump, falling from 120 Hz to 45 Hz.
+    phase += (45 + 75 * Math.exp(-t * 30)) / DRUM_RATE;
+    return Math.sin(2 * Math.PI * phase) * Math.exp(-t * 12);
   });
 }
 
 function snare(): Float32Array {
-  return drum(0.2, (t, random) => {
-    const tone = Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t * 30);
-    const noise = (random() * 2 - 1) * Math.exp(-t * 16);
-    return tone * 0.5 + noise * 0.75;
+  let low = 0;
+  return drum(0.18, (t, random) => {
+    // Low-passed noise keeps the snare from hissing.
+    low += 0.35 * (random() * 2 - 1 - low);
+    const tone = Math.sin(2 * Math.PI * 180 * t) * Math.exp(-t * 35);
+    return tone * 0.45 + low * 1.4 * Math.exp(-t * 18);
   });
 }
 
 function hat(): Float32Array {
-  let last = 0;
-  return drum(0.07, (t, random) => {
-    // Difference of white noise leans the hat towards the highs.
-    const white = random() * 2 - 1;
-    const high = white - last;
-    last = white;
-    return high * 0.5 * Math.exp(-t * 55);
+  let low = 0;
+  return drum(0.05, (t, random) => {
+    low += 0.5 * (random() * 2 - 1 - low);
+    return low * 0.8 * Math.exp(-t * 70);
   });
+}
+
+/**
+ * One-pole low-pass run around a looped wave, so the end joins the start.
+ * Rounds off the hard edges that make raw chip waves sound harsh.
+ */
+function soften(wave: number[], amount: number): Float32Array {
+  let y = 0;
+  const out = new Array<number>(wave.length).fill(0);
+  for (let pass = 0; pass < 3; pass++) {
+    wave.forEach((x, i) => {
+      y += amount * (x - y);
+      out[i] = y;
+    });
+  }
+  return Float32Array.from(out, to8);
+}
+
+const CYCLE = 32;
+
+/**
+ * A pulse whose width sweeps from thin to square and back over `cycles`
+ * cycles of 32 frames: pulse width modulation baked into one looped sample.
+ */
+function pwmWave(cycles: number): Float32Array {
+  const wave: number[] = [];
+  for (let c = 0; c < cycles; c++) {
+    const width = 0.14 + 0.34 * (1 - Math.abs((2 * c) / cycles - 1));
+    for (let i = 0; i < CYCLE; i++) wave.push(i / CYCLE < width ? 0.7 : -0.7);
+  }
+  return soften(wave, 0.5);
+}
+
+/** A saw that gets rounder and brighter again over `cycles` cycles. */
+function morphSaw(cycles: number): Float32Array {
+  const wave: number[] = [];
+  for (let c = 0; c < cycles; c++) {
+    for (let i = 0; i < CYCLE; i++) wave.push(0.8 - (1.6 * i) / CYCLE);
+  }
+  const amounts = Array.from({ length: cycles }, (_, c) => 0.25 + 0.2 * Math.sin((Math.PI * c) / cycles));
+  let y = 0;
+  const out = wave.map(() => 0);
+  for (let pass = 0; pass < 3; pass++) {
+    wave.forEach((x, i) => {
+      y += amounts[Math.floor(i / CYCLE)]! * (x - y);
+      out[i] = y;
+    });
+  }
+  return Float32Array.from(out, to8);
+}
+
+/** A square whose halves sag towards zero, like a chip output through a capacitor. */
+function droopSquare(): Float32Array {
+  const wave = Array.from({ length: CYCLE }, (_, i) => {
+    const half = i < CYCLE / 2 ? 1 : -1;
+    return half * 0.85 * Math.exp(-(i % (CYCLE / 2)) / 9);
+  });
+  return soften(wave, 0.6);
 }
 
 function instruments(): Instrument[] {
   const oneShot = { loopType: LoopType.None, loopLength: 0, relativeNote: 12 };
   return [
-    instrument('Lead pulse 25%', sample('Pulse 25%', generateWave('pulse25')), {
+    instrument('Lead PWM', sample('PWM pulse', pwmWave(24), { volume: 54 }), {
       volumeEnvelope: envelope(
         [
-          [0, 64],
-          [4, 50],
-          [20, 42],
-          [44, 0],
+          [0, 56],
+          [6, 46],
+          [24, 40],
+          [48, 0],
         ],
         { sustain: true, sustainPoint: 2 },
       ),
       fadeout: 600,
       // Delayed auto-vibrato on every lead note.
       vibratoType: 0,
-      vibratoSweep: 48,
-      vibratoDepth: 3,
-      vibratoRate: 24,
+      vibratoSweep: 64,
+      vibratoDepth: 2,
+      vibratoRate: 20,
     }),
-    instrument('Chord pulse 12.5%', sample('Pulse 12.5%', generateWave('pulse12'), { volume: 44 }), {
+    instrument('Chord soft saw', sample('Morphing saw', morphSaw(12), { volume: 36 }), {
       volumeEnvelope: envelope(
         [
           [0, 60],
-          [3, 44],
-          [14, 30],
-          [30, 0],
+          [4, 48],
+          [16, 36],
+          [32, 0],
         ],
         { sustain: true, sustainPoint: 2 },
       ),
       fadeout: 1024,
     }),
-    instrument('Bass square', sample('Square 50%', generateWave('square'), { volume: 46 }), {
+    instrument('Bass droop square', sample('Droop square', droopSquare(), { volume: 54 }), {
       volumeEnvelope: envelope(
         [
           [0, 64],
-          [6, 46],
-          [16, 0],
+          [8, 50],
+          [20, 0],
         ],
         { sustain: true, sustainPoint: 1 },
       ),
       fadeout: 2048,
     }),
-    instrument('Triangle', sample('Triangle', generateWave('triangle'))),
-    instrument('Kick', sample('Kick', kick(), oneShot)),
-    instrument('Snare', sample('Snare', snare(), { ...oneShot, volume: 52 })),
-    instrument('Hi-hat', sample('Hi-hat', hat(), { ...oneShot, volume: 40 })),
-    instrument('Pad saw', sample('Saw', generateWave('saw'), { volume: 36 }), {
+    instrument('Triangle', sample('Triangle', generateWave('triangle'), { volume: 52 })),
+    instrument('Kick', sample('Kick', kick(), { ...oneShot, volume: 56 })),
+    instrument('Snare', sample('Snare', snare(), { ...oneShot, volume: 40 })),
+    instrument('Shaker', sample('Shaker', hat(), { ...oneShot, volume: 24 })),
+    instrument('Pad soft saw', sample('Round saw', soften(Array.from({ length: CYCLE }, (_, i) => 0.8 - (1.6 * i) / CYCLE), 0.3), { volume: 30 }), {
       // Slow swell, and a looping pan envelope that sweeps it left and right.
       volumeEnvelope: envelope(
         [
@@ -189,12 +245,21 @@ function instruments(): Instrument[] {
 const NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
 
 /** XM note number from a name like "A-4" or "C#5". */
-function n(name: string): number {
+function noteNumber(name: string): number {
   const semitone = NAMES.indexOf(name.slice(0, 2));
   const octave = Number(name.slice(2));
   if (semitone < 0 || !Number.isInteger(octave)) throw new Error(`bad note ${name}`);
   return octave * 12 + semitone + 1;
 }
+
+/**
+ * The tune is written in A minor and played in E minor: the lower register
+ * keeps the chip waves warm instead of shrill.
+ */
+const KEY = -5;
+
+/** A melodic note, moved into the song's key. */
+const n = (name: string) => noteNumber(name) + KEY;
 
 const OFF = NOTE_KEY_OFF;
 
@@ -273,11 +338,12 @@ class Builder {
 
 type Phrase = [row: number, note: string, length: number][];
 
-/** Writes a melody; notes of 6 rows or more get vibrato after their attack. */
-function melody(b: Builder, channel: number, ins: number, phrase: Phrase, options: { transpose?: number; volume?: number; vibrato?: number } = {}): void {
+/** Writes a melody; notes of 6 rows or more get vibrato after their attack, or every note an arpeggio. */
+function melody(b: Builder, channel: number, ins: number, phrase: Phrase, options: { transpose?: number; volume?: number; vibrato?: number; arp?: number } = {}): void {
   for (const [row, name, length] of phrase) {
     b.put(row, channel, { note: n(name) + (options.transpose ?? 0), instrument: ins, volume: vol(options.volume ?? 64) });
-    if (length >= 6) b.fxRange(row + 3, row + length - 1, channel, VIBRATO, options.vibrato ?? 0x45);
+    if (options.arp !== undefined) b.fxRange(row, row + length - 1, channel, ARP, options.arp);
+    else if (length >= 6) b.fxRange(row + 3, row + length - 1, channel, VIBRATO, options.vibrato ?? 0x45);
   }
 }
 
@@ -308,17 +374,17 @@ function drums(b: Builder, variant: 'basic' | 'busy' | 'four' = 'basic', fill = 
   for (let bar = 0; bar < 4; bar++) {
     const base = bar * 16;
     const kicks = variant === 'four' ? [0, 4, 8, 12] : bar % 2 ? [0, 8, 10] : [0, 8];
-    for (let r = 0; r < 16; r += 2) b.put(base + r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(r % 4 === 2 ? 40 : 22) });
-    for (const r of kicks) b.put(base + r, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64) });
-    for (const r of [4, 12]) b.put(base + r, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(64) });
+    for (let r = 0; r < 16; r += 2) b.put(base + r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(r % 4 === 2 ? 26 : 14) });
+    for (const r of kicks) b.put(base + r, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64) });
+    for (const r of [4, 12]) b.put(base + r, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(64) });
     if (variant === 'busy') {
       // A ghost snare half a row late (note delay) and a short open hat.
-      b.put(base + 7, CH_DRUM, { note: n('D-4'), instrument: SNARE, volume: vol(20), effect: EXTENDED, param: 0xd3 });
-      b.put(base + 14, CH_DRUM, { note: n('A-4'), instrument: HAT, volume: vol(44) });
+      b.put(base + 7, CH_DRUM, { note: noteNumber('D-4'), instrument: SNARE, volume: vol(20), effect: EXTENDED, param: 0xd3 });
+      b.put(base + 14, CH_DRUM, { note: noteNumber('A-4'), instrument: HAT, volume: vol(44) });
     }
   }
   if (fill) {
-    [28, 36, 46, 60].forEach((v, i) => b.put(60 + i, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(v) }));
+    [28, 36, 46, 60].forEach((v, i) => b.put(60 + i, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(v) }));
   }
 }
 
@@ -394,11 +460,11 @@ function intro(song: Song): Pattern {
   b.fxRange(58, 63, CH_BASS, PORTA_UP, 0x04);
 
   // Hats grow louder, then the kick comes in.
-  for (let r = 16; r < 32; r += 4) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(12 + r) });
-  for (let r = 32; r < 56; r += 2) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(r % 4 ? 40 : 24) });
-  for (const r of [32, 40, 48]) b.put(r, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64) });
+  for (let r = 16; r < 32; r += 4) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(12 + r) });
+  for (let r = 32; r < 56; r += 2) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(r % 4 ? 26 : 14) });
+  for (const r of [32, 40, 48]) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64) });
   // Snare roll with multi retrig: retrigger every 3 ticks, louder each time.
-  b.put(56, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(16), effect: RETRIG, param: 0x93 });
+  b.put(56, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(16), effect: RETRIG, param: 0x93 });
   b.fxRange(57, 63, CH_DRUM, RETRIG, 0x93);
 
   // Lead: tone portamento up an octave, vibrato, then key off into the release.
@@ -429,10 +495,10 @@ function verseSlides(song: Song): Pattern {
   const glide = new Set([6, 22, 38, 56]);
   for (const [row, name, length] of THEME_A) {
     if (glide.has(row)) {
-      b.put(row, CH_LEAD, { note: n(name) + 12, effect: TONE_PORTA, param: 0x18 });
+      b.put(row, CH_LEAD, { note: n(name), effect: TONE_PORTA, param: 0x18 });
       b.fxRange(row + 1, row + length - 1, CH_LEAD, TONE_PORTA, 0x00);
     } else {
-      b.put(row, CH_LEAD, { note: n(name) + 12, instrument: LEAD, volume: vol(56) });
+      b.put(row, CH_LEAD, { note: n(name), instrument: LEAD, volume: vol(56) });
       // Vibrato and volume slide together on the long notes.
       if (length >= 6) b.fxRange(row + 3, row + length - 1, CH_LEAD, VIBRATO_SLIDE, 0x01);
       if (length >= 6) b.fx(row + 2, CH_LEAD, VIBRATO, 0x46);
@@ -480,9 +546,9 @@ function bridge(song: Song, echo: boolean): Pattern {
 function breakdown(song: Song): Pattern {
   const b = new Builder(song);
   // Rows 0-7 play twice (pattern loop): kick and hat with a staccato bass (note cut).
-  for (let r = 0; r < 8; r += 2) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(32) });
-  b.put(0, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64), effect: EXTENDED, param: 0x60 });
-  b.put(4, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(48) });
+  for (let r = 0; r < 8; r += 2) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(32) });
+  b.put(0, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64), effect: EXTENDED, param: 0x60 });
+  b.put(4, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(48) });
   b.fx(7, CH_DRUM, EXTENDED, 0x61);
   for (let r = 0; r < 8; r += 2) b.put(r, CH_BASS, { note: n(r % 4 ? 'A-3' : 'A-2'), instrument: BASS, effect: EXTENDED, param: 0xc2 });
 
@@ -490,8 +556,8 @@ function breakdown(song: Song): Pattern {
   b.put(8, CH_HARM, { note: n('A-4'), instrument: CHORD, volume: vol(48), effect: TREMOLO, param: 0x8c });
   b.fxRange(9, 15, CH_HARM, TREMOLO, 0x00);
   for (let r = 8; r < 16; r += 2) b.put(r, CH_BASS, { note: n('A-2'), instrument: BASS, effect: EXTENDED, param: 0xc3 });
-  for (let r = 8; r < 16; r += 2) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(r % 4 ? 40 : 24) });
-  b.put(12, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(56) });
+  for (let r = 8; r < 16; r += 2) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(r % 4 ? 26 : 14) });
+  b.put(12, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(56) });
 
   // Rows 16-31: lead with tremor, then a fine volume fade; chord arpeggio sweeping right with a pan slide.
   b.put(16, CH_LEAD, { note: n('E-5'), instrument: LEAD, volume: vol(60), effect: TREMOR, param: 0x31 });
@@ -503,9 +569,9 @@ function breakdown(song: Song): Pattern {
   b.put(24, CH_HARM, { note: n('G-4'), instrument: CHORD, volume: vol(48), effect: PAN_SLIDE, param: 0x08 });
   b.fxRange(25, 31, CH_HARM, PAN_SLIDE, 0x08);
   ['F-2', 'F-3', 'F-2', 'F-3', 'G-2', 'G-3', 'G-2', 'G-3'].forEach((note, i) => b.put(16 + i * 2, CH_BASS, { note: n(note), instrument: BASS, volume: vol(48) }));
-  for (let r = 16; r < 32; r += 2) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(r % 4 ? 40 : 22) });
-  for (const r of [16, 24, 26]) b.put(r, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64) });
-  for (const r of [20, 28]) b.put(r, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(64) });
+  for (let r = 16; r < 32; r += 2) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(r % 4 ? 26 : 14) });
+  for (const r of [16, 24, 26]) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64) });
+  for (const r of [20, 28]) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(64) });
 
   // Rows 32-47: lead trill as an octave arpeggio, then a dive; bass keyed off early for short notes.
   b.put(32, CH_LEAD, { note: n('A-5'), instrument: LEAD, volume: vol(50), effect: ARP, param: 0xc7 });
@@ -517,9 +583,9 @@ function breakdown(song: Song): Pattern {
     b.fx(r + 1, CH_BASS, KEY_OFF, 0x02);
   }
   // Hats swing with note delays, the kick plays from a sample offset for a tighter attack.
-  for (let r = 32; r < 48; r += 2) b.put(r + 1, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(30), effect: EXTENDED, param: 0xd2 });
-  for (const r of [32, 38, 40, 46]) b.put(r, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64), ...(r % 8 ? { effect: OFFSET, param: 0x04 } : {}) });
-  for (const r of [36, 44]) b.put(r, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(60) });
+  for (let r = 32; r < 48; r += 2) b.put(r + 1, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(30), effect: EXTENDED, param: 0xd2 });
+  for (const r of [32, 38, 40, 46]) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64), ...(r % 8 ? { effect: OFFSET, param: 0x04 } : {}) });
+  for (const r of [36, 44]) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(60) });
 
   // Rows 48-63: faster speed, rising bass and a snare roll that gets louder; speed back at the end.
   b.fx(48, CH_HARM, SPEED, 0x05);
@@ -528,7 +594,7 @@ function breakdown(song: Song): Pattern {
   b.fxRange(49, 62, CH_BASS, PORTA_UP, 0x03);
   for (let r = 48; r < 64; r++) {
     const every = r < 56 ? 2 : 1;
-    if ((r - 48) % every === 0) b.put(r, CH_DRUM, { note: n('C-4'), instrument: SNARE, volume: vol(16 + (r - 48) * 3) });
+    if ((r - 48) % every === 0) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: SNARE, volume: vol(16 + (r - 48) * 3) });
   }
   b.put(48, CH_LEAD, { note: n('E-5'), instrument: LEAD, volume: vol(40), effect: VOL_SLIDE, param: 0x20 });
   b.fxRange(49, 59, CH_LEAD, VOL_SLIDE, 0x10);
@@ -536,11 +602,11 @@ function breakdown(song: Song): Pattern {
   return b.pattern;
 }
 
-/** Big finish: theme in two octaves, lead and triangle in unison an octave apart. */
+/** Big finish: the lead trills in octaves while the triangle doubles the theme an octave lower. */
 function finale(song: Song): Pattern {
   const b = new Builder(song);
-  melody(b, CH_LEAD, LEAD, THEME_A, { transpose: 12, volume: 52, vibrato: 0x66 });
-  melody(b, CH_HARM, TRI, THEME_A, { volume: 64 });
+  melody(b, CH_LEAD, LEAD, THEME_A, { volume: 52, arp: 0x0c });
+  melody(b, CH_HARM, TRI, THEME_A, { transpose: -12, volume: 64 });
   bassline(b, VERSE);
   drums(b, 'busy');
   return b.pattern;
@@ -552,8 +618,8 @@ function outro(song: Song): Pattern {
   ['A-3', 'F-3', 'C-4', 'G-3'].forEach((root, bar) => b.put(bar * 16, CH_HARM, { note: n(root), instrument: PAD, volume: vol(64) }));
   ['A-2', 'F-2', 'C-3', 'G-2'].forEach((root, bar) => b.put(bar * 16, CH_BASS, { note: n(root), instrument: TRI, volume: vol(56) }));
   melody(b, CH_LEAD, LEAD, THEME_A.slice(0, 10), { volume: 44 });
-  for (let r = 0; r < 32; r += 8) b.put(r, CH_DRUM, { note: n('C-4'), instrument: KICK, volume: vol(64 - r) });
-  for (let r = 32; r < 64; r += 4) b.put(r, CH_DRUM, { note: n('C-5'), instrument: HAT, volume: vol(24) });
+  for (let r = 0; r < 32; r += 8) b.put(r, CH_DRUM, { note: noteNumber('C-4'), instrument: KICK, volume: vol(64 - r) });
+  for (let r = 32; r < 64; r += 4) b.put(r, CH_DRUM, { note: noteNumber('C-5'), instrument: HAT, volume: vol(24) });
   // Slow down a little, then fade everything out.
   b.fx(32, CH_BASS, SPEED, 110);
   b.fx(48, CH_BASS, SPEED, 96);
