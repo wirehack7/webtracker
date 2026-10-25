@@ -26,6 +26,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # The tracking code lives in a repository variable, so the source has none.
+      - run: node scripts/inject-tracking.mjs packages/app/dist
+        env:
+          TRACKING_CODE: ${{ vars.TRACKING_CODE }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
