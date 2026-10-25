@@ -8,8 +8,11 @@ import { MANUAL_CHAPTERS, type ManualBlock } from './ui/manual-content.ts';
 import { loadSettings } from './ui/settings.ts';
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' }[c]};`);
-/** Escapes text and shows `backticked` parts as keys. */
-const inline = (s: string) => escape(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+/** Escapes text, shows `backticked` parts as keys and [text](href) as links. */
+const inline = (s: string) =>
+  escape(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
 
 function blockHtml(block: ManualBlock): string {
   if (typeof block === 'string') return `<p>${inline(block)}</p>`;
@@ -20,8 +23,9 @@ function blockHtml(block: ManualBlock): string {
 
 function entryHtml(entry: HelpEntry): string {
   const name = entry.name ? `<b>${escape(entry.name)}</b> ` : '';
+  const link = entry.link ? ` <a href="${escape(entry.link.href)}" target="_blank" rel="noopener">${escape(entry.link.label)}</a>` : '';
   const id = entry.id ? ` id="${entry.id}"` : '';
-  return `<div class="help-entry"${id}><span class="help-code">${escape(entry.code)}</span><span>${name}${escape(entry.text)}</span></div>`;
+  return `<div class="help-entry"${id}><span class="help-code">${escape(entry.code)}</span><span>${name}${escape(entry.text)}${link}</span></div>`;
 }
 
 function groupHtml(group: HelpGroup): string {

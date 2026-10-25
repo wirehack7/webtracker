@@ -150,7 +150,7 @@
   <body>
     <main>
       <h1>chiptrackr replayer</h1>
-      <p>A small module player for your own demos and intros. It plays songs exactly like the tracker does, and tells you when each row is heard so effects can sync to the music. <a href="../">Open the tracker</a></p>
+      <p>A small module player for your own demos and intros. It plays songs exactly like the tracker does, and tells you when each row is heard so effects can sync to the music. Save &gt; Open in replayer in the tracker brings the song you are working on here. <a href="../">Open the tracker</a></p>
 
       <section class="panel" id="player">
         <div class="row">
@@ -518,7 +518,32 @@ button.onclick = () => music.play();   // browsers need a click first
         if (file) await open(await file.arrayBuffer(), file.name);
       };
 
-      open('demo.xm', 'demo.xm');
+      // The tracker's "Open in replayer" passes the song in the address:
+      // #module=<deflate-raw, base64url>&name=<file name>. Nothing is uploaded.
+      async function moduleFromHash() {
+        const params = new URLSearchParams(location.hash.slice(1));
+        const text = params.get('module');
+        if (!text) return null;
+        const name = params.get('name') || 'song.xm';
+        try {
+          const packed = Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+          const stream = new Blob([packed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+          return { bytes: await new Response(stream).arrayBuffer(), name };
+        } catch {
+          return { error: `${name}: the link is damaged or cut off` };
+        }
+      }
+
+      async function openFromHash() {
+        const found = await moduleFromHash();
+        if (!found) return false;
+        if (found.error) $('info').textContent = found.error;
+        else await open(found.bytes, found.name);
+        return true;
+      }
+      window.addEventListener('hashchange', () => void openFromHash());
+
+      if (!(await openFromHash())) open('demo.xm', 'demo.xm');
     </script>
   </body>
 </html>

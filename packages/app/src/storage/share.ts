@@ -89,6 +89,16 @@ export async function decodeShare(text: string): Promise<{ xm: Uint8Array; origi
   return meta ? { xm, origin: JSON.parse(meta) as AutosaveOrigin } : { xm };
 }
 
+/**
+ * The address of the replayer page with a module file in its fragment
+ * (`#module=…&name=…`, the bytes deflated), so it opens there at once.
+ */
+export async function replayerUrl(base: string, bytes: Uint8Array, fileName: string): Promise<string> {
+  const url = new URL('./replayer/', base);
+  url.hash = `module=${toBase64Url(await pipe(bytes, new CompressionStream('deflate-raw')))}&name=${encodeURIComponent(fileName)}`;
+  return url.href;
+}
+
 /** The song in a `#song=…` fragment, or null when the address has none. */
 export function shareFromHash(hash: string): string | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''));

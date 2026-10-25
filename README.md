@@ -6,6 +6,8 @@ A chiptune tracker for the browser, made for the demoscene. Classic tracker inte
 
 The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions and keeps a library of named songs. The library starts with a demo song, "Pixel Sunrise": four channels of generated chip sounds that try out most of the effects, instrument envelopes and auto-vibrato. Share puts the whole song, compressed, into a link that opens it again, with no server involved.
 
+For your own demos and intros there is a [replayer](#replayer-for-demos-and-intros) that plays your songs with the same engine: [chiptrackr.com/replayer/](https://chiptrackr.com/replayer/). The Replayer button in the tracker opens that page, and Save > Open in replayer hands it the song you are working on.
+
 Jam lets several people edit one song live. The host sends each person an invite link; they open it and send back an answer code, and from then on every edit travels straight between the browsers over WebRTC, with everyone's cursor shown in the pattern. Only a public STUN server (Google's) helps the browsers find each other's address; no song data passes through it. Some strict networks (certain mobile carriers, corporate firewalls) block such direct connections. "Open in a new tab" jams between tabs of one browser.
 
 ## Inspiration
@@ -54,7 +56,7 @@ The replayer plays songs in your own productions with the same engine as the tra
 - [webtracker-replayer.js](https://chiptrackr.com/replayer/webtracker-replayer.js) plays every format the tracker loads (about 33 KB gzipped).
 - [webtracker-replayer-lite.js](https://chiptrackr.com/replayer/webtracker-replayer-lite.js) plays XM and MOD only (about 21 KB gzipped).
 
-A demo page is at [chiptrackr.com/replayer/](https://chiptrackr.com/replayer/).
+A demo page is at [chiptrackr.com/replayer/](https://chiptrackr.com/replayer/). In the tracker, Save > Open in replayer opens it with the current song (passed in the address fragment, nothing is uploaded).
 
 ```js
 import { createReplayer } from './webtracker-replayer.js';

@@ -11,8 +11,9 @@ const escape = (s: string) => s.replace(/[&<>"]/g, (c) => `&${{ '&': 'amp', '<':
 
 function entryHtml(entry: HelpEntry): string {
   const name = entry.name ? `<b>${escape(entry.name)}</b> ` : '';
+  const link = entry.link ? ` <a href="${escape(entry.link.href)}" target="_blank" rel="noopener">${escape(entry.link.label)}</a>` : '';
   const id = entry.id ? ` data-id="${entry.id}"` : '';
-  return `<div class="help-entry"${id}><span class="help-code">${escape(entry.code)}</span><span>${name}${escape(entry.text)}</span></div>`;
+  return `<div class="help-entry"${id}><span class="help-code">${escape(entry.code)}</span><span>${name}${escape(entry.text)}${link}</span></div>`;
 }
 
 function groupHtml(group: HelpGroup): string {

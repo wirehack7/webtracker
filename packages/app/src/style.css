@@ -98,6 +98,14 @@ output {
   user-select: none;
 }
 
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+
 .btn:active,
 .btn[aria-pressed='true'],
 .btn[aria-selected='true'] {
@@ -1763,4 +1771,8 @@ select.value {
 
 canvas.drawing {
   cursor: crosshair;
+}
+
+.help-entry a {
+  color: var(--pat-cell);
 }

@@ -1,7 +1,7 @@
 import { createSong, LoopType, type Song } from '@webtracker/engine';
 import { loadModule, saveXm } from '@webtracker/formats';
 import { describe, expect, it } from 'vitest';
-import { decodeShare, encodeShare, shareFromHash, shrinkSong } from './share.ts';
+import { decodeShare, encodeShare, pipe, fromBase64Url, replayerUrl, shareFromHash, shrinkSong } from './share.ts';
 
 /** A song with one long 16-bit sample, looped halfway. */
 function songWithSample(): Song {
@@ -63,5 +63,17 @@ describe('share links', () => {
     expect(shareFromHash('#song=abc_-')).toBe('abc_-');
     expect(shareFromHash('#other=1')).toBeNull();
     expect(shareFromHash('')).toBeNull();
+  });
+});
+
+describe('replayer hand-over', () => {
+  it('puts the module and its name into the replayer address', async () => {
+    const xm = saveXm(songWithSample());
+    const url = new URL(await replayerUrl('https://chiptrackr.com/?x=1#song=abc', xm, 'my song.xm'));
+    expect(url.origin + url.pathname).toBe('https://chiptrackr.com/replayer/');
+    const params = new URLSearchParams(url.hash.slice(1));
+    expect(params.get('name')).toBe('my song.xm');
+    const back = await pipe(fromBase64Url(params.get('module')!), new DecompressionStream('deflate-raw'));
+    expect(Array.from(back)).toEqual(Array.from(xm));
   });
 });
