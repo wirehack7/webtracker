@@ -55,12 +55,9 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "CI and engines target Node 22; do not propose major Node bumps",
-      "matchPackageNames": [
+      "description": "CI and engines float on Node 22 (setup-node picks the latest 22.x); skip pinning patches and major Node bumps, those are done by hand",
+      "matchDepNames": [
         "node"
-      ],
-      "matchUpdateTypes": [
-        "major"
       ],
       "enabled": false
     }
