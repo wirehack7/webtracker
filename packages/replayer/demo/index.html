@@ -66,10 +66,64 @@
       }
       #stage {
         position: relative;
-        height: 160px;
+        height: 180px;
         margin-top: 16px;
         background: #000;
         overflow: hidden;
+        cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #stage:focus-visible {
+        outline: 2px solid var(--hot);
+      }
+      #view-name {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        padding: 1px 6px;
+        font-size: 11px;
+        color: var(--dim);
+        background: rgba(0, 0, 0, 0.75);
+        pointer-events: none;
+      }
+      #view {
+        height: 100%;
+      }
+      #stage canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .pattern {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        white-space: pre;
+        text-align: center;
+        overflow: hidden;
+        line-height: 1.25;
+        color: var(--text);
+      }
+      .pattern div {
+        padding: 0 6px;
+      }
+      .pattern .cur {
+        background: var(--line);
+        color: #fff;
+      }
+      .pattern .beat {
+        color: #b6c4dd;
+      }
+      .pattern .rn,
+      .pattern .off {
+        color: var(--dim);
+      }
+      .pattern .nt {
+        color: var(--hot);
       }
       .bar {
         position: absolute;
@@ -107,7 +161,10 @@
           <span id="pos">--:--</span>
         </div>
         <p id="info" style="margin: 8px 0 0">Loading the demo song…</p>
-        <div id="stage"></div>
+        <div id="stage" role="button" tabindex="0" title="Click to switch the view" aria-label="Switch the view: channels, pattern, scopes">
+          <span id="view-name"></span>
+          <div id="view"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -132,8 +189,215 @@ button.onclick = () => music.play();   // browsers need a click first
 
       const $ = (id) => document.getElementById(id);
       const stage = $('stage');
+      const view = $('view');
       let music = null;
       let context = null;
+
+      // Clicking the stage cycles through these.
+      const VIEWS = ['channels', 'pattern', 'scopes'];
+      let viewIndex = 0;
+      try {
+        viewIndex = Math.max(0, VIEWS.indexOf(localStorage.getItem('webtracker.replayerView')));
+      } catch {}
+      const viewName = () => VIEWS[viewIndex];
+
+      // ---- Channels: a bar lights up when a note starts ---------------------
+
+      function buildBars(song) {
+        stage.style.setProperty('--channels', song.channels);
+        view.replaceChildren(
+          ...Array.from({ length: song.channels }, (_, c) => {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            bar.style.left = `calc(${c} * 100% / ${song.channels})`;
+            bar.style.height = '0';
+            return bar;
+          }),
+        );
+      }
+
+      function updateBars(song, { pattern, row }) {
+        const p = song.patterns[pattern];
+        for (let c = 0; c < song.channels; c++) {
+          const note = p?.data[(row * song.channels + c) * 5] ?? 0;
+          const bar = view.children[c];
+          if (!bar) return;
+          if (note >= 1 && note <= 96) {
+            bar.style.transition = 'none';
+            bar.style.height = `${20 + (note / 96) * 80}%`;
+            bar.style.opacity = '1';
+            bar.getBoundingClientRect();
+            bar.style.transition = '';
+          }
+          bar.style.height = `${parseFloat(bar.style.height) * 0.7}%`;
+          bar.style.opacity = String(Math.max(0.2, parseFloat(bar.style.opacity || '1') * 0.8));
+        }
+      }
+
+      // ---- Pattern: the rows around the one heard now -----------------------
+
+      const NOTES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
+      const FX = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const VOL = '-+DUSVPLRM';
+      const hex = (v, n = 2) => v.toString(16).toUpperCase().padStart(n, '0');
+      const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const noteText = (n) => (n === 0 ? '---' : n === 97 ? '===' : NOTES[(n - 1) % 12] + Math.floor((n - 1) / 12));
+      const volText = (v) => (v < 0x10 ? '..' : v <= 0x50 ? hex(v - 0x10) : (VOL[(v >> 4) - 6] ?? '?') + hex(v & 15, 1));
+      const fxText = (e, p) => (e === 0 && p === 0 ? '...' : (FX[e] ?? '?') + hex(p));
+      // Each layout shows fewer columns, so wide songs still fit narrow screens.
+      const LAYOUTS = [
+        { width: 13, cell: (n, i, v, e, p) => `${noteText(n)} ${i ? hex(i) : '..'} ${volText(v)} ${fxText(e, p)}` },
+        { width: 6, cell: (n, i) => `${noteText(n)} ${i ? hex(i) : '..'}` },
+        { width: 3, cell: (n) => noteText(n) },
+      ];
+      let patternLayout = null;
+
+      function fitPattern(song) {
+        const width = stage.clientWidth - 12;
+        // About 0.6em per character in a monospace font; stay readable at 10px.
+        for (const layout of LAYOUTS) {
+          const chars = 3 + song.channels * (layout.width + 1);
+          const size = Math.min(14, width / (chars * 0.6));
+          if (size >= 10 || layout === LAYOUTS.at(-1)) {
+            patternLayout = layout;
+            view.style.fontSize = `${Math.max(7, size)}px`;
+            return;
+          }
+        }
+      }
+
+      function buildPattern(song) {
+        view.className = 'pattern';
+        fitPattern(song);
+        view.replaceChildren();
+        if (music?.position) updatePattern(song, music.position);
+        else updatePattern(song, { pattern: song.orders[0] ?? 0, row: 0 });
+      }
+
+      function updatePattern(song, { pattern, row }) {
+        const p = song.patterns[pattern];
+        if (!p || !patternLayout) return;
+        const lineHeight = parseFloat(getComputedStyle(view).fontSize) * 1.25;
+        const half = Math.max(1, Math.floor((stage.clientHeight / lineHeight - 1) / 2));
+        let html = '';
+        for (let r = row - half; r <= row + half; r++) {
+          if (r < 0 || r >= p.rows) {
+            html += '<div> </div>';
+            continue;
+          }
+          let line = `<span class="rn">${hex(r)}</span>`;
+          for (let c = 0; c < song.channels; c++) {
+            const o = (r * song.channels + c) * 5;
+            const d = p.data;
+            const text = esc(patternLayout.cell(d[o], d[o + 1], d[o + 2], d[o + 3], d[o + 4]));
+            line += ` <span class="${d[o] ? 'nt' : 'off'}">${text}</span>`;
+          }
+          html += `<div class="${r === row ? 'cur' : r % 4 === 0 ? 'beat' : ''}">${line}</div>`;
+        }
+        view.innerHTML = html;
+      }
+
+      // ---- Scopes: what each channel plays ----------------------------------
+
+      const SCOPE_WINDOW = 512;
+      let canvas = null;
+
+      function buildScopes() {
+        canvas = document.createElement('canvas');
+        view.replaceChildren(canvas);
+      }
+
+      // Start at a rising zero crossing so waves stand still.
+      function trigger(data) {
+        const last = data.length - SCOPE_WINDOW;
+        for (let i = 1; i < last; i++) if (data[i - 1] <= 0 && data[i] > 0) return i;
+        return Math.max(0, last);
+      }
+
+      function drawScopes() {
+        if (!canvas || !music) return;
+        const ratio = devicePixelRatio || 1;
+        const w = Math.round(canvas.clientWidth * ratio);
+        const h = Math.round(canvas.clientHeight * ratio);
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        const g = canvas.getContext('2d');
+        if (!g || !w || !h) return;
+        g.clearRect(0, 0, w, h);
+        const count = music.song.channels;
+        // Wide songs get more rows, so each scope stays wide enough to read.
+        const rows = Math.max(1, Math.ceil((count * 70 * ratio) / w));
+        const cols = Math.ceil(count / rows);
+        const cw = w / cols;
+        const ch = h / rows;
+        const line = Math.max(1, Math.round(ratio));
+        const scopes = music.scopes;
+        for (let c = 0; c < count; c++) {
+          const x0 = (c % cols) * cw;
+          const y0 = Math.floor(c / cols) * ch;
+          g.fillStyle = '#3d5578';
+          g.fillRect(Math.round(x0 + cw) - line, y0, line, ch);
+          g.fillRect(x0, Math.round(y0 + ch) - line, cw, line);
+          g.fillStyle = '#8496b4';
+          g.font = `${10 * ratio}px ui-monospace, monospace`;
+          g.fillText(String(c + 1), x0 + 4 * ratio, y0 + 12 * ratio);
+          g.fillStyle = '#ffd84a';
+          const mid = y0 + ch / 2;
+          const data = scopes[c];
+          const inner = cw - 2 * line;
+          if (!data || data.length < SCOPE_WINDOW) {
+            g.fillRect(x0 + line, Math.round(mid), inner, line);
+            continue;
+          }
+          const start = trigger(data);
+          const amp = (ch / 2) * 0.8;
+          let prev = Math.round(mid);
+          for (let x = 0; x < inner; x += line) {
+            const v = Math.max(-1, Math.min(1, data[start + Math.floor((x * SCOPE_WINDOW) / inner)]));
+            const y = Math.round(mid - v * amp);
+            const top = Math.min(prev, y);
+            g.fillRect(x0 + line + x, top, line, Math.max(prev, y) - top + line);
+            prev = y;
+          }
+        }
+      }
+
+      // ---- Switching -------------------------------------------------------
+
+      function showView() {
+        const name = viewName();
+        $('view-name').textContent = `${name} · click to switch`;
+        view.className = '';
+        view.style.fontSize = '';
+        canvas = null;
+        // Scopes cost a little, so the worklet only sends them while they show.
+        music?.enableScopes(name === 'scopes' ? 1024 : 0);
+        if (!music) return view.replaceChildren();
+        if (name === 'channels') buildBars(music.song);
+        else if (name === 'pattern') buildPattern(music.song);
+        else buildScopes();
+      }
+
+      function nextView() {
+        viewIndex = (viewIndex + 1) % VIEWS.length;
+        try {
+          localStorage.setItem('webtracker.replayerView', viewName());
+        } catch {}
+        showView();
+      }
+
+      stage.onclick = nextView;
+      stage.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          nextView();
+        }
+      };
+      new ResizeObserver(() => {
+        if (music && viewName() === 'pattern') buildPattern(music.song);
+      }).observe(stage);
 
       async function open(source, name) {
         music?.destroy();
@@ -148,32 +412,10 @@ button.onclick = () => music.play();   // browsers need a click first
         }
         const song = music.song;
         $('info').textContent = `${song.title || name} · ${song.formatName} · ${song.channels} channels`;
-        stage.style.setProperty('--channels', song.channels);
-        stage.replaceChildren(
-          ...Array.from({ length: song.channels }, (_, c) => {
-            const bar = document.createElement('div');
-            bar.className = 'bar';
-            bar.style.left = `calc(${c} * 100% / ${song.channels})`;
-            bar.style.height = '0';
-            return bar;
-          }),
-        );
-        music.onRow = ({ pattern, row }) => {
-          // Each note that starts on this row lights its channel.
-          const p = song.patterns[pattern];
-          for (let c = 0; c < song.channels; c++) {
-            const note = p?.data[(row * song.channels + c) * 5] ?? 0;
-            const bar = stage.children[c];
-            if (note >= 1 && note <= 96) {
-              bar.style.transition = 'none';
-              bar.style.height = `${20 + (note / 96) * 80}%`;
-              bar.style.opacity = '1';
-              bar.getBoundingClientRect();
-              bar.style.transition = '';
-            }
-            bar.style.height = `${parseFloat(bar.style.height) * 0.7}%`;
-            bar.style.opacity = String(Math.max(0.2, parseFloat(bar.style.opacity || '1') * 0.8));
-          }
+        showView();
+        music.onRow = (position) => {
+          if (viewName() === 'channels') updateBars(song, position);
+          else if (viewName() === 'pattern') updatePattern(song, position);
         };
         music.onEnd = () => ($('play').textContent = 'Play');
         $('play').disabled = $('stop').disabled = false;
@@ -181,6 +423,7 @@ button.onclick = () => music.play();   // browsers need a click first
       }
 
       function clock() {
+        if (music && viewName() === 'scopes') drawScopes();
         if (music) {
           const t = music.time;
           const p = music.position;
@@ -203,6 +446,7 @@ button.onclick = () => music.play();   // browsers need a click first
       $('stop').onclick = () => {
         music?.stop();
         $('play').textContent = 'Play';
+        if (music && viewName() === 'pattern') updatePattern(music.song, { pattern: music.song.orders[0] ?? 0, row: 0 });
       };
       $('loop').onchange = () => music && (music.loop = $('loop').checked);
       $('file').onchange = async () => {

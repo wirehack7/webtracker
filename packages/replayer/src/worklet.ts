@@ -2,7 +2,9 @@ import { ReplayerCore } from './core.ts';
 import type { ReplayerMessage } from './messages.ts';
 
 class ReplayerProcessor extends AudioWorkletProcessor {
-  private readonly core = new ReplayerCore(sampleRate, (event) => this.port.postMessage(event));
+  private readonly core = new ReplayerCore(sampleRate, (event) =>
+    this.port.postMessage(event, event.type === 'scopes' ? event.channels.map((c) => c.buffer as ArrayBuffer) : []),
+  );
   private spare = new Float32Array(128);
 
   constructor() {

@@ -2855,11 +2855,11 @@ export class Player {
 
   /**
    * Starts recording what each channel plays, after volume and before
-   * panning, for scopes. `size` is how many recent frames are kept.
+   * panning, for scopes. `size` is how many recent frames are kept; 0 stops.
    */
   enableScopes(size: number): void {
-    this.scopeRings = this.channels.map(() => new Float32Array(size));
-    this.scopeTaps = this.channels.map(() => new Float32Array(128));
+    this.scopeRings = size > 0 ? this.channels.map(() => new Float32Array(size)) : [];
+    this.scopeTaps = size > 0 ? this.channels.map(() => new Float32Array(128)) : [];
     this.scopePos = 0;
   }
 
