@@ -94,7 +94,7 @@
             <button type="button" class="btn sm" id="len-dec" title="Shorter (Shift: 16 rows)">-</button><button type="button" class="btn sm" id="len-inc" title="Longer (Shift: 16 rows)">+</button>
           </span>
           <button type="button" class="btn sm keys-toggle head-extra" id="keys-toggle" aria-pressed="false">Keys</button>
-          <button type="button" class="btn sm head-extra" id="edit-tools-open" title="Transpose, remap instruments, scale volume (Ctrl+E)">Edit</button>
+          <button type="button" class="btn sm head-extra" id="edit-tools-open" title="Transpose, remap instruments, scale volume, clean up the song (Ctrl+E)">Edit</button>
           <button type="button" class="btn sm head-extra" id="setup-open" title="Colours, mixer, keys and MIDI">Setup</button>
         </div>
         <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern editor"></div>
@@ -315,6 +315,16 @@
         <label><span class="label">End %</span><input type="number" class="value text" id="sc-end" value="50" min="0" max="400" /></label>
       </div>
       <div class="row"><button type="button" class="btn" id="sc-go">Scale</button></div>
+      <h3 class="ptitle">Clean up song</h3>
+      <div class="setup-fields">
+        <label><span class="label">Unused patterns</span><input type="checkbox" id="cu-patterns" checked /></label>
+        <label><span class="label">Duplicate patterns</span><input type="checkbox" id="cu-duplicates" checked /></label>
+        <label><span class="label">Unused instruments</span><input type="checkbox" id="cu-instruments" checked /></label>
+        <label><span class="label">Renumber instruments</span><input type="checkbox" id="cu-compact" /></label>
+        <label><span class="label">Unused samples</span><input type="checkbox" id="cu-samples" checked title="Samples of multi-sample instruments that no note reaches" /></label>
+        <label><span class="label">Cut after loop end</span><input type="checkbox" id="cu-tails" checked title="The part of a looped sample after its loop is never heard" /></label>
+      </div>
+      <div class="row"><button type="button" class="btn" id="cu-go" title="Whole song; Ctrl+Z undoes it">Clean up</button></div>
       <p class="info" id="edit-info"></p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>

@@ -22,8 +22,12 @@ import {
   scaleVolumeBlock,
   transposeBlock,
   writeCell,
+  cleanupPreview,
+  cleanupSong,
   type Block,
   type Cell,
+  type CleanupOptions,
+  type CleanupResult,
   type Clip,
   type Pattern,
   type PlayerState,
@@ -400,6 +404,13 @@ editor.onChange = (label) => {
     engine?.send({ type: 'mute', muted });
     showSong();
     view.moveTo(view.row, Math.min(view.channel, song().channels - 1));
+    return;
+  }
+  if (label === 'clean up') {
+    // Like a channel change, the cleanup reloads the song in the worklet.
+    stop();
+    instrument = Math.max(1, Math.min(instrument, song().instruments.length));
+    showSong();
     return;
   }
   if (label === 'title') {
@@ -1279,6 +1290,45 @@ $('#sc-go').addEventListener('click', () => {
   const start = Math.max(0, numberField('#sc-start'));
   const end = Math.max(0, numberField('#sc-end'));
   runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), 'volumes');
+});
+
+const cleanupOptions = (): CleanupOptions => ({
+  unusedPatterns: $<HTMLInputElement>('#cu-patterns').checked,
+  duplicatePatterns: $<HTMLInputElement>('#cu-duplicates').checked,
+  unusedInstruments: $<HTMLInputElement>('#cu-instruments').checked,
+  compactInstruments: $<HTMLInputElement>('#cu-compact').checked,
+  unusedSamples: $<HTMLInputElement>('#cu-samples').checked,
+  sampleTails: $<HTMLInputElement>('#cu-tails').checked,
+});
+
+function describeCleanup(result: CleanupResult): string {
+  const parts = [
+    result.patterns && `${result.patterns} pattern${result.patterns === 1 ? '' : 's'}`,
+    result.instruments && `${result.instruments} instrument${result.instruments === 1 ? '' : 's'}`,
+    result.samples && `${result.samples} sample${result.samples === 1 ? '' : 's'}`,
+  ].filter(Boolean);
+  if (result.frames) parts.push(`${result.frames.toLocaleString('en')} sample frames`);
+  return parts.length ? parts.join(', ') : 'nothing';
+}
+
+function previewCleanup(): void {
+  editInfo.textContent = `Clean up would remove ${describeCleanup(cleanupPreview(song(), cleanupOptions()))}.`;
+}
+for (const id of ['#cu-patterns', '#cu-duplicates', '#cu-instruments', '#cu-compact', '#cu-samples', '#cu-tails']) {
+  $(id).addEventListener('change', previewCleanup);
+}
+$('#cu-go').addEventListener('click', () => {
+  const options = cleanupOptions();
+  if (describeCleanup(cleanupPreview(song(), options)) === 'nothing') {
+    editInfo.textContent = 'Clean up: nothing to remove.';
+    return;
+  }
+  let result!: CleanupResult;
+  editor.editSong('clean up', (s) => {
+    result = cleanupSong(s, options);
+  });
+  editInfo.textContent = `Clean up removed ${describeCleanup(result)}; Ctrl+Z undoes it.`;
+  status.textContent = editInfo.textContent;
 });
 
 const help = $<HTMLDialogElement>('#help');

@@ -56,7 +56,7 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 | Ctrl+S | Save as XM; the Save button also saves MOD and exports WAV (whole song or one file per channel) |
 | Click / right-click a scope | Mute / solo a channel |
 | Ctrl+I | Interpolate the volume column or effect across the selection |
-| Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song) |
+| Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song), clean up the song (unused or duplicate patterns, unused instruments and samples, sample data after the loop) |
 | Ctrl+Enter | Play the pattern from the cursor row (with Shift the song) |
 | F9–F12 | Jump to row 0, ¼, ½ and ¾ of the pattern |
 | Shift+M / Shift+U | Mute the cursor channel / unmute all |
