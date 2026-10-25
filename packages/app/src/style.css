@@ -792,6 +792,32 @@ output {
   white-space: nowrap;
 }
 
+/* ---- Song tabs ------------------------------------------------------- */
+
+.song-tabs {
+  display: flex;
+  flex: none;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 2) calc(var(--px) * 2) 0;
+  overflow-x: auto;
+}
+
+.song-tabs[hidden] {
+  display: none;
+}
+
+.song-tab {
+  display: flex;
+  flex: none;
+}
+
+.song-tab .btn:first-child {
+  max-width: calc(var(--px) * 160);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Sample and instrument editors ----------------------------------- */
 
 .view-tabs {
