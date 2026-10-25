@@ -61,10 +61,11 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 | F9–F12 | Jump to row 0, ¼, ½ and ¾ of the pattern |
 | Shift+M / Shift+U | Mute the cursor channel / unmute all |
 | Ctrl+F | Follow song on/off |
+| Setup: Prospective view, Cursor wraps | Show the neighbouring patterns dimmed around the current one; stop the cursor at the first and last row |
 | Alt+PageUp/PageDown | Previous/next song tab (new, loaded and shared songs open in tabs; Setup can turn this off) |
 | Shift / Ctrl / Alt + F3–F5 | Cut, copy, paste the track / pattern / selection (Ctrl+F4 and Alt+F4 belong to the browser: copy the pattern with Ctrl+Shift+F4, the selection with Ctrl+C) |
 | Alt+Q…I, Alt+A…K | Jump to channel 1–8 or 9–16 |
 
 Besides cutting, normalizing, fades and resampling, the sample editor has tools to repair and shape samples: invert the phase, swap sign and byte order (for wrongly imported raw data), remove DC offset, reduce to 8 bits, low-pass and high-pass, loop crossfade, resample to any length and Save as WAV.
 
-Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, where E00/E01 switch the LED filter, and XM with linear interpolation; also Linear, Cubic and no interpolation at all) and the stereo width from mono to 200 %. WAV export uses the same settings.
+Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, where E00/E01 switch the LED filter, and XM with linear interpolation; also Linear, Cubic, an 8-tap Sinc and no interpolation at all) and the stereo width from mono to 200 %. WAV export uses the same settings.

@@ -37,9 +37,36 @@ const AUTO_VIBRATO_WAVEFORMS: Int16Array[] = [SINE, SQUARE, RAMP_DOWN, RAMP_DOWN
  * How sample frames are turned into output frames. 'amiga' holds each frame
  * (no interpolation) and runs the mix through the Amiga 500 output filters:
  * the fixed RC low-pass, and the "LED" filter that E00/E01 switch in MOD.
+ * 'sinc' is an 8-tap windowed sinc, the cleanest and the most work.
  * 'auto' is 'amiga' for MOD and 'linear' for XM.
  */
-export type Resampler = 'auto' | 'cubic' | 'linear' | 'none' | 'amiga';
+export type Resampler = 'auto' | 'sinc' | 'cubic' | 'linear' | 'none' | 'amiga';
+
+// Windowed-sinc kernel: 8 taps around the read position, for SINC_PHASES
+// fractional positions. Each phase is normalised so a constant passes unchanged.
+const SINC_TAPS = 8;
+const SINC_PHASES = 512;
+const SINC_TABLE = (() => {
+  const table = new Float32Array((SINC_PHASES + 1) * SINC_TAPS);
+  const cutoff = 0.97;
+  for (let p = 0; p <= SINC_PHASES; p++) {
+    const frac = p / SINC_PHASES;
+    let sum = 0;
+    for (let t = 0; t < SINC_TAPS; t++) {
+      // Tap t reads frame idx - 3 + t, at distance x from the read position.
+      const x = t - 3 - frac;
+      const sinc = x === 0 ? 1 : Math.sin(Math.PI * cutoff * x) / (Math.PI * cutoff * x);
+      // Blackman window over the kernel's width.
+      const w = (x + SINC_TAPS / 2) / SINC_TAPS;
+      const window = 0.42 - 0.5 * Math.cos(2 * Math.PI * w) + 0.08 * Math.cos(4 * Math.PI * w);
+      const v = sinc * Math.max(0, window);
+      table[p * SINC_TAPS + t] = v;
+      sum += v;
+    }
+    for (let t = 0; t < SINC_TAPS; t++) table[p * SINC_TAPS + t]! /= sum;
+  }
+  return table;
+})();
 
 // A500 output stage: one-pole RC low-pass near 4.4 kHz, LED filter a
 // two-pole Butterworth-like low-pass near 3.3 kHz.
@@ -1075,7 +1102,16 @@ export class Player {
     const mode = this.activeResampler;
     const smooth = mode === 'linear';
     const cubic = mode === 'cubic';
+    const sinc = mode === 'sinc';
     const blep = mode === 'amiga';
+    // Frame j as the loop plays it: past the loop end it continues from the loop start (or mirrors), past the end it is silent.
+    const frameAt = (j: number): number => {
+      if (looped && j >= loopEnd) {
+        const over = (j - loopEnd) % sample.loopLength;
+        j = pingPong ? loopEnd - 1 - over : loopStart + over;
+      }
+      return j >= 0 && j < len ? data[j]! : 0;
+    };
     let held = ch.held;
     let blepNext = ch.blepNext;
 
@@ -1096,6 +1132,10 @@ export class Player {
         const p3 = next2 < len ? data[next2]! : 0;
         const t = frac;
         s = a + 0.5 * t * (b - p0 + t * (2 * p0 - 5 * a + 4 * b - p3 + t * (3 * (a - b) + p3 - p0)));
+      } else if (sinc) {
+        const k = Math.round(frac * SINC_PHASES) * SINC_TAPS;
+        s = 0;
+        for (let t = 0; t < SINC_TAPS; t++) s += SINC_TABLE[k + t]! * frameAt(idx - 3 + t);
       }
       if (blep) {
         // Paula holds each frame; a polyBLEP smooths the steps so they do not

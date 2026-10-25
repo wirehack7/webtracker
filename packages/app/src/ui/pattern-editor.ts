@@ -1,6 +1,9 @@
 import { blockBetween, emptyPattern, type Block, type Pattern, type Song } from '@webtracker/engine';
 import { COLUMNS, rowHtml, type ViewState } from './pattern-view.ts';
 
+/** Rows of each neighbouring pattern the prospective view shows. */
+const GHOST_ROWS = 32;
+
 /**
  * Pattern editor view: draws one pattern of the song, owns the cursor and the
  * block selection, and turns mouse input into cursor moves. Changing the song
@@ -18,6 +21,12 @@ export class PatternEditor {
   patternIndex = 0;
   /** Called when the cursor moves through the mouse. */
   onCursor: (() => void) | null = null;
+  /** Prospective view: the end of the previous and the start of the next pattern, dimmed around this one. */
+  prospective = false;
+  /** The patterns before and after this one in the order list, for the prospective view. */
+  neighbours: (() => [Pattern | null, Pattern | null]) | null = null;
+  /** False stops the cursor at the first and last row instead of wrapping around. */
+  wrap = true;
 
   constructor(readonly container: HTMLElement) {
     container.addEventListener('pointerdown', (event) => {
@@ -79,9 +88,26 @@ export class PatternEditor {
   bar = 16;
 
   private rowClass(r: number): string {
+    return `${this.highlight(r)}${r === this.row ? ' cur' : ''}`;
+  }
+
+  private highlight(r: number): string {
     const beat = this.beat > 0 && r % this.beat === 0 ? ' beat' : '';
     const bar = this.bar > 0 && r % this.bar === 0 ? ' bar' : '';
-    return `r${beat}${bar}${r === this.row ? ' cur' : ''}`;
+    return `r${beat}${bar}`;
+  }
+
+  /** Rows of a neighbouring pattern, shown but not editable. */
+  private ghostRows(pattern: Pattern | null, from: number, to: number): HTMLDivElement[] {
+    if (!pattern || !this.song) return [];
+    const rows: HTMLDivElement[] = [];
+    for (let r = Math.max(0, from); r < Math.min(pattern.rows, to); r++) {
+      const div = document.createElement('div');
+      div.className = `${this.highlight(r)} ghost`;
+      div.innerHTML = rowHtml(this.song, pattern, r);
+      rows.push(div);
+    }
+    return rows;
   }
 
   /** Redraws every row, after edits or a new pattern. */
@@ -99,7 +125,12 @@ export class PatternEditor {
       rows.push(div);
     }
     this.rows = rows;
-    this.container.replaceChildren(...rows);
+    const [before, after] = this.prospective && this.neighbours ? this.neighbours() : [null, null];
+    this.container.replaceChildren(
+      ...this.ghostRows(before, (before?.rows ?? 0) - GHOST_ROWS, before?.rows ?? 0),
+      ...rows,
+      ...this.ghostRows(after, 0, GHOST_ROWS),
+    );
     this.scrollToCursor();
   }
 
@@ -111,7 +142,7 @@ export class PatternEditor {
   }
 
   /**
-   * Moves the cursor. Rows wrap around the pattern like in FT2. With `extend`
+   * Moves the cursor. Rows wrap around the pattern like in FT2, unless `wrap` is off. With `extend`
    * the selection grows from where the cursor was.
    */
   moveTo(row: number, channel: number, column = this.column, extend = false): void {
@@ -120,7 +151,7 @@ export class PatternEditor {
     if (extend) this.anchor ??= { row: this.row, channel: this.channel };
     else this.anchor = null;
 
-    this.row = ((row % rows) + rows) % rows;
+    this.row = this.wrap ? ((row % rows) + rows) % rows : Math.max(0, Math.min(rows - 1, row));
     this.channel = ((channel % this.channels) + this.channels) % this.channels;
     this.column = Math.max(0, Math.min(COLUMNS - 1, column));
     if (extend && this.anchor) {

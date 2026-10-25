@@ -260,7 +260,7 @@
         <label><span class="label">Colours</span><select class="value" id="set-theme"></select></label>
         <label><span class="label">Resampling</span>
           <select class="value" id="set-resampler">
-            <option value="auto">Auto (Amiga for MOD)</option><option value="linear">Linear</option><option value="cubic">Cubic</option>
+            <option value="auto">Auto (Amiga for MOD)</option><option value="linear">Linear</option><option value="cubic">Cubic</option><option value="sinc">Sinc (8 taps)</option>
             <option value="amiga">Amiga 500 filter</option><option value="none">None (raw)</option>
           </select>
         </label>
@@ -278,6 +278,8 @@
             <option value="16">Every 16 rows</option><option value="32">Every 32 rows</option>
           </select>
         </label>
+        <label><span class="label">Prospective view</span><input type="checkbox" id="set-prospective" title="Show the end of the previous and the start of the next pattern, dimmed" /></label>
+        <label><span class="label">Cursor wraps</span><input type="checkbox" id="set-wrap" title="Moving past the last row goes to the first, and back" /></label>
         <label><span class="label">Space key</span>
           <select class="value" id="set-space">
             <option value="ft2">Stop, or edit mode when stopped (FT2)</option>

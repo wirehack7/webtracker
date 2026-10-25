@@ -85,6 +85,17 @@ describe('mixer options', () => {
     expect(diff).toBeLessThan(peak(linear.left) * 0.2);
   });
 
+  it('interpolates sinc close to cubic and with less aliasing than none', () => {
+    const cubic = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'cubic' });
+    const sinc = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'sinc' });
+    const raw = renderSong(song(), { sampleRate: 44100, maxSeconds: 0.2, resampler: 'none' });
+    const diff = sinc.left.reduce((m, v, i) => Math.max(m, Math.abs(v - cubic.left[i]!)), 0);
+    expect(peak(sinc.left)).toBeGreaterThan(0.05);
+    expect(diff).toBeLessThan(peak(cubic.left) * 0.2);
+    const treble = (a: Float32Array) => a.subarray(2000, 6000).reduce((t, v, i, b) => t + (i ? (v - b[i - 1]!) ** 2 : 0), 0);
+    expect(treble(sinc.left)).toBeLessThan(treble(raw.left));
+  });
+
   it('narrows and widens the stereo image', () => {
     const mono = renderSong(song(), { sampleRate: RATE, maxSeconds: 0.5, stereoSeparation: 0 });
     for (let i = 0; i < mono.left.length; i += 101) expect(mono.left[i]).toBeCloseTo(mono.right[i]!, 6);
