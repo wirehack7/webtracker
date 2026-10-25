@@ -40,9 +40,38 @@ MODULE_DIR=~/mods pnpm test
 | --- | --- |
 | `packages/engine` | Song model, replayer, mixer. No DOM dependency; runs in the AudioWorklet, in the export worker and under Node. |
 | `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker), XM 1.04, S3M (Scream Tracker 3), IT (Impulse Tracker, including compressed samples), MTM (MultiTracker), 669 (Composer 669, UNIS 669) and OKT (Oktalyzer), also packed in ZIP, gzip, MMCMP, PowerPacker or UMX, saving XM, MOD, XI and 8SVX samples, XP pattern and XT track files, sample import (WAV, AIFF, 8SVX, XI, Gravis PAT, raw PCM), WAV and ZIP writers for export. |
+| `packages/replayer` | The replayer for demos and intros: the engine in an AudioWorklet behind a small API, built into one JavaScript file. |
 | `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, service worker for offline use. |
 
 Every push to `main` is deployed to GitHub Pages.
+
+## Replayer for demos and intros
+
+The replayer plays songs in your own productions with the same engine as the tracker. It is one ES module with the AudioWorklet built in, so there is nothing else to host:
+
+- [webtracker-replayer.js](https://wirehack7.github.io/webtracker/replayer/webtracker-replayer.js) plays every format the tracker loads (about 33 KB gzipped).
+- [webtracker-replayer-lite.js](https://wirehack7.github.io/webtracker/replayer/webtracker-replayer-lite.js) plays XM and MOD only (about 21 KB gzipped).
+
+A demo page is at [wirehack7.github.io/webtracker/replayer/](https://wirehack7.github.io/webtracker/replayer/).
+
+```js
+import { createReplayer } from './webtracker-replayer.js';
+
+// A URL, an ArrayBuffer or a Uint8Array. Options: context, destination, loop, volume, resampler, stereoSeparation.
+const music = await createReplayer('song.xm', { loop: false });
+music.onRow = ({ order, pattern, row, speed, tempo }) => {
+  // Runs when the row is heard (output latency included), for syncing effects.
+};
+music.onEnd = () => nextScene();
+startButton.onclick = () => music.play(); // browsers only start audio after a click or key press
+
+function frame() {
+  const t = music.time; // song time in seconds, as heard
+  requestAnimationFrame(frame);
+}
+```
+
+`pause()`, `stop()`, `seek(order, row)`, `volume`, `loop`, `position`, `isPlaying`, `song` (the loaded song, with its patterns for reading sync notes or effects) and `destroy()` complete the API. Build it with `pnpm --filter @webtracker/replayer build`; the files land in `packages/replayer/dist`.
 
 ## Usage
 

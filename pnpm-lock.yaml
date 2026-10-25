@@ -51,6 +51,22 @@ importers:
         specifier: workspace:*
         version: link:../engine
 
+  packages/replayer:
+    dependencies:
+      '@webtracker/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@webtracker/formats':
+        specifier: workspace:*
+        version: link:../formats
+    devDependencies:
+      '@types/audioworklet':
+        specifier: ^0.0.100
+        version: 0.0.100
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.2':
