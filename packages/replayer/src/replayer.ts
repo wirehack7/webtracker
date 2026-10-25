@@ -11,6 +11,8 @@ export interface ReplayerOptions extends Partial<MixerSettings> {
   context?: AudioContext;
   /** Where the output goes; the context's speakers when left out. */
   destination?: AudioNode;
+  /** The module's file name, for formats only recognised by it (tagless 15-sample MODs). */
+  fileName?: string;
 }
 
 /** What a module can be given as: its bytes, a URL to fetch, or a song already loaded. */
@@ -28,14 +30,15 @@ async function register(context: BaseAudioContext): Promise<void> {
   registered.add(context);
 }
 
-async function toSong(source: Source, parse: Parser): Promise<Song> {
+/** Fetches and parses a module without touching audio, so it works before any click. */
+export async function toSong(source: Source, parse: Parser, fileName = ''): Promise<Song> {
   if (typeof source === 'string') {
     const response = await fetch(source);
     if (!response.ok) throw new Error(`Could not load ${source}: ${response.status}`);
-    return parse(await response.arrayBuffer(), new URL(source, location.href).pathname.split('/').pop() ?? '');
+    return parse(await response.arrayBuffer(), fileName || (new URL(source, location.href).pathname.split('/').pop() ?? ''));
   }
-  if (source instanceof ArrayBuffer) return parse(source, '');
-  if (source instanceof Uint8Array) return parse(source.slice().buffer, '');
+  if (source instanceof ArrayBuffer) return parse(source, fileName);
+  if (source instanceof Uint8Array) return parse(source.slice().buffer, fileName);
   return source;
 }
 
@@ -66,7 +69,7 @@ export class Replayer {
   }
 
   static async create(source: Source, parse: Parser, options: ReplayerOptions = {}): Promise<Replayer> {
-    const song = await toSong(source, parse);
+    const song = await toSong(source, parse, options.fileName);
     const context = options.context ?? new AudioContext();
     await register(context);
     const node = new AudioWorkletNode(context, 'webtracker-replayer', { numberOfInputs: 0, outputChannelCount: [2] });
