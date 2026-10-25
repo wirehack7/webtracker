@@ -58,7 +58,7 @@ import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
-import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
+import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -2454,6 +2454,9 @@ const themeSelect = $<HTMLSelectElement>('#set-theme');
 themeSelect.replaceChildren(
   ...Object.entries(THEMES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })),
 );
+$('#set-ui-size').replaceChildren(
+  ...Object.entries(UI_SIZES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })),
+);
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
 function mixerMessage(): EngineMessage {
@@ -2546,6 +2549,8 @@ colourFile.addEventListener('change', async (event) => {
 
 function applySettings(): void {
   document.documentElement.dataset.theme = prefs.theme;
+  if (prefs.uiSize === 'auto') delete document.documentElement.dataset.uiSize;
+  else document.documentElement.dataset.uiSize = prefs.uiSize;
   applyColours();
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
   view.beat = prefs.beat;
@@ -2561,6 +2566,7 @@ function applySettings(): void {
 
 function showSettings(): void {
   themeSelect.value = prefs.theme;
+  $<HTMLSelectElement>('#set-ui-size').value = prefs.uiSize;
   $<HTMLSelectElement>('#set-resampler').value = prefs.resampler;
   $<HTMLInputElement>('#set-separation').value = String(prefs.stereoSeparation);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
@@ -2582,6 +2588,7 @@ function showSettings(): void {
 
 setup.addEventListener('change', () => {
   prefs.theme = themeSelect.value as Theme;
+  prefs.uiSize = $<HTMLSelectElement>('#set-ui-size').value as UiSize;
   prefs.resampler = $<HTMLSelectElement>('#set-resampler').value as Resampler;
   prefs.stereoSeparation = Number($<HTMLInputElement>('#set-separation').value);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;

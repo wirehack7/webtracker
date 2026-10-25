@@ -181,6 +181,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
       {
         list: [
           'Colours: several schemes and a colour editor; colours can be exported and imported as a file.',
+          'Interface size: Small, Compact, Medium or Large for panels, text and the pattern. Auto is Compact with a mouse and Medium on tablets; phones keep their own size.',
           'Resampling: how samples are played at other pitches. Auto plays MOD songs like an Amiga 500 (with its filter) and the rest with linear interpolation; Cubic and Sinc are smoother still, None gives the crunchy sound of old PC trackers.',
           'Stereo width, amplification and volume ramps (soft starts and ends of notes against clicks).',
           'Row highlights, prospective view (shows the neighbouring patterns dimmed), cursor wrapping and what the Space key does.',

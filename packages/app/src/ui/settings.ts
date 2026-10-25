@@ -10,6 +10,16 @@ export const THEMES = {
 } as const;
 export type Theme = keyof typeof THEMES;
 
+/** Interface sizes for screens bigger than a phone; phones keep their own. */
+export const UI_SIZES = {
+  auto: 'Auto',
+  small: 'Small',
+  compact: 'Compact',
+  medium: 'Medium',
+  large: 'Large',
+} as const;
+export type UiSize = keyof typeof UI_SIZES;
+
 /** The colours the scheme editor offers, by CSS custom property, with their labels. */
 export const COLOR_VARS: [string, string][] = [
   ['--desk', 'Panels'],
@@ -46,6 +56,8 @@ export const COLOR_VARS: [string, string][] = [
 
 export interface Settings {
   theme: Theme;
+  /** 'auto' is compact with a mouse and medium on tablets. */
+  uiSize: UiSize;
   /** How samples are resampled; 'auto' is Amiga for MOD and linear for XM. */
   resampler: Resampler;
   /** Stereo width in percent, 0..200. */
@@ -78,6 +90,7 @@ export interface Settings {
 
 export const DEFAULTS: Settings = {
   theme: 'classic',
+  uiSize: 'auto',
   resampler: 'auto',
   stereoSeparation: 100,
   volumeRamps: true,
@@ -105,6 +118,7 @@ export function loadSettings(): Settings {
     delete stored.interpolation;
     const merged = { ...DEFAULTS, ...stored };
     if (!(merged.theme in THEMES)) merged.theme = DEFAULTS.theme;
+    if (!(merged.uiSize in UI_SIZES)) merged.uiSize = DEFAULTS.uiSize;
     merged.colors = parseColors(merged.colors);
     return merged;
   } catch {

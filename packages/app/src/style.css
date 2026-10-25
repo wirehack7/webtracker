@@ -6,7 +6,7 @@
  */
 :root {
   color-scheme: dark;
-  --px: 2px;
+  --px: 1.25px;
   --font: 'Press Start 2P', ui-monospace, monospace;
 
   --desk: #3d5578;
@@ -366,7 +366,9 @@ a.btn {
   color: var(--text);
 }
 
+/* Channels share out the spare width, so a few channels fill the view. */
 .pattern-view .c {
+  flex: 1 0 auto;
   display: flex;
   gap: var(--px);
   padding: 0 calc(var(--px) * 3);
@@ -545,12 +547,27 @@ a.btn {
 
 /* ---- Responsive ------------------------------------------------------ */
 
-/* Medium screens: smaller pixels, instruments move under the song panels. */
-@media (max-width: 1279px) {
+/* Interface size from Setup. Auto is compact with a mouse and one step
+   bigger on tablets; the phone rules below override all of these. */
+@media (pointer: coarse) {
   :root {
     --px: 1.5px;
   }
 }
+:root[data-ui-size='small'] {
+  --px: 1px;
+}
+:root[data-ui-size='compact'] {
+  --px: 1.25px;
+}
+:root[data-ui-size='medium'] {
+  --px: 1.5px;
+}
+:root[data-ui-size='large'] {
+  --px: 2px;
+}
+
+/* Medium screens: instruments move under the song panels. */
 
 @media (max-width: 899px) {
   .top {
@@ -571,8 +588,12 @@ a.btn {
 /* Phones, upright or on their side: one top panel at a time, chosen with
    the tab bar; tapping the open tab again folds the panels away. */
 @media (max-width: 639px), (max-height: 500px) and (orientation: landscape) {
-  :root {
+  :root,
+  :root[data-ui-size] {
     --px: 1.5px;
+  }
+  .pattern-view .c {
+    flex: none;
   }
   .tabs {
     display: flex;
@@ -665,6 +686,9 @@ a.btn {
   .phone-only {
     display: inline-block;
   }
+  .desk-only {
+    display: none;
+  }
   .pattern-head .len,
   .pattern-head .head-extra {
     display: none;
@@ -747,7 +771,8 @@ a.btn {
 
 /* Narrow phones: one step smaller so a row of controls still fits. */
 @media (max-width: 419px) {
-  :root {
+  :root,
+  :root[data-ui-size] {
     --px: 1.25px;
   }
 }
