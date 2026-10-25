@@ -245,6 +245,29 @@ export class SongEditor {
     this.changed('channels');
   }
 
+  /**
+   * Changes patterns, orders and instruments together as one undo step, for
+   * song-wide tools such as the cleanup. The player is rebuilt, so playback stops.
+   */
+  editSong(label: string, edit: (song: Song) => void): void {
+    const song = this.song;
+    const snapshot = () => ({ orders: [...song.orders], patterns: song.patterns.map(clonePattern), instruments: song.instruments.map(cloneInstrument) });
+    const before = snapshot();
+    edit(song);
+    const after = snapshot();
+    const apply = (state: typeof before) => {
+      song.orders = [...state.orders];
+      song.patterns = state.patterns.map(clonePattern);
+      song.instruments = state.instruments.map(cloneInstrument);
+      if (song.restartPosition >= song.orders.length) song.restartPosition = 0;
+      this.sync({ type: 'load', song });
+      this.changed(label);
+    };
+    this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
+    this.sync({ type: 'load', song });
+    this.changed(label);
+  }
+
   undo(): string | null {
     return this.history.undo()?.label ?? null;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSong, readCell, resizePattern, writeCell } from '@webtracker/engine';
+import { cleanupSong, createSong, readCell, resizePattern, writeCell } from '@webtracker/engine';
 import type { EngineMessage } from '../audio/messages.ts';
 import { SongEditor } from './song-editor.ts';
 
@@ -87,6 +87,24 @@ describe('SongEditor song settings', () => {
     expect(editor.undo()).toBe('channels');
     expect(editor.song.channels).toBe(4);
     expect(readCell(editor.song, editor.song.patterns[0]!, 0, 3).note).toBe(49);
+  });
+
+  it('cleans up the song as one undo step and reloads the player', () => {
+    const { editor, sent } = setup();
+    editor.editOrders('orders', () => [0, 2]);
+    writeCell(editor.song, editor.song.patterns[2]!, 0, 0, { note: 49, instrument: 3 });
+    const instruments = editor.song.instruments.length;
+    editor.editSong('clean up', (s) => cleanupSong(s, { unusedPatterns: true, duplicatePatterns: false, unusedInstruments: true, compactInstruments: true, unusedSamples: false, sampleTails: false }));
+    expect(editor.song.patterns).toHaveLength(2);
+    expect(editor.song.orders).toEqual([0, 1]);
+    expect(readCell(editor.song, editor.song.patterns[1]!, 0, 0).instrument).toBe(1);
+    expect(sent.at(-1)).toMatchObject({ type: 'load' });
+
+    expect(editor.undo()).toBe('clean up');
+    expect(editor.song.patterns).toHaveLength(3);
+    expect(editor.song.orders).toEqual([0, 2]);
+    expect(editor.song.instruments).toHaveLength(instruments);
+    expect(readCell(editor.song, editor.song.patterns[2]!, 0, 0).instrument).toBe(3);
   });
 
   it('sets the title, cut to 20 characters, with undo', () => {
