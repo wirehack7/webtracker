@@ -15,31 +15,46 @@ export interface LibrarySong {
   savedAt: number;
   bytes: Uint8Array;
   origin?: AutosaveOrigin;
+  /** Set on the demo song while it is the copy the tracker put there. */
+  demo?: number;
 }
 
-/** Set once the demo song has been put in the library, so a deleted demo stays deleted. */
+/** The demo version this browser has been given; a deleted demo stays deleted. */
 const DEMO_KEY = 'webtracker.demoSong';
+/** Raise when the demo song changes, to replace older copies nobody has edited. */
+const DEMO_VERSION = 2;
 export const DEMO_SONG_NAME = `Demo: ${DEMO_SONG_TITLE}`;
 
 let seeding: Promise<void> | null = null;
 
-/** Adds the demo song the first time the library is opened in this browser. */
+/**
+ * Adds the demo song the first time the library is opened in this browser,
+ * and swaps an older demo for the current one. Copies the user saved over
+ * lose the `demo` mark (saving writes a new record), so their edits are kept.
+ */
 function seedDemoSong(db: IDBDatabase): Promise<void> {
   seeding ??= (async () => {
+    let seeded: number;
     try {
-      if (localStorage.getItem(DEMO_KEY)) return;
+      seeded = Number(localStorage.getItem(DEMO_KEY) ?? 0);
     } catch {
       return;
     }
+    if (seeded >= DEMO_VERSION) return;
     const tx = db.transaction(STORE, 'readwrite');
     const store = tx.objectStore(STORE);
     const all = (await result(store.getAll())) as LibrarySong[];
-    if (!all.some((song) => song.name === DEMO_SONG_NAME)) {
-      store.put({ name: DEMO_SONG_NAME, savedAt: Date.now(), bytes: saveXm(createDemoSong()) });
+    const bytes = saveXm(createDemoSong());
+    if (!seeded) {
+      if (!all.some((song) => song.name === DEMO_SONG_NAME)) store.put({ name: DEMO_SONG_NAME, savedAt: Date.now(), bytes, demo: DEMO_VERSION });
+    } else {
+      // Version 1 did not mark its copy, so it is found by name.
+      const old = all.find((song) => (seeded === 1 ? song.name === DEMO_SONG_NAME : song.demo !== undefined));
+      if (old) store.put({ ...old, bytes, demo: DEMO_VERSION });
     }
     await done(tx);
     try {
-      localStorage.setItem(DEMO_KEY, '1');
+      localStorage.setItem(DEMO_KEY, String(DEMO_VERSION));
     } catch {
       // Without localStorage the name check above still keeps it from being added twice.
     }
