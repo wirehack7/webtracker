@@ -1,8 +1,8 @@
 /**
  * Unpacks modules that come inside a container: ZIP and gzip archives (also
- * as MDZ, XMZ, S3Z, ITZ and their gzip forms), MMCMP (ziRCONia) and
- * PowerPacker (PP20). Containers may nest, so unpacking repeats until the
- * data is no longer packed.
+ * as MDZ, XMZ, S3Z, ITZ and their gzip forms), MMCMP (ziRCONia),
+ * PowerPacker (PP20) and Unreal music packages (UMX). Containers may nest,
+ * so unpacking repeats until the data is no longer packed.
  */
 import { inflateRaw } from './inflate.ts';
 
@@ -256,6 +256,27 @@ export function unpackMmcmp(bytes: Uint8Array): Uint8Array {
   return out;
 }
 
+export function isUmx(bytes: Uint8Array): boolean {
+  return bytes.length >= 64 && bytes[0] === 0xc1 && bytes[1] === 0x83 && bytes[2] === 0x2a && bytes[3] === 0x9e;
+}
+
+/**
+ * Finds the module inside an Unreal music package (UMX). The package wraps
+ * one S3M, XM, IT or MOD file; its own signature tells where it starts.
+ */
+export function unpackUmx(bytes: Uint8Array): { bytes: Uint8Array; extension: string } {
+  const text = new TextDecoder('latin1').decode(bytes);
+  const found = [
+    { at: text.indexOf('Extended Module: '), extension: 'xm' },
+    { at: text.indexOf('IMPM'), extension: 'it' },
+    { at: text.indexOf('SCRM') - 44, extension: 's3m' },
+    { at: text.search(/M\.K\.|M!K!|[4-8]CHN/) - 1080, extension: 'mod' },
+  ].filter((f) => f.at > 0);
+  const first = found.sort((a, b) => a.at - b.at)[0];
+  if (!first) throw new Error('No module found in the UMX package');
+  return { bytes: bytes.slice(first.at), extension: first.extension };
+}
+
 /** Unpacks a PowerPacker (PP20) data file, common for Amiga modules. */
 export function unpackPp20(bytes: Uint8Array): Uint8Array {
   const n = bytes.length;
@@ -332,6 +353,10 @@ export function unpackModule(bytes: Uint8Array, fileName = ''): Unpacked {
     } else if (isMmcmp(bytes)) {
       containers.push('MMCMP');
       next = { bytes: unpackMmcmp(bytes), fileName };
+    } else if (isUmx(bytes)) {
+      containers.push('UMX');
+      const inner = unpackUmx(bytes);
+      next = { bytes: inner.bytes, fileName: `${fileName.replace(/\.[^.]*$/, '') || 'music'}.${inner.extension}` };
     } else if (isPp20(bytes)) {
       containers.push('PowerPacker');
       next = { bytes: unpackPp20(bytes), fileName };

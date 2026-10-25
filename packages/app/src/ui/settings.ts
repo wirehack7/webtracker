@@ -1,4 +1,5 @@
 /** Preferences that belong to the browser, not the song, kept in localStorage. */
+import type { RawFormat } from '@webtracker/formats';
 import type { Resampler } from '@webtracker/engine';
 
 export const THEMES = {
@@ -27,6 +28,8 @@ export interface Settings {
   midiVelocity: boolean;
   /** New, loaded and shared songs open beside the current one instead of replacing it. */
   songTabs: boolean;
+  /** How headerless sample files are read. */
+  rawFormat: RawFormat;
 }
 
 export const DEFAULTS: Settings = {
@@ -40,6 +43,7 @@ export const DEFAULTS: Settings = {
   midi: false,
   midiVelocity: false,
   songTabs: true,
+  rawFormat: 's8',
 };
 
 const KEY = 'webtracker.settings';

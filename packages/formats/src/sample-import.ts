@@ -219,9 +219,104 @@ export function loadXi(buffer: ArrayBuffer): Imported {
   return { kind: 'instrument', instrument };
 }
 
+// ---- PAT (Gravis UltraSound patch) -----------------------------------------
+
+const PAT_HEADER = 239;
+const PAT_SAMPLE = 96;
+
+export function isPat(b: Uint8Array): boolean {
+  return b.length >= PAT_HEADER && (ascii(b, 0, 12) === 'GF1PATCH110\0' || ascii(b, 0, 12) === 'GF1PATCH100\0');
+}
+
+/** Frequency of note index 0..95 (C-0..B-7) in Hz, with C-4 at middle C. */
+const noteHz = (index: number) => 261.6256 * Math.pow(2, (index - 48) / 12);
+
+/**
+ * Reads a Gravis patch as an instrument: one sample per wave, mapped to the
+ * keys of its frequency range and tuned from its root frequency. The patch
+ * envelopes are left out.
+ */
+export function loadPat(buffer: ArrayBuffer, name = ''): Imported {
+  const b = new Uint8Array(buffer);
+  const v = new DataView(buffer);
+  const instrument = emptyInstrument(readString(b, 131, 16) || name.replace(/\.[^.]+$/, '').slice(0, 22));
+  const count = Math.min(16, b[198] ?? 0);
+  type Range = { low: number; high: number; root: number };
+  const ranges: Range[] = [];
+  let o = PAT_HEADER;
+  for (let i = 0; i < count && o + PAT_SAMPLE <= b.length; i++) {
+    const size = v.getUint32(o + 8, true);
+    const loopStart = v.getUint32(o + 12, true);
+    const loopEnd = v.getUint32(o + 16, true);
+    const rate = v.getUint16(o + 20, true) || 44100;
+    const low = v.getUint32(o + 22, true);
+    const high = v.getUint32(o + 26, true);
+    const root = v.getUint32(o + 30, true) || 261626;
+    const modes = b[o + 55] ?? 0;
+    const sixteen = (modes & 1) !== 0;
+    const unsigned = (modes & 2) !== 0;
+    const width = sixteen ? 2 : 1;
+    const at = o + PAT_SAMPLE;
+    const frames = Math.floor(Math.min(size, b.length - at) / width);
+    const data = new Float32Array(frames);
+    for (let f = 0; f < frames; f++) {
+      data[f] = sixteen
+        ? ((unsigned ? v.getUint16(at + f * 2, true) - 32768 : v.getInt16(at + f * 2, true)) / 32768)
+        : ((unsigned ? b[at + f]! - 128 : (b[at + f]! << 24) >> 24) / 128);
+    }
+    if (modes & 16) data.reverse();
+    // The patch plays its root frequency at the stored rate; C-4 plays middle C.
+    const sample = tunedSample(readString(b, o, 7) || `${instrument.name} ${i + 1}`, data, (rate * noteHz(48) * 1000) / root);
+    const start = Math.min(frames, Math.floor(loopStart / width));
+    const end = Math.min(frames, Math.floor(loopEnd / width));
+    if (modes & 4 && end > start) {
+      sample.loopStart = start;
+      sample.loopLength = end - start;
+      sample.loopType = modes & 8 ? LoopType.PingPong : LoopType.Forward;
+    }
+    instrument.samples.push(sample);
+    ranges.push({ low, high, root });
+    o = at + size;
+  }
+  if (instrument.samples.length === 0) throw new Error('PAT file has no waves');
+  // Each key takes the wave whose range holds it, else the one with the nearest root.
+  for (let n = 0; n < 96; n++) {
+    const milliHz = noteHz(n) * 1000;
+    let pick = ranges.findIndex((r) => milliHz >= r.low && milliHz <= r.high);
+    if (pick < 0) {
+      let best = Infinity;
+      ranges.forEach((r, i) => {
+        const distance = Math.abs(Math.log(milliHz / r.root));
+        if (distance < best) [best, pick] = [distance, i];
+      });
+    }
+    instrument.keymap[n] = Math.max(0, pick);
+  }
+  return { kind: 'instrument', instrument };
+}
+
+// ---- Raw PCM -----------------------------------------------------------------
+
+export type RawFormat = 's8' | 'u8' | 's16le' | 's16be';
+
+/** Headerless sample data in the given format, tuned to play at `rate` on C-4. */
+export function loadRaw(buffer: ArrayBuffer, name = '', format: RawFormat = 's8', rate = 8363): Imported {
+  const b = new Uint8Array(buffer);
+  const v = new DataView(buffer);
+  const sixteen = format === 's16le' || format === 's16be';
+  const frames = sixteen ? b.length >> 1 : b.length;
+  const data = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    if (format === 's8') data[f] = ((b[f]! << 24) >> 24) / 128;
+    else if (format === 'u8') data[f] = (b[f]! - 128) / 128;
+    else data[f] = v.getInt16(f * 2, format === 's16le') / 32768;
+  }
+  return { kind: 'sample', sample: tunedSample(name, data, rate), rate };
+}
+
 /**
  * Reads a sample or instrument file it understands by its contents: WAV,
- * AIFF, IFF 8SVX or XI. Returns null for anything else, so the caller can
+ * AIFF, IFF 8SVX, XI or a Gravis PAT. Returns null for anything else, so the caller can
  * hand it to the browser's decoder (MP3, OGG, FLAC).
  */
 export function importSample(buffer: ArrayBuffer, name = ''): Imported | null {
@@ -230,6 +325,7 @@ export function importSample(buffer: ArrayBuffer, name = ''): Imported | null {
   if (isAiff(b)) return loadAiff(buffer, name);
   if (is8svx(b)) return load8svx(buffer, name);
   if (isXi(b)) return loadXi(buffer);
+  if (isPat(b)) return loadPat(buffer, name);
   return null;
 }
 
