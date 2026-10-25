@@ -4,6 +4,11 @@ A chiptune tracker for the browser, made for the demoscene. Classic tracker inte
 
 **Start it right in your browser: https://chiptrackr.com/**
 
+<p>
+  <img src="docs/screenshots/desktop.png" alt="chiptrackr on a desktop browser, playing the demo song Pixel Sunrise" width="73%">
+  <img src="docs/screenshots/mobile.png" alt="chiptrackr on a phone, with the pattern editor and the on-screen piano" width="24%">
+</p>
+
 The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions and keeps a library of named songs. The library starts with a demo song, "Pixel Sunrise": four channels of generated chip sounds that try out most of the effects, instrument envelopes and auto-vibrato. Share puts the whole song, compressed, into a link that opens it again, with no server involved.
 
 For your own demos and intros there is a [replayer](#replayer-for-demos-and-intros) that plays your songs with the same engine: [chiptrackr.com/replayer/](https://chiptrackr.com/replayer/). The Replayer button in the tracker opens that page, and Save > Open in replayer hands it the song you are working on.
