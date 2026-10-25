@@ -34,6 +34,7 @@ import {
 import type { SongEditor } from '../editor/song-editor.ts';
 import { hex } from './pattern-view.ts';
 import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
+import { askText } from './ask.ts';
 
 export interface SampleEditorHost {
   editor: SongEditor;
@@ -112,7 +113,7 @@ export class SampleEditor {
       button('Norm', () => this.rangeTool('normalize', normalizeRange), 'Normalize to full scale'),
       button('Vol-', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 0.5)), 'Halve the volume'),
       button('Vol+', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 2)), 'Double the volume (clips)'),
-      button('Amp', () => this.gain(), 'Change the volume by any amount, or ramp it from one amount to another'),
+      button('Amp', () => void this.gain(), 'Change the volume by any amount, or ramp it from one amount to another'),
       button('FadeIn', () => this.rangeTool('fade in', fadeIn)),
       button('FadeOut', () => this.rangeTool('fade out', fadeOut)),
       button('x2', () => this.edit('resample', (s) => resample(s, 2)), 'Resample to twice the length, same pitch'),
@@ -130,10 +131,10 @@ export class SampleEditor {
       button('Swap', () => this.rangeTool('byte swap', swapBytesRange), 'Swap the bytes of 16-bit frames, for samples with the wrong byte order'),
       button('DC', () => this.rangeTool('DC offset', removeDcRange), 'Remove the DC offset'),
       button('8-Bit', () => this.edit('8-bit', quantize8), 'Reduce to 8 bits; the sample is then saved as 8-bit'),
-      button('LP', () => this.filter('lowpass'), 'Low-pass filter the selection'),
-      button('HP', () => this.filter('highpass'), 'High-pass filter the selection'),
-      button('XFade', () => this.crossfade(), 'Crossfade the loop end into the frames before the loop start'),
-      button('Rsmp', () => this.resampleTo(), 'Resample to any length, same pitch'),
+      button('LP', () => void this.filter('lowpass'), 'Low-pass filter the selection'),
+      button('HP', () => void this.filter('highpass'), 'High-pass filter the selection'),
+      button('XFade', () => void this.crossfade(), 'Crossfade the loop end into the frames before the loop start'),
+      button('Rsmp', () => void this.resampleTo(), 'Resample to any length, same pitch'),
       this.drawButton,
       button('Save', () => host.saveSample('wav'), 'Save the sample as WAV'),
       button('IFF', () => host.saveSample('iff'), 'Save the sample as Amiga IFF 8SVX (8-bit, forward loop)'),
@@ -215,9 +216,13 @@ export class SampleEditor {
     return s ? rateForTuning(s.relativeNote, s.finetune) : 8363;
   }
 
-  private filter(kind: 'lowpass' | 'highpass'): void {
+  private async filter(kind: 'lowpass' | 'highpass'): Promise<void> {
     const rate = Math.round(this.sampleRate());
-    const answer = prompt(`${kind === 'lowpass' ? 'Low' : 'High'}-pass cutoff in Hz (sample plays at ${rate} Hz on C-4):`, kind === 'lowpass' ? '2000' : '100');
+    const answer = await askText(`Cutoff in Hz (the sample plays at ${rate} Hz on C-4):`, kind === 'lowpass' ? '2000' : '100', {
+      title: kind === 'lowpass' ? 'Low-pass filter' : 'High-pass filter',
+      ok: 'Filter',
+      inputMode: 'numeric',
+    });
     const cutoff = Number(answer);
     if (!answer || !(cutoff > 0)) return;
     this.rangeTool(kind, (s, r) => filterRange(s, r, kind, cutoff, rate));
@@ -231,8 +236,8 @@ export class SampleEditor {
   }
 
   /** Asks for a gain in percent, or a start and end percentage for a ramp. */
-  private gain(): void {
-    const answer = prompt('Volume in percent, or start and end percent for a ramp (e.g. 100 0):', '150');
+  private async gain(): Promise<void> {
+    const answer = await askText('Volume in percent, or start and end percent for a ramp (e.g. 100 0):', '150', { title: 'Volume', ok: 'Apply' });
     if (!answer) return;
     const parts = answer.split(/[\s,;]+/).filter(Boolean).map(Number);
     const from = parts[0];
@@ -244,13 +249,17 @@ export class SampleEditor {
     this.rangeTool('amplify', (s, r) => gainRange(s, r, from / 100, (to ?? from) / 100));
   }
 
-  private crossfade(): void {
+  private async crossfade(): Promise<void> {
     const s = this.sample();
     if (!s || s.loopType === LoopType.None) {
       this.host.status('Crossfade needs a loop.');
       return;
     }
-    const answer = prompt('Crossfade length in frames:', String(Math.min(256, Math.floor(s.loopLength / 4)) || 1));
+    const answer = await askText('Length in frames:', String(Math.min(256, Math.floor(s.loopLength / 4)) || 1), {
+      title: 'Crossfade loop',
+      ok: 'Crossfade',
+      inputMode: 'numeric',
+    });
     const frames = Math.floor(Number(answer));
     if (!answer || !(frames > 0)) return;
     let done = 0;
@@ -258,10 +267,14 @@ export class SampleEditor {
     this.host.status(done ? `Crossfaded ${done} frames into the loop start.` : 'No room before the loop start to crossfade.');
   }
 
-  private resampleTo(): void {
+  private async resampleTo(): Promise<void> {
     const s = this.sample();
     if (!s || s.data.length === 0) return;
-    const answer = prompt(`New length in frames (now ${s.data.length}); the pitch stays:`, String(s.data.length));
+    const answer = await askText(`New length in frames (now ${s.data.length}); the pitch stays:`, String(s.data.length), {
+      title: 'Resample',
+      ok: 'Resample',
+      inputMode: 'numeric',
+    });
     const frames = Math.floor(Number(answer));
     if (!answer || !(frames > 0) || frames === s.data.length) return;
     this.edit('resample', (sample) => resample(sample, frames / sample.data.length));

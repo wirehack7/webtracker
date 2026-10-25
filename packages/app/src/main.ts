@@ -46,6 +46,7 @@ import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, type Invite } from './collab/links.ts';
 import { JamSession, type JamDocument, type Link } from './collab/session.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
+import { ask, askText } from './ui/ask.ts';
 import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
@@ -678,9 +679,16 @@ function step(key: keyof typeof limits, delta: number): void {
   }
   if (key === 'channels') {
     const channels = clampTo(s.channels + delta);
-    if (channels < s.channels && !confirm(`Remove channels ${channels + 1}–${s.channels} from every pattern? Undo brings them back.`)) return;
-    editor.setChannels(channels);
-    status.textContent = `${channels} channels.`;
+    const apply = () => {
+      editor.setChannels(channels);
+      status.textContent = `${channels} channels.`;
+    };
+    if (channels >= s.channels) apply();
+    else {
+      const which = channels + 1 === s.channels ? `channel ${s.channels}` : `channels ${channels + 1}–${s.channels}`;
+      const message = `Remove ${which} from every pattern? Undo brings them back.`;
+      void ask(message, { title: 'Channels', ok: 'Remove' }).then((ok) => ok && apply());
+    }
     return;
   }
   if (key === 'octave') {
@@ -984,9 +992,9 @@ entryKeys.addEventListener('click', (event) => {
 
 const fileInput = $<HTMLInputElement>('#file');
 
-function confirmDiscard(): boolean {
+async function confirmDiscard(): Promise<boolean> {
   // With tabs the next song gets its own, so nothing is discarded.
-  return opensNewTab() || !editor.dirty || confirm('Discard the changes to the current song?');
+  return opensNewTab() || !editor.dirty || ask('Discard the changes to the current song?', { title: 'Unsaved changes', ok: 'Discard' });
 }
 
 function startSong(next: Song): void {
@@ -1063,25 +1071,29 @@ function showTab(index: number): void {
   renderTabs();
 }
 
-function switchTab(index: number): void {
+async function switchTab(index: number): Promise<void> {
   if (index === activeTab || !tabs[index]) return;
-  if (jam?.active && !confirm('Switching songs leaves the jam. Go on?')) return;
+  if (jam?.active && !(await ask('Switching songs leaves the jam. Go on?', { title: 'Jam', ok: 'Switch' }))) return;
   leaveJam('You left the jam to switch songs. The jam song stays as it was.');
   tabs[activeTab] = parkTab();
   showTab(index);
   status.textContent = `Song ${index + 1} of ${tabs.length}: ${tabName(song(), libraryEntry)}.`;
 }
 
-function closeTab(index: number): void {
+async function closeTab(index: number): Promise<void> {
   if (index !== activeTab) {
     const tab = tabs[index]!;
-    if (tab.doc.dirty && !confirm(`Close "${tabName(tab.doc.song, tab.library)}" and discard its changes?`)) return;
+    if (tab.doc.dirty && !(await ask(`Close "${tabName(tab.doc.song, tab.library)}" and discard its changes?`, { title: 'Unsaved changes', ok: 'Close' }))) return;
+    // The list may have changed while the question was open.
+    index = tabs.indexOf(tab);
+    if (index < 0 || index === activeTab) return;
     tabs.splice(index, 1);
     if (index < activeTab) activeTab--;
     renderTabs();
     return;
   }
-  if (editor.dirty && !confirm('Close this song and discard its changes?')) return;
+  if (editor.dirty && !(await ask('Close this song and discard its changes?', { title: 'Unsaved changes', ok: 'Close' }))) return;
+  if (index !== activeTab) return;
   leaveJam('You left the jam by closing its song.');
   tabs.splice(index, 1);
   if (tabs.length === 0) {
@@ -1117,14 +1129,14 @@ function renderTabs(): void {
     pick.setAttribute('aria-selected', String(active));
     pick.textContent = `${tabName(s, active ? libraryEntry : tab.library)}${dirty ? '*' : ''}`;
     pick.title = `Song ${i + 1} (Alt+PageUp/PageDown switch songs)`;
-    pick.addEventListener('click', () => switchTab(i));
+    pick.addEventListener('click', () => void switchTab(i));
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'btn sm';
     close.textContent = 'x';
     close.title = 'Close this song';
     close.setAttribute('aria-label', `Close ${pick.textContent}`);
-    close.addEventListener('click', () => closeTab(i));
+    close.addEventListener('click', () => void closeTab(i));
     item.append(pick, close);
     return item;
   });
@@ -1132,7 +1144,7 @@ function renderTabs(): void {
 }
 
 async function openModule(file: File): Promise<void> {
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   try {
     const loaded = loadModule(await file.arrayBuffer(), file.name);
     startSong(loaded);
@@ -1401,8 +1413,8 @@ async function showAutosaves(): Promise<void> {
     time.textContent = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     li.append(time, ` ${v.title || 'untitled'}`);
     li.title = 'Open this version';
-    li.addEventListener('click', () => {
-      if (!confirmDiscard()) return;
+    li.addEventListener('click', async () => {
+      if (!(await confirmDiscard())) return;
       fileDialog.close();
       restoreAutosave(v);
     });
@@ -1487,7 +1499,7 @@ async function showLibrary(): Promise<void> {
     li.append(time, ` ${entry.name}`);
     li.title = 'Double-click to open';
     li.addEventListener('click', () => selectLibrarySong(i));
-    li.addEventListener('dblclick', () => openLibrarySong());
+    li.addEventListener('dblclick', () => void openLibrarySong());
     return li;
   });
   if (!items.length) items.push(listNote('No songs saved here yet.'));
@@ -1504,7 +1516,7 @@ function selectLibrarySong(index: number): void {
 async function saveToLibrary(): Promise<void> {
   const name = libraryName.value.trim() || 'untitled';
   const same = librarySongs.find((e) => e.name === name);
-  if (same && same.id !== libraryEntry?.id && !confirm(`Replace the saved song "${name}"?`)) return;
+  if (same && same.id !== libraryEntry?.id && !(await ask(`Replace the saved song "${name}"?`, { title: 'Save', ok: 'Replace' }))) return;
   const s = song();
   try {
     const id = await putSong({ id: same?.id, name, savedAt: Date.now(), bytes: saveXm(s), origin: originOf(s) });
@@ -1519,9 +1531,9 @@ async function saveToLibrary(): Promise<void> {
   }
 }
 
-function openLibrarySong(): void {
+async function openLibrarySong(): Promise<void> {
   const entry = librarySongs[librarySelected];
-  if (!entry || !confirmDiscard()) return;
+  if (!entry || !(await confirmDiscard())) return;
   try {
     startSong(applyOrigin(loadModule(entry.bytes.slice().buffer, `${entry.name}.xm`), entry.origin));
     libraryEntry = { id: entry.id, name: entry.name };
@@ -1535,7 +1547,7 @@ function openLibrarySong(): void {
 
 async function renameLibrarySong(): Promise<void> {
   const entry = librarySongs[librarySelected];
-  const name = entry && prompt('New name', entry.name)?.trim();
+  const name = entry && (await askText('New name:', entry.name, { title: 'Rename', ok: 'Rename' }))?.trim();
   if (!entry || !name || name === entry.name) return;
   await renameSong(entry.id, name);
   if (libraryEntry?.id === entry.id) libraryEntry.name = libraryName.value = name;
@@ -1544,7 +1556,7 @@ async function renameLibrarySong(): Promise<void> {
 
 async function deleteLibrarySong(): Promise<void> {
   const entry = librarySongs[librarySelected];
-  if (!entry || !confirm(`Delete "${entry.name}" from this browser?`)) return;
+  if (!entry || !(await ask(`Delete "${entry.name}" from this browser?`, { title: 'Delete', ok: 'Delete' }))) return;
   await deleteSong(entry.id);
   if (libraryEntry?.id === entry.id) libraryEntry = null;
   await showLibrary();
@@ -1552,7 +1564,7 @@ async function deleteLibrarySong(): Promise<void> {
 
 $('#songs-open').addEventListener('click', openSongsDialog);
 $('#library-save').addEventListener('click', () => void saveToLibrary());
-$('#library-open').addEventListener('click', openLibrarySong);
+$('#library-open').addEventListener('click', () => void openLibrarySong());
 $('#library-rename').addEventListener('click', () => void renameLibrarySong());
 $('#library-delete').addEventListener('click', () => void deleteLibrarySong());
 libraryName.addEventListener('keydown', (event) => {
@@ -1663,7 +1675,13 @@ window.addEventListener('hashchange', () => {
   const invite = jamFromHash(location.hash);
   if (invite) return openJamInvite(invite);
   const text = shareFromHash(location.hash);
-  if (text && confirmDiscard()) void openSharedSong(text).then((error) => error && (status.textContent = error));
+  if (text) {
+    void (async () => {
+      if (!(await confirmDiscard())) return;
+      const error = await openSharedSong(text);
+      if (error) status.textContent = error;
+    })();
+  }
 });
 
 // ---- Jam: editing one song together ------------------------------------------
@@ -1916,8 +1934,8 @@ $('#jam-invite-copy').addEventListener('click', () => void copyField(jamInviteUr
 $('#jam-connect').addEventListener('click', () => void connectJamGuest());
 $('#jam-join').addEventListener('click', () => void joinJam());
 $('#jam-answer-copy').addEventListener('click', () => void copyField(jamAnswerOut, 'Answer code'));
-$('#jam-leave').addEventListener('click', () => {
-  if (jam?.role === 'host' && jam.peers.length > 1 && !confirm('Leaving ends the jam for everyone. Go on?')) return;
+$('#jam-leave').addEventListener('click', async () => {
+  if (jam?.role === 'host' && jam.peers.length > 1 && !(await ask('Leaving ends the jam for everyone. Go on?', { title: 'Jam', ok: 'Leave' }))) return;
   if (jam) leaveJam();
   else {
     cancelAnswer?.();
@@ -1945,8 +1963,8 @@ async function startUp(): Promise<void> {
   if (error) status.textContent = error;
 }
 
-$('#new').addEventListener('click', () => {
-  if (!confirmDiscard()) return;
+$('#new').addEventListener('click', async () => {
+  if (!(await confirmDiscard())) return;
   startSong(createSong());
   // A new song stays replaceable until it is edited.
   blankTab = true;
@@ -2294,7 +2312,7 @@ window.addEventListener('keydown', (event) => {
 
   if (event.altKey && !event.ctrlKey && !event.shiftKey && (event.code === 'PageUp' || event.code === 'PageDown')) {
     event.preventDefault();
-    if (tabs.length > 1) switchTab((activeTab + (event.code === 'PageDown' ? 1 : tabs.length - 1)) % tabs.length);
+    if (tabs.length > 1) void switchTab((activeTab + (event.code === 'PageDown' ? 1 : tabs.length - 1)) % tabs.length);
     return;
   }
   const inPattern = app.dataset.view === 'pattern';
