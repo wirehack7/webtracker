@@ -194,6 +194,7 @@ export function loadS3m(buffer: ArrayBuffer): Song {
       loopType: looped ? LoopType.Forward : LoopType.None,
       volume: Math.min(64, u8(at + 28)),
       panning: 128,
+      usePanning: false,
       ...tuningForRate(rate),
     };
     if (frames > 0) instrument.samples.push(sample);

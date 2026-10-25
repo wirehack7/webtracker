@@ -518,7 +518,7 @@ export class Player {
     const sample = this.isMod ? ins.samples[0] : ch.sample;
     if (sample) {
       ch.volume = sample.volume;
-      if (!this.isMod) ch.panning = sample.panning;
+      if (!this.isMod && sample.usePanning !== false) ch.panning = sample.panning;
     }
     ch.keyOn = true;
     ch.fadeout = 32768;
@@ -972,7 +972,8 @@ export class Player {
         envVol = envelopeValue(ve, ch.volEnvTick);
         ch.volEnvTick = envelopeAdvance(ve, ch.volEnvTick, ch.keyOn);
         // Fadeout only runs with an enabled volume envelope; without one key off cuts the note.
-        if (!ch.keyOn) ch.fadeout = Math.max(0, ch.fadeout - ins.fadeout);
+        const fading = !ins.fadeAfterEnvelope || ve.loop || ch.volEnvTick >= ve.points[ve.points.length - 1]!.x;
+        if (!ch.keyOn && fading) ch.fadeout = Math.max(0, ch.fadeout - ins.fadeout);
       }
       const pe = ins.panningEnvelope;
       if (pe.enabled) {
