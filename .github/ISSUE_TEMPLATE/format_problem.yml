@@ -1,0 +1,44 @@
+name: File import / export problem
+description: A module, sample or export does not load, save or convert correctly.
+labels: [formats]
+body:
+  - type: dropdown
+    id: direction
+    attributes:
+      label: What goes wrong?
+      options:
+        - A module does not load / loads wrong
+        - A sample or instrument does not import / imports wrong
+        - Saved XM or MOD is wrong in another tracker
+        - Saved sample or instrument (XI, 8SVX, WAV) is wrong
+        - Audio export (WAV, FLAC, MP3) is wrong
+        - Share link or replayer does not work
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: File format
+      placeholder: IT with compressed samples, MOD packed in PowerPacker, 24-bit WAV ...
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: File
+      description: Attach the file (zip it first if GitHub refuses the file type) or link to it.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include any error message chiptrackr showed. For saved files, name the program you opened them in and what looked wrong there.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser, version and OS
+      placeholder: Chrome 140 on Windows 11

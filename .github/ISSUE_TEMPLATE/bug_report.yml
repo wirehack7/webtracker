@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in the tracker breaks, freezes or behaves wrongly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! If a module **plays** differently than in the tracker it was made with, use the *Playback accuracy* form instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Describe the problem. Screenshots or a screen recording help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Load the demo song
+        2. Switch to the sample view
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device type
+      options:
+        - Desktop / laptop
+        - Tablet
+        - Phone
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Firefox 141, Chrome 140, Safari 19 ...
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and device
+      placeholder: Windows 11, macOS 16, Android 16 on Pixel 9, iOS 19 on iPhone 16 ...
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: Input
+      multiple: true
+      options:
+        - Keyboard
+        - Mouse
+        - Touch
+        - MIDI
+  - type: textarea
+    id: module
+    attributes:
+      label: Module file
+      description: If the bug needs a specific song, attach it here (zip it first if GitHub refuses the file type) or paste a share link from the Share dialog.
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Errors from the browser's developer console (F12), if any.
+      render: text

@@ -1,0 +1,70 @@
+name: Playback accuracy
+description: A module sounds different from the tracker it was made with.
+labels: [playback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        chiptrackr aims to play modules exactly like the original trackers. To track down a difference we need the module and a pointer to where it happens.
+  - type: textarea
+    id: module
+    attributes:
+      label: Module file
+      description: Attach the module (zip it first, GitHub does not accept .xm/.mod/.s3m/.it directly) or link to it, e.g. on modarchive.org.
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Format
+      options:
+        - XM
+        - MOD
+        - S3M
+        - IT
+        - MTM
+        - "669"
+        - OKT
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: Reference player
+      description: Which tracker or player does it sound right in, and which version?
+      placeholder: FastTracker 2.09, ProTracker 2.3D, OpenMPT 1.32, Scream Tracker 3.21 ...
+    validations:
+      required: true
+  - type: input
+    id: position
+    attributes:
+      label: Where does it happen?
+      description: Order and row (shown in the tracker), and/or a timestamp.
+      placeholder: Order 0C, row 20, channel 3 / around 1:42
+    validations:
+      required: true
+  - type: textarea
+    id: difference
+    attributes:
+      label: What sounds different?
+      description: For example a wrong pitch slide, missing vibrato, volume too loud, a note that should be cut, wrong loop. If you know the effect involved (like E9x or Lxx), mention it.
+    validations:
+      required: true
+  - type: textarea
+    id: recordings
+    attributes:
+      label: Recordings
+      description: Optional. Short audio clips of both players (zipped WAV/FLAC or a link) make comparison much easier.
+  - type: dropdown
+    id: resampler
+    attributes:
+      label: Resampling setting (Setup)
+      options:
+        - Auto (Amiga for MOD)
+        - Amiga 500 filter
+        - Linear
+        - Cubic
+        - Sinc (8 taps)
+        - None
+        - Don't know
