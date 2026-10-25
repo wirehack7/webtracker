@@ -61,6 +61,7 @@
               <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
+              <button type="button" class="btn" id="jam-open" aria-pressed="false" title="Edit this song together with others, live">Jam</button>
               <button type="button" class="btn" id="help-open" title="Keys, effects and workflows">Help</button>
               <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
               <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
@@ -234,6 +235,48 @@
       </div>
       <p class="info" id="share-info"></p>
       <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog" id="jam-dialog">
+      <h2 class="ptitle">Jam</h2>
+      <div class="export-fields">
+        <label><span class="label">Your name</span><input type="text" class="value text" id="jam-name" maxlength="24" spellcheck="false" /></label>
+      </div>
+      <div id="jam-start">
+        <p class="info">Edit this song together with others, live. Edits go straight from browser to browser; nothing is uploaded.</p>
+        <div class="row"><button type="button" class="btn" id="jam-host">Start a jam</button></div>
+      </div>
+      <div id="jam-hosting" hidden>
+        <h2 class="ptitle">Invite</h2>
+        <div class="row">
+          <button type="button" class="btn" id="jam-invite">New invite link</button>
+          <button type="button" class="btn" id="jam-tab">Open in a new tab</button>
+        </div>
+        <div id="jam-invite-box" hidden>
+          <input type="text" class="value text share-url" id="jam-invite-url" readonly aria-label="Invite link" />
+          <div class="row"><button type="button" class="btn" id="jam-invite-copy">Copy invite</button></div>
+          <p class="info">Send the link to one person. They send you back an answer code: paste it here.</p>
+          <input type="text" class="value text share-url" id="jam-answer" spellcheck="false" placeholder="Answer code" aria-label="Answer code" />
+          <div class="row"><button type="button" class="btn" id="jam-connect">Connect</button></div>
+        </div>
+      </div>
+      <div id="jam-joining" hidden>
+        <p class="info">You were invited to a jam. You get the host's song in a tab of its own.</p>
+        <div class="row"><button type="button" class="btn" id="jam-join">Join</button></div>
+        <div id="jam-answer-box" hidden>
+          <input type="text" class="value text share-url" id="jam-answer-out" readonly aria-label="Answer code" />
+          <div class="row"><button type="button" class="btn" id="jam-answer-copy">Copy answer</button></div>
+          <p class="info">Send this answer code back to the host. You are in as soon as they paste it.</p>
+        </div>
+      </div>
+      <div id="jam-people-box" hidden>
+        <h2 class="ptitle">People</h2>
+        <ol class="list" id="jam-people"></ol>
+      </div>
+      <p class="info" id="jam-info"></p>
+      <form method="dialog" class="row">
+        <button type="button" class="btn" id="jam-leave" hidden>Leave jam</button>
         <button type="submit" class="btn">Close</button>
       </form>
     </dialog>

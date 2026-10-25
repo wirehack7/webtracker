@@ -40,6 +40,8 @@ import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
+import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, type Invite } from './collab/links.ts';
+import { JamSession, type JamDocument, type Link } from './collab/session.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountHelp } from './ui/help.ts';
@@ -440,6 +442,18 @@ editor.onChange = (label) => {
     titleInput.value = song().title;
     return;
   }
+  if (label === 'jam') {
+    // Someone else in the jam changed the song: anything may have moved.
+    const s = song();
+    showValue('bpm', s.initialTempo, true);
+    showValue('speed', s.initialSpeed);
+    if (document.activeElement !== titleInput) titleInput.value = s.title;
+    fillOrders();
+    fillInstruments();
+    showPosition();
+    renderEditors();
+    return;
+  }
   fillOrders();
   showPosition();
   // Pattern edits do not touch instruments, so the lists only refresh for the rest.
@@ -811,6 +825,8 @@ function confirmDiscard(): boolean {
 }
 
 function startSong(next: Song): void {
+  // The jam is about the song in the editor; another one there ends it, except the jam's own song arriving.
+  if (!adoptingJamSong) leaveJam('You left the jam to open another song. The jam song stays as it was.');
   stop();
   if (opensNewTab()) {
     tabs[activeTab] = parkTab();
@@ -884,6 +900,8 @@ function showTab(index: number): void {
 
 function switchTab(index: number): void {
   if (index === activeTab || !tabs[index]) return;
+  if (jam?.active && !confirm('Switching songs leaves the jam. Go on?')) return;
+  leaveJam('You left the jam to switch songs. The jam song stays as it was.');
   tabs[activeTab] = parkTab();
   showTab(index);
   status.textContent = `Song ${index + 1} of ${tabs.length}: ${tabName(song(), libraryEntry)}.`;
@@ -899,6 +917,7 @@ function closeTab(index: number): void {
     return;
   }
   if (editor.dirty && !confirm('Close this song and discard its changes?')) return;
+  leaveJam('You left the jam by closing its song.');
   tabs.splice(index, 1);
   if (tabs.length === 0) {
     // The last song makes way for a new one.
@@ -1440,12 +1459,284 @@ shareSend.addEventListener('click', () => void sendShare(false));
 shareFile.addEventListener('click', () => void sendShare(true));
 shareUrl.addEventListener('focus', () => shareUrl.select());
 window.addEventListener('hashchange', () => {
+  const invite = jamFromHash(location.hash);
+  if (invite) return openJamInvite(invite);
   const text = shareFromHash(location.hash);
   if (text && confirmDiscard()) void openSharedSong(text).then((error) => error && (status.textContent = error));
 });
 
+// ---- Jam: editing one song together ------------------------------------------
+
+const jamDialog = $<HTMLDialogElement>('#jam-dialog');
+const jamName = $<HTMLInputElement>('#jam-name');
+const jamInfo = $('#jam-info');
+const jamInviteUrl = $<HTMLInputElement>('#jam-invite-url');
+const jamAnswer = $<HTMLInputElement>('#jam-answer');
+const jamAnswerOut = $<HTMLInputElement>('#jam-answer-out');
+const JAM_NAME_KEY = 'webtracker.jamName';
+let jam: JamSession | null = null;
+/** Host: the room other tabs of this browser join, and how to stop listening there. */
+let jamRoom = '';
+let stopTabs: (() => void) | null = null;
+/** Host: the invite waiting for its answer code. */
+let jamInvite: Invite | null = null;
+/** Guest: an invite opened from a link, waiting for Join. */
+let pendingInvite: { kind: 'rtc' | 'tab'; value: string } | null = null;
+let cancelAnswer: (() => void) | null = null;
+let adoptingJamSong = false;
+
+try {
+  jamName.value = localStorage.getItem(JAM_NAME_KEY) ?? '';
+} catch {
+  // Without storage the name is asked for each time.
+}
+jamName.addEventListener('change', () => {
+  try {
+    localStorage.setItem(JAM_NAME_KEY, jamName.value.trim());
+  } catch {
+    // Only a convenience.
+  }
+});
+
+const jamDoc: JamDocument = {
+  song: () => editor.song,
+  applied: (edits) => editor.applyRemote(edits, edits.some((e) => e.kind === 'song') ? 'channels' : 'jam'),
+  adopt: (next) => {
+    adoptingJamSong = true;
+    try {
+      startSong(next);
+    } finally {
+      adoptingJamSong = false;
+    }
+  },
+};
+editor.onEdit = (edit) => jam?.local(edit);
+
+let lastCursor = '';
+view.onMoved = () => {
+  if (!jam?.active) return;
+  const cursor = { pattern: view.patternIndex, row: view.row, channel: view.channel };
+  const key = `${cursor.pattern}:${cursor.row}:${cursor.channel}`;
+  if (key === lastCursor) return;
+  lastCursor = key;
+  jam.cursor(cursor);
+};
+
+function showPeers(): void {
+  const session = jam;
+  if (!session) return view.setPeers([]);
+  const marks = [...session.cursors].flatMap(([id, cursor]) => {
+    const peer = session.peers.find((p) => p.id === id);
+    return peer ? [{ ...cursor, colour: peer.colour, name: peer.name }] : [];
+  });
+  view.setPeers(marks);
+}
+
+function jamPersonName(): string {
+  return jamName.value.trim() || 'Anonymous';
+}
+
+function wireJam(session: JamSession): void {
+  jam = session;
+  lastCursor = '';
+  session.onPeers = () => renderJam();
+  session.onCursors = showPeers;
+  session.onJoined = () => {
+    status.textContent = `You joined the jam: ${session.peers.map((p) => p.name).join(', ')}.`;
+    jamInfo.textContent = 'You are in. Edits show up for everyone as you make them.';
+    pendingInvite = null;
+    view.onMoved?.();
+    renderJam();
+  };
+  session.onEnd = (reason) => {
+    if (jam === session) jam = null;
+    stopTabs?.();
+    stopTabs = null;
+    jamInvite?.cancel();
+    jamInvite = null;
+    status.textContent = reason;
+    jamInfo.textContent = reason;
+    showPeers();
+    renderJam();
+  };
+}
+
+function leaveJam(reason?: string): void {
+  if (!jam) return;
+  const session = jam;
+  session.leave();
+  if (reason) status.textContent = reason;
+}
+
+function startJam(): void {
+  if (jam) return;
+  const session = JamSession.host(jamDoc, jamPersonName());
+  wireJam(session);
+  jamRoom = newRoom();
+  stopTabs = listenInTabs(jamRoom, (link) => session.addGuest(link));
+  jamInfo.textContent = 'The jam is on. Invite people with a link, one link per person.';
+  status.textContent = 'Jam started.';
+  view.onMoved?.();
+  renderJam();
+}
+
+function jamAddress(param: string, value: string): string {
+  const url = new URL(location.href);
+  url.hash = `${param}=${value}`;
+  return url.href;
+}
+
+async function newJamInvite(): Promise<void> {
+  jamInvite?.cancel();
+  jamInvite = null;
+  jamInfo.textContent = 'Making an invite…';
+  try {
+    const invite = await createInvite();
+    if (!jam?.active) return invite.cancel();
+    jamInvite = invite;
+    jamInviteUrl.value = jamAddress(JAM_PARAM, invite.offer);
+    jamAnswer.value = '';
+    jamInfo.textContent = '';
+  } catch (error) {
+    jamInfo.textContent = `Could not make an invite: ${(error as Error).message}.`;
+  }
+  renderJam();
+}
+
+async function connectJamGuest(): Promise<void> {
+  const invite = jamInvite;
+  const session = jam;
+  if (!invite || !session || !jamAnswer.value.trim()) return;
+  jamInfo.textContent = 'Connecting…';
+  try {
+    const link = await invite.accept(jamAnswer.value);
+    session.addGuest(link);
+    jamInvite = null;
+    jamInviteUrl.value = '';
+    jamInfo.textContent = 'Connected. Make another invite for the next person.';
+  } catch (error) {
+    jamInfo.textContent = `Could not connect: ${(error as Error).message}.`;
+  }
+  renderJam();
+}
+
+/** Opens the Jam dialog for an invite link someone sent. */
+function openJamInvite(invite: { kind: 'rtc' | 'tab'; value: string }): void {
+  history.replaceState(null, '', location.pathname + location.search);
+  if (jam?.active) {
+    status.textContent = 'You are in a jam already; leave it to join another.';
+    return;
+  }
+  pendingInvite = invite;
+  jamAnswerOut.value = '';
+  jamInfo.textContent = '';
+  renderJam();
+  if (!jamDialog.open) jamDialog.showModal();
+  // Tabs of this browser need no answer code, so they join straight away.
+  if (invite.kind === 'tab') void joinJam();
+}
+
+function joinWith(link: Link): void {
+  wireJam(JamSession.join(jamDoc, jamPersonName(), link));
+  jamInfo.textContent = 'Waiting for the song…';
+  renderJam();
+}
+
+async function joinJam(): Promise<void> {
+  const invite = pendingInvite;
+  if (!invite) return;
+  if (invite.kind === 'tab') return joinWith(joinInTab(invite.value));
+  cancelAnswer?.();
+  jamInfo.textContent = 'Making your answer code…';
+  try {
+    const { answer, link, cancel } = await answerInvite(invite.value);
+    cancelAnswer = cancel;
+    jamAnswerOut.value = answer;
+    jamInfo.textContent = '';
+    renderJam();
+    joinWith(await link);
+    cancelAnswer = null;
+  } catch (error) {
+    jamInfo.textContent = `Could not join: ${(error as Error).message}.`;
+    renderJam();
+  }
+}
+
+async function copyField(field: HTMLInputElement, what: string): Promise<void> {
+  if (!field.value) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    jamInfo.textContent = `${what} copied.`;
+  } catch {
+    field.select();
+    jamInfo.textContent = `Select the ${what.toLowerCase()} and copy it.`;
+  }
+}
+
+function renderJam(): void {
+  const session = jam?.active || jam?.role === 'guest' ? jam : null;
+  const hosting = session?.role === 'host';
+  const joining = !session && pendingInvite !== null;
+  $('#jam-start').hidden = !!session || joining;
+  $('#jam-hosting').hidden = !hosting;
+  $('#jam-invite-box').hidden = !hosting || !jamInvite;
+  $('#jam-joining').hidden = !joining && !(session?.role === 'guest' && !session.active);
+  $('#jam-join').hidden = !joining || !!jamAnswerOut.value;
+  $('#jam-answer-box').hidden = !jamAnswerOut.value || !!session?.active;
+  $('#jam-leave').hidden = !session;
+  jamName.disabled = !!session;
+  const people = session?.active ? session.peers : [];
+  $('#jam-people-box').hidden = people.length === 0;
+  $('#jam-people').replaceChildren(
+    ...people.map((peer) => {
+      const li = document.createElement('li');
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      swatch.style.setProperty('--peer', peer.colour);
+      li.append(swatch, `${peer.name}${peer.id === session!.me ? ' (you)' : peer.id === 0 ? ' (host)' : ''}`);
+      return li;
+    }),
+  );
+  const button = $('#jam-open');
+  button.setAttribute('aria-pressed', String(!!session?.active));
+  button.title = session?.active ? `In a jam with ${people.map((p) => p.name).join(', ')}` : 'Edit this song together with others, live';
+}
+
+$('#jam-open').addEventListener('click', () => {
+  renderJam();
+  jamDialog.showModal();
+});
+$('#jam-host').addEventListener('click', startJam);
+$('#jam-invite').addEventListener('click', () => void newJamInvite());
+$('#jam-tab').addEventListener('click', () => {
+  if (jam?.active) window.open(jamAddress(JAM_TAB_PARAM, jamRoom), '_blank');
+});
+$('#jam-invite-copy').addEventListener('click', () => void copyField(jamInviteUrl, 'Invite'));
+$('#jam-connect').addEventListener('click', () => void connectJamGuest());
+$('#jam-join').addEventListener('click', () => void joinJam());
+$('#jam-answer-copy').addEventListener('click', () => void copyField(jamAnswerOut, 'Answer code'));
+$('#jam-leave').addEventListener('click', () => {
+  if (jam?.role === 'host' && jam.peers.length > 1 && !confirm('Leaving ends the jam for everyone. Go on?')) return;
+  if (jam) leaveJam();
+  else {
+    cancelAnswer?.();
+    pendingInvite = null;
+  }
+  jamAnswerOut.value = '';
+  renderJam();
+});
+jamInviteUrl.addEventListener('focus', () => jamInviteUrl.select());
+jamAnswerOut.addEventListener('focus', () => jamAnswerOut.select());
+addEventListener('pagehide', () => jam?.leave());
+
 /** On start, a shared song from the link wins over the last session. */
 async function startUp(): Promise<void> {
+  const invite = jamFromHash(location.hash);
+  if (invite) {
+    await restoreLastSession();
+    openJamInvite(invite);
+    return;
+  }
   const text = shareFromHash(location.hash);
   const error = text ? await openSharedSong(text) : null;
   if (text && !error) return;
