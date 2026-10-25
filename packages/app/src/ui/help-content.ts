@@ -88,7 +88,7 @@ const KEYS: HelpSection = {
       title: 'Files and panels',
       entries: [
         { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV' },
-        { code: 'Setup', text: 'Colours and the colour editor, resampling, stereo width, amplification, volume ramps, row highlights, Space key, MIDI keyboard input' },
+        { code: 'Setup', text: 'Colours and the colour editor, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
         { code: 'Sample view', text: 'Drag to select, drag the yellow markers to move the loop, double-click selects all' },
         { code: 'Instr view', text: 'Click to add envelope points, drag to move, right-click to delete' },
         {
@@ -152,14 +152,14 @@ const EXTENDED: HelpGroup = {
     { id: 'fx-E5', code: 'E5x', name: 'Set finetune', text: 'Tunes the note in this row in 1/8 semitone steps. XM: 8 is in tune, 0–7 flatter, 9–F sharper. MOD: 0 is in tune, 1–7 sharper, 8–F flatter.' },
     { id: 'fx-E6', code: 'E6x', name: 'Pattern loop', text: 'E60 marks the loop start, E6x on a later row plays the rows in between x more times. Each channel has its own loop.' },
     { id: 'fx-E7', code: 'E7x', name: 'Tremolo waveform', text: 'As E4x, for the tremolo.' },
-    { id: 'fx-E8', code: 'E8x', name: 'Set panning (coarse)', text: '0 is left, 8 about centre, F right.' },
+    { id: 'fx-E8', code: 'E8x', name: 'Set panning (coarse)', text: '0 is left, 8 about centre, F right. MOD: ProTracker\'s Karplus-Strong filter instead, which smooths the sample loop on every tick. Most MODs use E8x only as a demo sync marker, so it is off unless switched on in Setup.' },
     { id: 'fx-E9', code: 'E9x', name: 'Retrigger note', text: 'Restarts the note every x ticks; with speed 6, E93 plays it twice per row. Good for drum rolls.' },
     { id: 'fx-EA', code: 'EAx', name: 'Fine volume slide up', text: 'Raises the volume by x once, on the first tick.' },
     { id: 'fx-EB', code: 'EBx', name: 'Fine volume slide down', text: 'Lowers the volume by x once, on the first tick.' },
     { id: 'fx-EC', code: 'ECx', name: 'Note cut', text: 'Sets the volume to 0 at tick x. EC0 silences it at once. Short, punchy hi-hats and chip blips.' },
     { id: 'fx-ED', code: 'EDx', name: 'Note delay', text: 'Starts the note in this row x ticks late, for swing and flams.' },
     { id: 'fx-EE', code: 'EEx', name: 'Pattern delay', text: 'Holds the song on this row for x more rows; effects keep running.' },
-    { id: 'fx-EF', code: 'EFx', name: 'Invert loop', text: 'ProTracker\'s "funk repeat" rewrites the sample while it plays; it is not supported and does nothing.' },
+    { id: 'fx-EF', code: 'EFx', name: 'Invert loop', text: 'MOD only: ProTracker\'s "funk repeat" flips one byte of the sample loop at a time, x sets how fast (F is once per tick). The song\'s sample stays unchanged.' },
   ],
 };
 

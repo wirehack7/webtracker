@@ -56,6 +56,8 @@ export interface Settings {
   amplify: number;
   /** Colours changed in the scheme editor, by CSS custom property, over the theme. */
   colors: Record<string, string>;
+  /** MOD E8x runs ProTracker's Karplus-Strong filter instead of being ignored. */
+  karplusStrong: boolean;
   /** Row highlight every n rows, and the stronger one; 0 is off. */
   beat: number;
   bar: number;
@@ -81,6 +83,7 @@ export const DEFAULTS: Settings = {
   volumeRamps: true,
   amplify: 100,
   colors: {},
+  karplusStrong: false,
   beat: 4,
   bar: 16,
   space: 'ft2',

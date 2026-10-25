@@ -1098,6 +1098,7 @@ function exportWav(): void {
     stereoSeparation: prefs.stereoSeparation,
     volumeRamps: prefs.volumeRamps,
     amplify: prefs.amplify,
+    karplusStrong: prefs.karplusStrong,
     name: safeName(s.title, 'untitled'),
   };
   const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
@@ -1962,7 +1963,14 @@ themeSelect.replaceChildren(
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
 function mixerMessage(): EngineMessage {
-  return { type: 'mixer', resampler: prefs.resampler, stereoSeparation: prefs.stereoSeparation, volumeRamps: prefs.volumeRamps, amplify: prefs.amplify };
+  return {
+    type: 'mixer',
+    resampler: prefs.resampler,
+    stereoSeparation: prefs.stereoSeparation,
+    volumeRamps: prefs.volumeRamps,
+    amplify: prefs.amplify,
+    karplusStrong: prefs.karplusStrong,
+  };
 }
 
 // ---- Colour scheme editor -------------------------------------------------
@@ -2066,6 +2074,7 @@ function showSettings(): void {
   $<HTMLInputElement>('#set-amplify').value = String(prefs.amplify);
   $('#set-amplify-value').textContent = `${prefs.amplify}%`;
   showColours();
+  checkbox('#set-karplus').checked = prefs.karplusStrong;
   $<HTMLSelectElement>('#set-beat').value = String(prefs.beat);
   $<HTMLSelectElement>('#set-bar').value = String(prefs.bar);
   $<HTMLSelectElement>('#set-space').value = prefs.space;
@@ -2085,6 +2094,7 @@ setup.addEventListener('change', () => {
   prefs.volumeRamps = checkbox('#set-ramps').checked;
   prefs.amplify = Number($<HTMLInputElement>('#set-amplify').value);
   $('#set-amplify-value').textContent = `${prefs.amplify}%`;
+  prefs.karplusStrong = checkbox('#set-karplus').checked;
   prefs.beat = Number($<HTMLSelectElement>('#set-beat').value);
   prefs.bar = Number($<HTMLSelectElement>('#set-bar').value);
   prefs.space = $<HTMLSelectElement>('#set-space').value as Settings['space'];

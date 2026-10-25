@@ -12,7 +12,13 @@ class EngineProcessor extends AudioWorkletProcessor {
   private framesToScopes = 0;
   /** Kept here so a reloaded song keeps the muted channels. */
   private muted: boolean[] = [];
-  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; amplify: number } = { resampler: 'auto', stereoSeparation: 100, volumeRamps: true, amplify: 100 };
+  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; amplify: number; karplusStrong: boolean } = {
+    resampler: 'auto',
+    stereoSeparation: 100,
+    volumeRamps: true,
+    amplify: 100,
+    karplusStrong: false,
+  };
   /** Rows a row-by-row play still lets start; the next one stops it. */
   private rowsToPlay = 0;
   private framesToVoices = 0;
@@ -61,7 +67,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (this.player) this.player.muted = this.muted;
         break;
       case 'mixer':
-        this.mixer = { resampler: message.resampler, stereoSeparation: message.stereoSeparation, volumeRamps: message.volumeRamps, amplify: message.amplify };
+        this.mixer = {
+          resampler: message.resampler,
+          stereoSeparation: message.stereoSeparation,
+          volumeRamps: message.volumeRamps,
+          amplify: message.amplify,
+          karplusStrong: message.karplusStrong,
+        };
         if (this.player) Object.assign(this.player, this.mixer);
         break;
       case 'playRow':

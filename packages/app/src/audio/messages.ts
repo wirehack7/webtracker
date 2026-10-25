@@ -9,7 +9,7 @@ export type EngineMessage =
   | { type: 'stop' }
   | { type: 'seek'; order: number }
   | { type: 'mute'; muted: boolean[] }
-  | { type: 'mixer'; resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; amplify: number }
+  | { type: 'mixer'; resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; amplify: number; karplusStrong: boolean }
   // Plays one row and stops when the next one starts.
   | { type: 'playRow'; order: number; row: number }
   // Live edits to the song that is playing.
