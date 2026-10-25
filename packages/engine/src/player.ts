@@ -349,6 +349,8 @@ export class Player {
   karplusStrong = false;
   /** Overall output gain applied after mixing. */
   masterGain: number;
+  /** The listener's amplification in percent, on top of the master gain. */
+  amplify = 100;
 
   private samplesLeftInTick = 0;
   /** MOD samples rewritten by EFx and E8x, by original; the song keeps its own data. */
@@ -494,7 +496,7 @@ export class Player {
     if (this.playing && this.scopeTaps.length) this.pushScopes(frames);
 
     if (this.activeResampler === 'amiga') this.amigaFilter(left, right, frames);
-    const g = this.masterGain;
+    const g = (this.masterGain * Math.max(0, this.amplify)) / 100;
     const width = Math.max(0, this.stereoSeparation) / 100;
     for (let i = 0; i < frames; i++) {
       let l = left[i]!;

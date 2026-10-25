@@ -1321,6 +1321,36 @@ select.value {
   accent-color: var(--btn-on);
 }
 
+.colour-editor {
+  margin-top: calc(var(--px) * 4);
+}
+
+.colour-editor summary {
+  cursor: pointer;
+}
+
+.colour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--px) * 90), 1fr));
+  gap: calc(var(--px) * 2) calc(var(--px) * 4);
+  margin: calc(var(--px) * 3) 0;
+}
+
+.colour-grid label {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+
+.colour-grid input[type='color'] {
+  flex: none;
+  width: calc(var(--px) * 14);
+  height: calc(var(--px) * 9);
+  padding: 0;
+  border: var(--px) solid var(--desk-lo);
+  background: none;
+}
+
 .setup-fields input[type='checkbox'] {
   justify-self: start;
   width: calc(var(--px) * 8);
@@ -1365,4 +1395,8 @@ select.value {
 .ins-picker.one-sample .picker-samples-title,
 .ins-picker.one-sample .picker-samples {
   display: none;
+}
+
+canvas.drawing {
+  cursor: crosshair;
 }

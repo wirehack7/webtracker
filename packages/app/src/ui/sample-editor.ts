@@ -2,12 +2,14 @@ import {
   amplifyRange,
   copyRange,
   crossfadeLoop,
+  drawLine,
   cropRange,
   deleteRange,
   emptySample,
   fadeIn,
   fadeOut,
   filterRange,
+  gainRange,
   fixLoop,
   generateWave,
   insertFrames,
@@ -41,8 +43,8 @@ export interface SampleEditorHost {
   status(text: string): void;
   /** Opens the file picker that imports into the current sample slot. */
   importFile(): void;
-  /** Downloads the current sample as a WAV file. */
-  saveSample(): void;
+  /** Downloads the current sample as a WAV or IFF 8SVX file. */
+  saveSample(format: 'wav' | 'iff'): void;
 }
 
 const WAVE_LABELS: Record<WaveShape, string> = {
@@ -73,7 +75,10 @@ export class SampleEditor {
   private zoom: Range | null = null;
   private clipboard: Float32Array | null = null;
   private waveLengthIndex = 1;
-  private drag: { kind: 'select' | 'loopStart' | 'loopEnd'; anchor: number; before: ReturnType<SongEditor['snapshotInstrument']> | null } | null = null;
+  private drag: { kind: 'select' | 'loopStart' | 'loopEnd' | 'draw'; anchor: number; level: number; before: ReturnType<SongEditor['snapshotInstrument']> | null } | null = null;
+  /** Quick Draw: dragging on the waveform draws it instead of selecting. */
+  private drawing = false;
+  private readonly drawButton: HTMLButtonElement;
 
   constructor(private readonly host: SampleEditorHost) {
     this.name = textInput('Name', 22, (value) => this.edit('name', (s) => (s.name = value)));
@@ -89,6 +94,7 @@ export class SampleEditor {
       toggle('Fwd', () => this.setLoop(LoopType.Forward), 'Forward loop'),
       toggle('Ping', () => this.setLoop(LoopType.PingPong), 'Ping-pong loop'),
     ];
+    this.drawButton = toggle('Draw', () => this.toggleDraw(), 'Quick Draw: drag on the waveform to draw it by hand');
     this.waveLength = stepper('Len', (d) => this.stepWaveLength(d), (i) => String(WAVE_LENGTHS[i] ?? 32), 1);
 
     const props = el('div', 'tool-row');
@@ -106,6 +112,7 @@ export class SampleEditor {
       button('Norm', () => this.rangeTool('normalize', normalizeRange), 'Normalize to full scale'),
       button('Vol-', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 0.5)), 'Halve the volume'),
       button('Vol+', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 2)), 'Double the volume (clips)'),
+      button('Amp', () => this.gain(), 'Change the volume by any amount, or ramp it from one amount to another'),
       button('FadeIn', () => this.rangeTool('fade in', fadeIn)),
       button('FadeOut', () => this.rangeTool('fade out', fadeOut)),
       button('x2', () => this.edit('resample', (s) => resample(s, 2)), 'Resample to twice the length, same pitch'),
@@ -127,7 +134,9 @@ export class SampleEditor {
       button('HP', () => this.filter('highpass'), 'High-pass filter the selection'),
       button('XFade', () => this.crossfade(), 'Crossfade the loop end into the frames before the loop start'),
       button('Rsmp', () => this.resampleTo(), 'Resample to any length, same pitch'),
-      button('Save', () => host.saveSample(), 'Save the sample as WAV'),
+      this.drawButton,
+      button('Save', () => host.saveSample('wav'), 'Save the sample as WAV'),
+      button('IFF', () => host.saveSample('iff'), 'Save the sample as Amiga IFF 8SVX (8-bit, forward loop)'),
     );
 
     const generate = el('div', 'tool-row');
@@ -212,6 +221,27 @@ export class SampleEditor {
     const cutoff = Number(answer);
     if (!answer || !(cutoff > 0)) return;
     this.rangeTool(kind, (s, r) => filterRange(s, r, kind, cutoff, rate));
+  }
+
+  private toggleDraw(): void {
+    this.drawing = !this.drawing;
+    setPressed(this.drawButton, this.drawing);
+    this.canvas.classList.toggle('drawing', this.drawing);
+    this.host.status(this.drawing ? 'Quick Draw on: drag on the waveform to draw.' : 'Quick Draw off.');
+  }
+
+  /** Asks for a gain in percent, or a start and end percentage for a ramp. */
+  private gain(): void {
+    const answer = prompt('Volume in percent, or start and end percent for a ramp (e.g. 100 0):', '150');
+    if (!answer) return;
+    const parts = answer.split(/[\s,;]+/).filter(Boolean).map(Number);
+    const from = parts[0];
+    const to = parts[1] ?? from;
+    if (from === undefined || parts.length > 2 || !parts.every((p) => p >= 0 && p <= 1000)) {
+      this.host.status('Give one or two percentages between 0 and 1000.');
+      return;
+    }
+    this.rangeTool('amplify', (s, r) => gainRange(s, r, from / 100, (to ?? from) / 100));
   }
 
   private crossfade(): void {
@@ -327,6 +357,12 @@ export class SampleEditor {
     return z && z.end <= len ? z : { start: 0, end: Math.max(1, len) };
   }
 
+  /** The sample level, -1..1, at a height on the canvas. */
+  private levelAt(clientY: number): number {
+    const box = this.canvas.getBoundingClientRect();
+    return Math.max(-1, Math.min(1, 1 - (2 * (clientY - box.top)) / Math.max(1, box.height)));
+  }
+
   private frameAt(clientX: number): number {
     const s = this.sample();
     if (!s) return 0;
@@ -351,13 +387,19 @@ export class SampleEditor {
       const looped = s.loopType !== LoopType.None && s.loopLength > 0;
       const near = (frame: number) => Math.abs(this.xOf(frame, s) - x) <= 6;
       const index = this.host.instrumentIndex();
-      if (looped && near(s.loopStart)) {
-        this.drag = { kind: 'loopStart', anchor: 0, before: this.host.editor.snapshotInstrument(index) };
+      if (this.drawing) {
+        const f = Math.min(s.data.length - 1, this.frameAt(event.clientX));
+        const level = this.levelAt(event.clientY);
+        this.drag = { kind: 'draw', anchor: f, level, before: this.host.editor.snapshotInstrument(index) };
+        drawLine(s, f, level, f, level);
+        this.draw();
+      } else if (looped && near(s.loopStart)) {
+        this.drag = { kind: 'loopStart', anchor: 0, level: 0, before: this.host.editor.snapshotInstrument(index) };
       } else if (looped && near(s.loopStart + s.loopLength)) {
-        this.drag = { kind: 'loopEnd', anchor: 0, before: this.host.editor.snapshotInstrument(index) };
+        this.drag = { kind: 'loopEnd', anchor: 0, level: 0, before: this.host.editor.snapshotInstrument(index) };
       } else {
         const f = this.frameAt(event.clientX);
-        this.drag = { kind: 'select', anchor: f, before: null };
+        this.drag = { kind: 'select', anchor: f, level: 0, before: null };
         this.selection = { start: f, end: f };
         this.draw();
       }
@@ -367,7 +409,14 @@ export class SampleEditor {
       const s = this.sample();
       if (!drag || !s) return;
       const f = this.frameAt(event.clientX);
-      if (drag.kind === 'select') {
+      if (drag.kind === 'draw') {
+        // Each move draws a line from the last point, so fast strokes leave no gaps.
+        const to = Math.min(s.data.length - 1, f);
+        const level = this.levelAt(event.clientY);
+        drawLine(s, drag.anchor, drag.level, to, level);
+        drag.anchor = to;
+        drag.level = level;
+      } else if (drag.kind === 'select') {
         this.selection = { start: Math.min(drag.anchor, f), end: Math.max(drag.anchor, f) };
       } else {
         const end = s.loopStart + s.loopLength;
@@ -385,7 +434,7 @@ export class SampleEditor {
     const finish = () => {
       const drag = this.drag;
       this.drag = null;
-      if (drag?.before) this.host.editor.recordInstrument(this.host.instrumentIndex(), 'loop', drag.before);
+      if (drag?.before) this.host.editor.recordInstrument(this.host.instrumentIndex(), drag.kind === 'draw' ? 'draw' : 'loop', drag.before);
       this.render();
     };
     c.addEventListener('pointerup', finish);

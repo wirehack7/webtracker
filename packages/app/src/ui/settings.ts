@@ -10,6 +10,40 @@ export const THEMES = {
 } as const;
 export type Theme = keyof typeof THEMES;
 
+/** The colours the scheme editor offers, by CSS custom property, with their labels. */
+export const COLOR_VARS: [string, string][] = [
+  ['--desk', 'Panels'],
+  ['--desk-hi', 'Panel light'],
+  ['--desk-lo', 'Panel shadow'],
+  ['--btn', 'Buttons'],
+  ['--btn-hi', 'Button light'],
+  ['--btn-lo', 'Button shadow'],
+  ['--btn-on', 'Button on'],
+  ['--text', 'Text'],
+  ['--label', 'Labels'],
+  ['--dim', 'Dim text'],
+  ['--field-bg', 'Field'],
+  ['--field-fg', 'Field text'],
+  ['--list-sel', 'List selection'],
+  ['--pat-bg', 'Pattern'],
+  ['--pat-rowhl', 'Highlight'],
+  ['--pat-rowhl2', 'Highlight 2'],
+  ['--pat-cursor', 'Cursor row'],
+  ['--pat-cell', 'Cursor'],
+  ['--pat-sel', 'Selection'],
+  ['--pat-rec', 'Edit mode row'],
+  ['--pat-rn', 'Row numbers'],
+  ['--pat-sep', 'Separators'],
+  ['--pat-note', 'Notes'],
+  ['--pat-instr', 'Instruments'],
+  ['--pat-vol', 'Volume, waveform'],
+  ['--pat-fx', 'Effects'],
+  ['--pat-param', 'Parameters'],
+  ['--pat-empty', 'Empty cells'],
+  ['--scope-line', 'Scopes'],
+  ['--play-marker', 'Play marker'],
+];
+
 export interface Settings {
   theme: Theme;
   /** How samples are resampled; 'auto' is Amiga for MOD and linear for XM. */
@@ -18,6 +52,10 @@ export interface Settings {
   stereoSeparation: number;
   /** Short volume ramps against clicks. */
   volumeRamps: boolean;
+  /** Output amplification in percent, 25..400. */
+  amplify: number;
+  /** Colours changed in the scheme editor, by CSS custom property, over the theme. */
+  colors: Record<string, string>;
   /** MOD E8x runs ProTracker's Karplus-Strong filter instead of being ignored. */
   karplusStrong: boolean;
   /** Row highlight every n rows, and the stronger one; 0 is off. */
@@ -43,6 +81,8 @@ export const DEFAULTS: Settings = {
   resampler: 'auto',
   stereoSeparation: 100,
   volumeRamps: true,
+  amplify: 100,
+  colors: {},
   karplusStrong: false,
   beat: 4,
   bar: 16,
@@ -65,10 +105,22 @@ export function loadSettings(): Settings {
     delete stored.interpolation;
     const merged = { ...DEFAULTS, ...stored };
     if (!(merged.theme in THEMES)) merged.theme = DEFAULTS.theme;
+    merged.colors = parseColors(merged.colors);
     return merged;
   } catch {
     return { ...DEFAULTS };
   }
+}
+
+/** Keeps only known colour properties with #rrggbb values, from stored or imported data. */
+export function parseColors(value: unknown): Record<string, string> {
+  const colors: Record<string, string> = {};
+  if (!value || typeof value !== 'object') return colors;
+  for (const [name] of COLOR_VARS) {
+    const v = (value as Record<string, unknown>)[name];
+    if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) colors[name] = v.toLowerCase();
+  }
+  return colors;
 }
 
 export function saveSettings(settings: Settings): void {

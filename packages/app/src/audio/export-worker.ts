@@ -16,6 +16,7 @@ export interface ExportRequest {
   resampler: Resampler;
   stereoSeparation: number;
   volumeRamps: boolean;
+  amplify: number;
   karplusStrong: boolean;
   name: string;
 }
@@ -33,8 +34,8 @@ const scope = self as unknown as {
 const pad = (n: number) => String(n + 1).padStart(2, '0');
 
 scope.onmessage = (event) => {
-  const { song, format, sampleRate, stems, muted, name, resampler, stereoSeparation, volumeRamps, karplusStrong } = event.data;
-  const mixer = { resampler, stereoSeparation, volumeRamps, karplusStrong };
+  const { song, format, sampleRate, stems, muted, name, resampler, stereoSeparation, volumeRamps, amplify, karplusStrong } = event.data;
+  const mixer = { resampler, stereoSeparation, volumeRamps, amplify, karplusStrong };
   try {
     const passes = stems ? song.channels + 1 : 1;
     const progress = (pass: number) => (f: number) => scope.postMessage({ type: 'progress', fraction: (pass + f) / passes });

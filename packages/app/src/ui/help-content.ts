@@ -49,6 +49,7 @@ const KEYS: HelpSection = {
         { code: 'Enter', text: 'Play song from the current position' },
         { code: 'Shift+Enter', text: 'Play the current pattern' },
         { code: 'Ctrl+Enter', text: 'Play the pattern from the cursor row (Shift: the song)' },
+        { code: 'Alt+Enter', text: 'Play only the cursor row and move down one row' },
         { code: 'Ctrl+F', text: 'Follow song on or off' },
         { code: 'Shift+M / Shift+U', text: 'Mute or unmute the cursor channel / unmute all' },
         { code: 'Scopes', text: 'Click to mute a channel, right-click to solo it' },
@@ -87,7 +88,7 @@ const KEYS: HelpSection = {
       title: 'Files and panels',
       entries: [
         { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV' },
-        { code: 'Setup', text: 'Colours, resampling, stereo width, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
+        { code: 'Setup', text: 'Colours and the colour editor, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
         { code: 'Sample view', text: 'Drag to select, drag the yellow markers to move the loop, double-click selects all' },
         { code: 'Instr view', text: 'Click to add envelope points, drag to move, right-click to delete' },
         {
