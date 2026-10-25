@@ -18,6 +18,8 @@ export interface Settings {
   stereoSeparation: number;
   /** Short volume ramps against clicks. */
   volumeRamps: boolean;
+  /** MOD E8x runs ProTracker's Karplus-Strong filter instead of being ignored. */
+  karplusStrong: boolean;
   /** Row highlight every n rows, and the stronger one; 0 is off. */
   beat: number;
   bar: number;
@@ -41,6 +43,7 @@ export const DEFAULTS: Settings = {
   resampler: 'auto',
   stereoSeparation: 100,
   volumeRamps: true,
+  karplusStrong: false,
   beat: 4,
   bar: 16,
   space: 'ft2',

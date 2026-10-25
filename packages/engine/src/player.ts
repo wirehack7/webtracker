@@ -16,7 +16,7 @@ import {
   type Sample,
   type Song,
 } from './song.ts';
-import { PT_PERIODS, PT_VIBRATO } from './protracker.ts';
+import { PT_FUNK, PT_PERIODS, PT_VIBRATO } from './protracker.ts';
 
 // Vibrato/tremolo waveforms, 64 steps, amplitude +-255.
 const WAVEFORMS: Int16Array[] = (() => {
@@ -47,6 +47,8 @@ const FT2_AUTO_VIB_SINE = Int8Array.from({ length: 256 }, (_, i) => Math.round(-
 const FT2_NOTES = 12 * 10 * 16 + 16;
 /** ProTracker's lowest note, C-1 (period 856), as a note number. */
 const PT_LOW_NOTE = 37;
+/** A sample value as the signed byte ProTracker holds in memory. */
+const toByte = (v: number) => Math.max(-128, Math.min(127, Math.round(v * 128)));
 const AMIGA_PAL_CLOCK = 3546895;
 /** Period limits for MODs that use notes outside ProTracker's three octaves. */
 const PT_MIN_EXTENDED = 14;
@@ -277,6 +279,9 @@ class Channel {
   ptLoopIns = 0;
   ptWaveControl = 0;
   ptGlissFunk = 0;
+  /** EFx: the byte of the loop inverted last, and the counter towards the next one. */
+  ptWaveStart = 0;
+  ptFunkOffset = 0;
   ptVibratoCmd = 0;
   ptTremoloCmd = 0;
   ptTrigger = false;
@@ -337,10 +342,17 @@ export class Player {
   stereoSeparation = 100;
   /** Short volume ramps against clicks; off changes volume at once, like old hardware. */
   volumeRamps = true;
+  /**
+   * Lets E8x in MODs run ProTracker's Karplus-Strong filter over the sample
+   * loop. Off by default: most MODs use E8x only as a sync marker for demos.
+   */
+  karplusStrong = false;
   /** Overall output gain applied after mixing. */
   masterGain: number;
 
   private samplesLeftInTick = 0;
+  /** MOD samples rewritten by EFx and E8x, by original; the song keeps its own data. */
+  private ptCopies = new Map<Sample, Sample>();
   private patternDelay = 0;
   private repeatingRow = false;
   private jumpOrder = -1;
@@ -427,6 +439,7 @@ export class Player {
     this.loops = 0;
     this.ledFilter = false;
     this.filterState.fill(0);
+    this.ptCopies.clear();
   }
 
   /** The resampler in effect, with 'auto' resolved by the song's format. */
@@ -2035,7 +2048,8 @@ export class Player {
     if (note > 0 && note <= 96 && (note < PT_LOW_NOTE || note >= PT_LOW_NOTE + 36)) this.ptExtended = true;
     if (instrument >= 1 && instrument <= 31) {
       // An empty sample slot loads too: it silences the channel.
-      const s = this.song.instruments[instrument - 1]?.samples[0];
+      const original = this.song.instruments[instrument - 1]?.samples[0];
+      const s = original && (this.ptCopies.get(original) ?? original);
       const words = s ? s.data.length >> 1 : 0;
       const looped = !!s && s.loopType !== LoopType.None && s.loopLength > 2;
       const repeat = looped ? s.loopStart >> 1 : 0;
@@ -2050,6 +2064,7 @@ export class Player {
       ch.ptLoop = ch.ptStart;
       ch.ptLoopPos = repeat * 2;
       ch.ptLoopIns = instrument;
+      ch.ptWaveStart = ch.ptLoopPos;
       if (repeat > 0) ch.ptLength = repeat + ch.ptReplen;
     }
     // MODs have no volume column, but one entered in the editor still sets the volume.
@@ -2192,6 +2207,7 @@ export class Player {
 
   /** Effects on the other ticks, and on tick 0 of a row repeated by EEx (checkeffects). */
   private ptCheckEffects(ch: Channel): void {
+    this.ptUpdateFunk(ch);
     const effect = ch.effect;
     if (effect !== 0 || ch.param !== 0) {
       switch (effect) {
@@ -2267,6 +2283,9 @@ export class Player {
       case 0x7:
         ch.ptWaveControl = (y << 4) | (ch.ptWaveControl & 15);
         break;
+      case 0x8:
+        if (this.karplusStrong) this.ptKarplusStrong(ch);
+        break;
       case 0x9:
         if (y === 0 || (tick0 && ch.ptNote > 0)) break;
         if (this.tick % y === 0) this.ptRetrigger(ch);
@@ -2286,8 +2305,57 @@ export class Player {
       case 0xe:
         if (tick0 && this.pattDelTime2 === 0) this.pattDelTime = y + 1;
         break;
-      // E8x (Karplus-Strong) and EFx (invert loop) rewrite the sample data, so they are left out.
+      case 0xf:
+        if (!tick0) break;
+        ch.ptGlissFunk = (y << 4) | (ch.ptGlissFunk & 15);
+        if (y) this.ptUpdateFunk(ch);
+        break;
     }
+  }
+
+  /** A copy of `s` that EFx and E8x may change, put in place of `s` on every channel. */
+  private ptWritable(s: Sample): Sample {
+    const own = this.ptCopies.get(s);
+    if (own) return own;
+    for (const copy of this.ptCopies.values()) if (copy === s) return s;
+    const copy = { ...s, data: s.data.slice() };
+    this.ptCopies.set(s, copy);
+    for (const ch of this.channels) {
+      if (ch.ptStart === s) ch.ptStart = copy;
+      if (ch.ptLoop === s) ch.ptLoop = copy;
+      if (ch.latch === s) ch.latch = copy;
+      if (ch.sample === s) ch.sample = copy;
+    }
+    return copy;
+  }
+
+  /** EFx (invert loop): flips one more byte of the loop each time the counter wraps. */
+  private ptUpdateFunk(ch: Channel): void {
+    const speed = ch.ptGlissFunk >> 4;
+    if (speed === 0) return;
+    ch.ptFunkOffset += PT_FUNK[speed]!;
+    if (ch.ptFunkOffset < 128) return;
+    ch.ptFunkOffset = 0;
+    if (!ch.ptLoop) return;
+    if (++ch.ptWaveStart >= ch.ptLoopPos + ch.ptReplen * 2) ch.ptWaveStart = ch.ptLoopPos;
+    const data = this.ptWritable(ch.ptLoop).data;
+    const i = ch.ptWaveStart;
+    if (i < data.length) data[i] = (-1 - toByte(data[i]!)) / 128;
+  }
+
+  /** E8x: averages each byte of the loop with the next one, on every tick. */
+  private ptKarplusStrong(ch: Channel): void {
+    if (!ch.ptLoop) return;
+    const data = this.ptWritable(ch.ptLoop).data;
+    const start = ch.ptLoopPos;
+    // ProTracker counts in 16 bits, so loops over 64 KB wrap.
+    const end = (ch.ptReplen * 2 - 2) & 0xffff;
+    const at = (i: number) => (start + i < data.length ? toByte(data[start + i]!) : 0);
+    const set = (i: number, v: number) => {
+      if (start + i < data.length) data[start + i] = v / 128;
+    };
+    for (let i = 0; i <= end; i++) set(i, (at(i) + at(i + 1)) >> 1);
+    set(end + 1, (at(end + 1) + at(0)) >> 1);
   }
 
   private ptVolumeSlide(ch: Channel): void {

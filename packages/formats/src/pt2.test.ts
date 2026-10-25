@@ -88,4 +88,34 @@ describe('ProTracker replayer', () => {
     const { left } = play(cells, [{ data: square(64, 32), volume: 64, loopStart: 0, loopLength: 64 }], 0.6);
     expect(at(left, 3 * ROW + 0.07, 4 * ROW)).toBeCloseTo((2 * RATE) / 32, -1);
   });
+  it('inverts the loop byte by byte with EFx, without touching the song', () => {
+    const cells = [];
+    cells[0] = [{ note: C4, ins: 1, eff: 0x0e, param: 0xff }];
+    const data = square(64, 64);
+    const song = loadModule(buildMod({ samples: [{ data, volume: 64, loopStart: 0, loopLength: 64 }], patterns: [cells], orders: [0] }), 'test.mod');
+    const before = song.instruments[0]!.samples[0]!.data.slice();
+    // EFF flips one byte per tick: after 32 ticks nearly the whole loop is
+    // negative, so the output sits far below zero.
+    const { left } = render(song, 1, (p) => (p.resampler = 'linear'));
+    const mean = (from: number, to: number) => left.slice(from * SR, to * SR).reduce((a, b) => a + b, 0) / ((to - from) * SR);
+    expect(Math.abs(mean(0.02, 0.04))).toBeLessThan(rms(left, 0.02 * SR, 0.04 * SR) / 4);
+    expect(mean(0.67, 0.69)).toBeLessThan(-0.8 * rms(left, 0.67 * SR, 0.69 * SR));
+    expect(song.instruments[0]!.samples[0]!.data).toEqual(before);
+  });
+
+  it('runs E8x as Karplus-Strong only when it is switched on', () => {
+    const cells = [];
+    cells[0] = [{ note: C4, ins: 1, eff: 0x0e, param: 0x80 }];
+    for (let r = 1; r < 8; r++) cells[r] = [{ eff: 0x0e, param: 0x80 }];
+    const samples = [{ data: square(64, 2), volume: 64, loopStart: 0, loopLength: 64 }];
+    const song = loadModule(buildMod({ samples, patterns: [cells], orders: [0] }), 'test.mod');
+    const off = render(song, 0.5, (p) => (p.resampler = 'linear')).left;
+    const on = render(song, 0.5, (p) => {
+      p.resampler = 'linear';
+      p.karplusStrong = true;
+    }).left;
+    expect(rms(off, 0.3 * SR, 0.5 * SR)).toBeCloseTo(rms(off, 0, 0.1 * SR), 2);
+    // Averaging neighbours wipes out the Nyquist square at once.
+    expect(rms(on, 0.3 * SR, 0.5 * SR)).toBeLessThan(rms(off, 0.3 * SR, 0.5 * SR) / 10);
+  });
 });

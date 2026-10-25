@@ -12,7 +12,12 @@ class EngineProcessor extends AudioWorkletProcessor {
   private framesToScopes = 0;
   /** Kept here so a reloaded song keeps the muted channels. */
   private muted: boolean[] = [];
-  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean } = { resampler: 'auto', stereoSeparation: 100, volumeRamps: true };
+  private mixer: { resampler: Resampler; stereoSeparation: number; volumeRamps: boolean; karplusStrong: boolean } = {
+    resampler: 'auto',
+    stereoSeparation: 100,
+    volumeRamps: true,
+    karplusStrong: false,
+  };
   private framesToVoices = 0;
   /** Whether the last 'voices' message listed any, so silence is sent once. */
   private hadVoices = false;
@@ -48,7 +53,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (this.player) this.player.muted = this.muted;
         break;
       case 'mixer':
-        this.mixer = { resampler: message.resampler, stereoSeparation: message.stereoSeparation, volumeRamps: message.volumeRamps };
+        this.mixer = {
+          resampler: message.resampler,
+          stereoSeparation: message.stereoSeparation,
+          volumeRamps: message.volumeRamps,
+          karplusStrong: message.karplusStrong,
+        };
         if (this.player) Object.assign(this.player, this.mixer);
         break;
       case 'play':

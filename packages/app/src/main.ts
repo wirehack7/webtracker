@@ -1083,6 +1083,7 @@ function exportWav(): void {
     resampler: prefs.resampler,
     stereoSeparation: prefs.stereoSeparation,
     volumeRamps: prefs.volumeRamps,
+    karplusStrong: prefs.karplusStrong,
     name: safeName(s.title, 'untitled'),
   };
   const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
@@ -1946,7 +1947,13 @@ themeSelect.replaceChildren(
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
 function mixerMessage(): EngineMessage {
-  return { type: 'mixer', resampler: prefs.resampler, stereoSeparation: prefs.stereoSeparation, volumeRamps: prefs.volumeRamps };
+  return {
+    type: 'mixer',
+    resampler: prefs.resampler,
+    stereoSeparation: prefs.stereoSeparation,
+    volumeRamps: prefs.volumeRamps,
+    karplusStrong: prefs.karplusStrong,
+  };
 }
 
 function applySettings(): void {
@@ -1969,6 +1976,7 @@ function showSettings(): void {
   $<HTMLInputElement>('#set-separation').value = String(prefs.stereoSeparation);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   checkbox('#set-ramps').checked = prefs.volumeRamps;
+  checkbox('#set-karplus').checked = prefs.karplusStrong;
   $<HTMLSelectElement>('#set-beat').value = String(prefs.beat);
   $<HTMLSelectElement>('#set-bar').value = String(prefs.bar);
   $<HTMLSelectElement>('#set-space').value = prefs.space;
@@ -1986,6 +1994,7 @@ setup.addEventListener('change', () => {
   prefs.stereoSeparation = Number($<HTMLInputElement>('#set-separation').value);
   $('#set-separation-value').textContent = `${prefs.stereoSeparation}%`;
   prefs.volumeRamps = checkbox('#set-ramps').checked;
+  prefs.karplusStrong = checkbox('#set-karplus').checked;
   prefs.beat = Number($<HTMLSelectElement>('#set-beat').value);
   prefs.bar = Number($<HTMLSelectElement>('#set-bar').value);
   prefs.space = $<HTMLSelectElement>('#set-space').value as Settings['space'];
