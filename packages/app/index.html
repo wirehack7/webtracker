@@ -63,6 +63,7 @@
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
               <button type="button" class="btn" id="jam-open" aria-pressed="false" title="Edit this song together with others, live">Jam</button>
               <button type="button" class="btn" id="help-open" title="Keys, effects and workflows">Help</button>
+              <button type="button" class="btn" id="about-open" title="Who made this">About</button>
               <a class="btn" id="replayer-link" href="./replayer/" target="_blank" rel="noopener" title="Play your songs in your own demos and intros: the replayer files, a demo and the API">Replayer</a>
               <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
               <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
@@ -154,7 +155,7 @@
 
       <footer class="statusbar">
         <span id="status">Press a key or tap the piano to start audio.</span>
-        <span class="brand">chiptrackr</span>
+        <button type="button" class="brand" id="brand-about" title="About chiptrackr">chiptrackr</button>
       </footer>
     </div>
 
@@ -172,6 +173,16 @@
       <div class="help-body">
         <p class="help-empty" hidden>Nothing found.</p>
       </div>
+    </dialog>
+    <dialog class="panel help file-dialog about" id="about" aria-label="About">
+      <h2 class="ptitle">About</h2>
+      <canvas class="about-demo" width="320" height="180" aria-label="Demo animation: copper bars, a starfield, the chiptrackr logo and a sine scroller"></canvas>
+      <p class="about-title">chiptrackr</p>
+      <p class="about-by">made by <a href="https://github.com/wirehack7" target="_blank" rel="noopener">wirehack7</a></p>
+      <p class="info">A tracker for chiptunes, modules and the demoscene, right in your browser. Free and open source: the code is on <a href="https://github.com/wirehack7/webtracker" target="_blank" rel="noopener">GitHub</a>. Click the demo to pause it.</p>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
     </dialog>
     <dialog class="panel help file-dialog" id="file-dialog">
       <h2 class="ptitle">Save</h2>
