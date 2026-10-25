@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  drawLine,
+  gainRange,
   copyRange,
   crossfadeLoop,
   cropRange,
@@ -162,5 +164,27 @@ describe('sample tools', () => {
     expect(rateForTuning(0, 0)).toBeCloseTo(8363);
     const t = tuningForRate(44100);
     expect(rateForTuning(t.relativeNote, t.finetune)).toBeCloseTo(44100, -2);
+  });
+});
+
+describe('gainRange', () => {
+  it('ramps the gain across the range and clips', () => {
+    const s = { data: new Float32Array([0.5, 0.5, 0.5, 0.5, 0.5]) } as Sample;
+    gainRange(s, { start: 0, end: 5 }, 1, 0);
+    expect(Array.from(s.data)).toEqual([0.5, 0.375, 0.25, 0.125, 0]);
+    gainRange(s, { start: 0, end: 1 }, 4, 4);
+    expect(s.data[0]).toBe(1);
+  });
+});
+
+describe('drawLine', () => {
+  it('draws a straight line in either direction and stays inside the sample', () => {
+    const s = { data: new Float32Array(5) } as Sample;
+    drawLine(s, 4, 1, 0, -1);
+    expect(Array.from(s.data)).toEqual([-1, -0.5, 0, 0.5, 1]);
+    drawLine(s, -3, 2, 1, 2);
+    expect(Array.from(s.data)).toEqual([1, 1, 0, 0.5, 1]);
+    drawLine(s, 9, 0, 9, 0);
+    expect(s.data.length).toBe(5);
   });
 });

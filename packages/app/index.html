@@ -248,6 +248,7 @@
           </select>
         </label>
         <label><span class="label">Stereo</span><span class="range-field"><input type="range" id="set-separation" min="0" max="200" step="10" /><span id="set-separation-value"></span></span></label>
+        <label><span class="label">Amplify</span><span class="range-field"><input type="range" id="set-amplify" min="25" max="400" step="25" title="Makes the whole output louder or quieter; very loud songs are softly limited" /><span id="set-amplify-value"></span></span></label>
         <label><span class="label">Volume ramps</span><input type="checkbox" id="set-ramps" /></label>
         <label><span class="label">Highlight</span>
           <select class="value" id="set-beat">
@@ -279,6 +280,16 @@
         </label>
         <label><span class="label">Song tabs</span><input type="checkbox" id="set-tabs" title="New, loaded and shared songs open in a new tab instead of replacing the current song" /></label>
       </div>
+      <details class="colour-editor" id="colour-editor">
+        <summary class="ptitle">Edit colours</summary>
+        <div class="colour-grid" id="colour-grid"></div>
+        <div class="row">
+          <button type="button" class="btn" id="colours-reset" title="Go back to the colours of the chosen scheme">Reset</button>
+          <button type="button" class="btn" id="colours-export" title="Save these colours as a file">Export</button>
+          <button type="button" class="btn" id="colours-import" title="Load colours from a file">Import</button>
+          <input type="file" id="colours-file" accept=".json,application/json" hidden />
+        </div>
+      </details>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>

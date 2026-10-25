@@ -124,6 +124,23 @@ export function amplifyRange(sample: Sample, range: Range, factor: number): void
   mapRange(sample, range, (v) => clip(v * factor));
 }
 
+/** Scales the range by a gain that moves from `from` to `to` across it, clipping at full scale. */
+export function gainRange(sample: Sample, range: Range, from: number, to: number): void {
+  mapRange(sample, range, (v, i, n) => clip(v * (n > 1 ? from + ((to - from) * i) / (n - 1) : from)));
+}
+
+/**
+ * Draws a straight line from frame `x0` at level `y0` to frame `x1` at `y1`,
+ * for drawing a waveform by hand. Levels are clipped to -1..1.
+ */
+export function drawLine(sample: Sample, x0: number, y0: number, x1: number, y1: number): void {
+  const len = sample.data.length;
+  if (x1 < x0) [x0, y0, x1, y1] = [x1, y1, x0, y0];
+  const a = Math.max(0, Math.round(x0));
+  const b = Math.min(len - 1, Math.round(x1));
+  for (let i = a; i <= b; i++) sample.data[i] = clip(x1 === x0 ? y1 : y0 + ((y1 - y0) * (i - x0)) / (x1 - x0));
+}
+
 /** Scales the range so its loudest frame reaches full scale. */
 export function normalizeRange(sample: Sample, range: Range): void {
   const r = clampRange(sample, range);
