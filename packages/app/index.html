@@ -19,6 +19,19 @@
     <meta name="twitter:image" content="https://chiptrackr.com/social-preview.png" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- Umami analytics, loaded only on the live site so local dev and previews are not counted. -->
+    <script>
+      if (/^(www\.)?chiptrackr\.com$/.test(location.hostname)) {
+        for (const name of ['script', 'recorder']) {
+          const s = document.createElement('script');
+          s.defer = true;
+          s.src = `https://umami.capsop.com/${name}.js`;
+          s.dataset.websiteId = 'c7cd5551-908e-4ee9-a929-4ed7fa28d141';
+          s.dataset.domains = 'chiptrackr.com,www.chiptrackr.com';
+          document.head.append(s);
+        }
+      }
+    </script>
   </head>
   <body>
     <div class="app" id="app" data-tab="song" data-view="pattern">
