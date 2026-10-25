@@ -185,13 +185,17 @@ button.onclick = () => music.play();   // browsers need a click first
       </p>
     </main>
     <script type="module">
-      import { createReplayer } from './webtracker-replayer.js';
+      import { createReplayer, loadSong } from './webtracker-replayer.js';
 
       const $ = (id) => document.getElementById(id);
       const stage = $('stage');
       const view = $('view');
+      // The loaded song shows at once; its replayer is made on the first Play,
+      // because browsers only start audio after a click.
+      let song = null;
       let music = null;
       let context = null;
+      let loads = 0;
 
       // Clicking the stage cycles through these.
       const VIEWS = ['channels', 'pattern', 'scopes'];
@@ -315,7 +319,7 @@ button.onclick = () => music.play();   // browsers need a click first
       }
 
       function drawScopes() {
-        if (!canvas || !music) return;
+        if (!canvas || !song) return;
         const ratio = devicePixelRatio || 1;
         const w = Math.round(canvas.clientWidth * ratio);
         const h = Math.round(canvas.clientHeight * ratio);
@@ -326,14 +330,14 @@ button.onclick = () => music.play();   // browsers need a click first
         const g = canvas.getContext('2d');
         if (!g || !w || !h) return;
         g.clearRect(0, 0, w, h);
-        const count = music.song.channels;
+        const count = song.channels;
         // Wide songs get more rows, so each scope stays wide enough to read.
         const rows = Math.max(1, Math.ceil((count * 70 * ratio) / w));
         const cols = Math.ceil(count / rows);
         const cw = w / cols;
         const ch = h / rows;
         const line = Math.max(1, Math.round(ratio));
-        const scopes = music.scopes;
+        const scopes = music?.scopes ?? [];
         for (let c = 0; c < count; c++) {
           const x0 = (c % cols) * cw;
           const y0 = Math.floor(c / cols) * ch;
@@ -374,9 +378,9 @@ button.onclick = () => music.play();   // browsers need a click first
         canvas = null;
         // Scopes cost a little, so the worklet only sends them while they show.
         music?.enableScopes(name === 'scopes' ? 1024 : 0);
-        if (!music) return view.replaceChildren();
-        if (name === 'channels') buildBars(music.song);
-        else if (name === 'pattern') buildPattern(music.song);
+        if (!song) return view.replaceChildren();
+        if (name === 'channels') buildBars(song);
+        else if (name === 'pattern') buildPattern(song);
         else buildScopes();
       }
 
@@ -396,30 +400,69 @@ button.onclick = () => music.play();   // browsers need a click first
         }
       };
       new ResizeObserver(() => {
-        if (music && viewName() === 'pattern') buildPattern(music.song);
+        if (song && viewName() === 'pattern') buildPattern(song);
       }).observe(stage);
 
+      function setPlaying(playing) {
+        $('play').textContent = playing ? 'Pause' : 'Play';
+      }
+
       async function open(source, name) {
-        music?.destroy();
-        music = null;
-        $('play').disabled = $('stop').disabled = true;
+        const load = ++loads;
+        $('info').textContent = `Loading ${name}…`;
+        let next;
         try {
-          context ??= new AudioContext();
-          music = await createReplayer(source, { context, loop: $('loop').checked });
+          next = await loadSong(source, name);
         } catch (error) {
-          $('info').textContent = `${name}: ${error.message}`;
+          // The song before stays loaded and playable.
+          if (load === loads) $('info').textContent = `${name}: ${error.message}`;
           return;
         }
-        const song = music.song;
+        if (load !== loads) return;
+        music?.destroy();
+        music = null;
+        song = next;
         $('info').textContent = `${song.title || name} · ${song.formatName} · ${song.channels} channels`;
+        $('pos').textContent = '--:--';
+        setPlaying(false);
         showView();
+        $('play').disabled = $('stop').disabled = false;
+        // Once audio runs, get the next song ready right away.
+        if (context?.state === 'running') await prepare().catch(() => {});
+      }
+
+      /** Makes the replayer for the loaded song; needs a click the first time. */
+      let preparing = null;
+      function prepare() {
+        if (music?.song === song) return Promise.resolve(music);
+        if (preparing?.song !== song) {
+          const job = { song, promise: makeReplayer(song) };
+          preparing = job;
+          job.promise.finally(() => preparing === job && (preparing = null)).catch(() => {});
+        }
+        return preparing.promise;
+      }
+
+      async function makeReplayer(wanted) {
+        context ??= new AudioContext();
+        const starting = context.state === 'running' ? null : context.resume();
+        const ready = createReplayer(wanted, { context, loop: $('loop').checked });
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('the browser did not start audio')), 8000));
+        const made = await Promise.race([ready, timeout]);
+        await starting;
+        if (wanted !== song) {
+          made.destroy();
+          return null;
+        }
+        music?.destroy();
+        music = made;
         music.onRow = (position) => {
           if (viewName() === 'channels') updateBars(song, position);
           else if (viewName() === 'pattern') updatePattern(song, position);
         };
-        music.onEnd = () => ($('play').textContent = 'Play');
-        $('play').disabled = $('stop').disabled = false;
-        $('play').textContent = 'Play';
+        music.onEnd = () => setPlaying(false);
+        showView();
+        return music;
       }
 
       function clock() {
@@ -434,19 +477,28 @@ button.onclick = () => music.play();   // browsers need a click first
       clock();
 
       $('play').onclick = async () => {
-        if (!music) return;
-        if (music.isPlaying) {
+        if (!song) return;
+        if (music?.isPlaying) {
           music.pause();
-          $('play').textContent = 'Play';
-        } else {
-          await music.play();
-          $('play').textContent = 'Pause';
+          setPlaying(false);
+          return;
         }
+        const info = $('info').textContent;
+        if (!music) $('info').textContent = 'Starting audio…';
+        try {
+          if (!(await prepare())) return;
+        } catch (error) {
+          $('info').textContent = `Could not play: ${error.message}`;
+          return;
+        }
+        $('info').textContent = info;
+        await music.play();
+        setPlaying(true);
       };
       $('stop').onclick = () => {
         music?.stop();
-        $('play').textContent = 'Play';
-        if (music && viewName() === 'pattern') updatePattern(music.song, { pattern: music.song.orders[0] ?? 0, row: 0 });
+        setPlaying(false);
+        if (song && viewName() === 'pattern') updatePattern(song, { pattern: song.orders[0] ?? 0, row: 0 });
       };
       $('loop').onchange = () => music && (music.loop = $('loop').checked);
       $('file').onchange = async () => {
