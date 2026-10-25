@@ -863,6 +863,11 @@ output {
   margin-left: calc(var(--px) * 2);
 }
 
+.tool-row .preset {
+  width: calc(var(--px) * 72);
+  text-align: left;
+}
+
 .stepper,
 .text-field {
   display: inline-flex;

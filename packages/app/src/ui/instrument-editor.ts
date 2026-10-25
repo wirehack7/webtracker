@@ -1,5 +1,6 @@
 import { noteName, type Envelope, type Instrument, type VoiceState } from '@webtracker/engine';
 import type { SongEditor } from '../editor/song-editor.ts';
+import { copyEnvelope, PANNING_PRESETS, pastedEnvelope, VOLUME_PRESETS } from './envelope-presets.ts';
 import { hex } from './pattern-view.ts';
 import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
 
@@ -47,6 +48,9 @@ class EnvelopeView {
       button('LpS=Pt', () => this.edit('loop start', (e) => (e.loopStart = Math.min(this.selected, e.loopEnd))), 'Loop starts at the selected point'),
       button('LpE=Pt', () => this.edit('loop end', (e) => (e.loopEnd = Math.max(this.selected, e.loopStart))), 'Loop ends at the selected point'),
       button('DelPt', () => this.deletePoint(this.selected), 'Delete the selected point (or right-click it)'),
+      button('Copy', () => this.copy(), 'Copy this envelope'),
+      button('Paste', () => this.paste(), 'Paste a copied envelope (volume and panning share the clipboard)'),
+      this.presetSelect(key === 'volumeEnvelope' ? VOLUME_PRESETS : PANNING_PRESETS),
       this.info,
     );
     this.root.append(row, this.layers.root);
@@ -55,6 +59,36 @@ class EnvelopeView {
       this.draw();
       this.drawTicks();
     }).observe(this.canvas);
+  }
+
+  private presetSelect(presets: typeof VOLUME_PRESETS): HTMLSelectElement {
+    const select = el('select', 'value preset');
+    select.title = 'Replace the envelope with a ready-made one';
+    select.append(new Option('Preset', ''), ...presets.map((p, i) => new Option(p.name, String(i))));
+    select.addEventListener('change', () => {
+      const preset = presets[Number(select.value)];
+      select.value = '';
+      if (!preset) return;
+      this.edit(`${preset.name.toLowerCase()} envelope`, (e) => Object.assign(e, preset.build()));
+      this.host.status(`${preset.name} envelope.`);
+    });
+    return select;
+  }
+
+  private copy(): void {
+    const env = this.envelope();
+    if (!env) return;
+    copyEnvelope(env);
+    this.host.status(`Copied the envelope, ${env.points.length} points.`);
+  }
+
+  private paste(): void {
+    const pasted = pastedEnvelope();
+    if (!pasted) {
+      this.host.status('Copy an envelope first.');
+      return;
+    }
+    this.edit('paste envelope', (e) => Object.assign(e, pasted));
   }
 
   /** Marks the envelope positions of the voices playing this instrument. */
