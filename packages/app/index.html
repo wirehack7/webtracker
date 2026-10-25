@@ -92,7 +92,7 @@
             <button type="button" class="btn sm" data-view-target="sample" title="Sample editor">Sample</button>
             <button type="button" class="btn sm" data-view-target="instrument" title="Instrument editor">Instr</button>
           </span>
-          <span class="ptitle">Pattern <output class="value" id="pattern-no">00</output></span>
+          <button type="button" class="ptitle pat-pick" id="pat-pick" aria-haspopup="dialog" title="Choose pattern">Pattern <output class="value" id="pattern-no">00</output></button>
           <!-- Phones: the current instrument, one tap to step or to open the picker. -->
           <span class="ins-quick phone-only" id="ins-quick">
             <button type="button" class="btn sm" id="ins-prev" aria-label="Previous instrument">&lt;</button>
@@ -242,6 +242,24 @@
       <ol class="list" id="picker-list"></ol>
       <h2 class="ptitle picker-samples-title">Sample</h2>
       <div class="row picker-samples" id="picker-samples"></div>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog ins-picker pat-picker" id="pat-picker" aria-label="Choose pattern">
+      <div class="row pat-picker-pos">
+        <button type="button" class="btn" id="pat-pos-prev" aria-label="Previous position">&lt;</button>
+        <h2 class="ptitle">Position <span class="idx" id="pat-pos">00</span> of <span id="pat-pos-count">01</span></h2>
+        <button type="button" class="btn" id="pat-pos-next" aria-label="Next position">&gt;</button>
+      </div>
+      <ol class="list" id="pat-list"></ol>
+      <div class="row picker-actions">
+        <button type="button" class="btn" id="pat-new" title="Play an empty pattern at this position">New</button>
+        <button type="button" class="btn" id="pat-clone" title="Play a copy of this pattern at this position">Clone</button>
+        <button type="button" class="btn" data-proxy="order-ins" title="Insert position">Ins pos</button>
+        <button type="button" class="btn" data-proxy="order-del" title="Delete position">Del pos</button>
+      </div>
+      <p class="info">A pattern you pick plays at this position. Each line shows its length and the positions that play it.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>

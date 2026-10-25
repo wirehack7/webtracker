@@ -171,6 +171,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
       'On a phone the editor and an on-screen piano fill the screen. The bar at the bottom has Play/Stop, `Rec`, the octave and `Menu`, which slides up all the panels and toolbar buttons.',
       'In edit mode a pad under the pattern shows the cursor cell in big fields. Tap `Ins`, `Vol`, `Fx` or `Val` and a hex keypad takes the place of the piano. `Step` is how far the cursor moves after each entry; `Off`, `Del` and `Undo` write a key off, clear the field and undo.',
       'Tap a field in the pattern to move the cursor there. Drag on the piano, its octave strip, or swipe with two fingers to reach other octaves.',
+      'Above the editor, the instrument button opens a list of all instruments, and the arrows next to it step through them. Tap the pattern number to pick which pattern plays at the current position: the list shows each pattern with its length and the positions that play it. `New` and `Clone` put an empty pattern or a copy of this one at the position, the arrows step through the positions, and `Ins pos` and `Del pos` add or remove one.',
     ],
   },
   {
