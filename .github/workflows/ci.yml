@@ -17,5 +17,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test:coverage
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo '## Unit test coverage' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm smoke smoke-screenshots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: smoke-screenshots
+          path: smoke-screenshots/
