@@ -28,6 +28,10 @@ export interface Settings {
   midiVelocity: boolean;
   /** New, loaded and shared songs open beside the current one instead of replacing it. */
   songTabs: boolean;
+  /** Show the neighbouring patterns, dimmed, above and below the current one. */
+  prospective: boolean;
+  /** The cursor wraps from the last row to the first and back. */
+  wrapCursor: boolean;
   /** How headerless sample files are read. */
   rawFormat: RawFormat;
 }
@@ -43,6 +47,8 @@ export const DEFAULTS: Settings = {
   midi: false,
   midiVelocity: false,
   songTabs: true,
+  prospective: false,
+  wrapCursor: true,
   rawFormat: 's8',
 };
 

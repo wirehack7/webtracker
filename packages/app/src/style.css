@@ -329,6 +329,12 @@ output {
   background: var(--pat-cursor);
 }
 
+/* Prospective view: neighbouring patterns, dimmed and not editable. */
+.pattern-view .r.ghost {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .pattern-view .rn {
   position: sticky;
   left: 0;

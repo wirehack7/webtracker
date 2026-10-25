@@ -61,6 +61,7 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 | F9–F12 | Jump to row 0, ¼, ½ and ¾ of the pattern |
 | Shift+M / Shift+U | Mute the cursor channel / unmute all |
 | Ctrl+F | Follow song on/off |
+| Setup: Prospective view, Cursor wraps | Show the neighbouring patterns dimmed around the current one; stop the cursor at the first and last row |
 | Alt+PageUp/PageDown | Previous/next song tab (new, loaded and shared songs open in tabs; Setup can turn this off) |
 | Shift / Ctrl / Alt + F3–F5 | Cut, copy, paste the track / pattern / selection (Ctrl+F4 and Alt+F4 belong to the browser: copy the pattern with Ctrl+Shift+F4, the selection with Ctrl+C) |
 | Alt+Q…I, Alt+A…K | Jump to channel 1–8 or 9–16 |

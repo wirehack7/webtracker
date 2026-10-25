@@ -84,6 +84,12 @@ let sounding: number | null = null;
 
 const editor = new SongEditor(createSong(), (message) => engine?.send(message));
 
+view.neighbours = () => {
+  const { orders, patterns } = song();
+  const at = (order: number) => (order >= 0 && order < orders.length ? (patterns[orders[order]!] ?? null) : null);
+  return [at(currentOrder - 1), at(currentOrder + 1)];
+};
+
 const host = {
   editor,
   instrumentIndex: () => instrument - 1,
@@ -1861,6 +1867,8 @@ function applySettings(): void {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
   view.beat = prefs.beat;
   view.bar = prefs.bar;
+  view.prospective = prefs.prospective;
+  view.wrap = prefs.wrapCursor;
   view.render();
   engine?.send(mixerMessage());
   scopesDirty = true;
@@ -1880,6 +1888,8 @@ function showSettings(): void {
   checkbox('#set-midi').checked = prefs.midi;
   checkbox('#set-velocity').checked = prefs.midiVelocity;
   checkbox('#set-tabs').checked = prefs.songTabs;
+  checkbox('#set-prospective').checked = prefs.prospective;
+  checkbox('#set-wrap').checked = prefs.wrapCursor;
   $<HTMLSelectElement>('#set-raw').value = prefs.rawFormat;
 }
 
@@ -1895,6 +1905,8 @@ setup.addEventListener('change', () => {
   prefs.midi = checkbox('#set-midi').checked;
   prefs.midiVelocity = checkbox('#set-velocity').checked;
   prefs.songTabs = checkbox('#set-tabs').checked;
+  prefs.prospective = checkbox('#set-prospective').checked;
+  prefs.wrapCursor = checkbox('#set-wrap').checked;
   prefs.rawFormat = $<HTMLSelectElement>('#set-raw').value as RawFormat;
   saveSettings(prefs);
   applySettings();
