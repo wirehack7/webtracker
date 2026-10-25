@@ -36,7 +36,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
         list: [
           '`Position`: the order list. Each line is a position in the song and names the pattern it plays.',
           '`Song`: title, pattern length (`Len`), number of channels (`Chn`), starting tempo (`BPM`) and speed (`Spd`), the octave for the keyboard and `Add`, the number of rows the cursor moves after each note.',
-          '`Transport`: play the song or the pattern, stop, edit mode (`Rec`), and the buttons for files, songs, sharing, jams, Setup, Help and the Replayer page.',
+          '`Transport`: play the song or the pattern, stop, edit mode (`Rec`), and the buttons for files, songs, sharing, jams, Setup, Help, About and the Replayer page.',
           '`Instruments` and `Samples`: the instrument you play with and its samples.',
           'Scopes show what every channel plays. Click a scope to mute its channel, right-click to solo it.',
           '`Pattern`, `Sample` and `Instr` switch the editor between the pattern, the sample editor and the instrument editor.',

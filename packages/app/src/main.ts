@@ -49,6 +49,7 @@ import { noteForKey, octaveForKey } from './keyboard.ts';
 import { ask, askText } from './ui/ask.ts';
 import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
+import { mountAbout } from './ui/about.ts';
 import { mountHelp } from './ui/help.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
@@ -2132,6 +2133,14 @@ $('#help-open').addEventListener('click', () => {
   setSheet(false);
   help.open(app.dataset.view === 'pattern' && field ? cellHelpTarget(field, cursorCell()) : null);
 });
+
+const about = mountAbout($<HTMLDialogElement>('#about'));
+for (const id of ['#about-open', '#brand-about']) {
+  $(id).addEventListener('click', () => {
+    setSheet(false);
+    about.open();
+  });
+}
 
 // Buttons hand focus back to the pattern, so Space and Enter never press them twice.
 document.addEventListener('click', (event) => {
