@@ -55,7 +55,7 @@ import { SampleEditor } from './ui/sample-editor.ts';
 import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
-import { decodeShare, encodeShare, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
+import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, velocityToVolume, type Settings, type Theme } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -1178,6 +1178,40 @@ function saveSong(): void {
   status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
 }
 
+/** Browsers refuse longer addresses (Chrome stops at 2 MB). */
+const MAX_REPLAYER_URL = 2_000_000;
+
+/**
+ * Opens the replayer page in a new tab with the song in its address. MOD
+ * songs go as MOD when nothing is lost, so they keep ProTracker playback.
+ */
+async function openInReplayer(): Promise<void> {
+  const info = $('#replayer-info');
+  // Opened before the async packing, so popup blockers see the click.
+  const tab = window.open('about:blank', '_blank');
+  const s = song();
+  const name = safeName(s.title, 'untitled');
+  const mod = s.format === 'mod' ? saveMod(s) : null;
+  const [bytes, fileName] = mod && mod.warnings.length === 0 ? [mod.bytes, `${name}.mod`] : [saveXm(s), `${name}.xm`];
+  try {
+    const url = await replayerUrl(location.href, bytes, fileName);
+    if (url.length > MAX_REPLAYER_URL) {
+      tab?.close();
+      info.textContent = 'The song is too big to hand over. Save XM and load the file on the replayer page.';
+      return;
+    }
+    if (!tab) {
+      info.textContent = 'The browser blocked the new tab. Allow pop-ups for this site, or save the song and load it on the replayer page.';
+      return;
+    }
+    tab.location.href = url;
+    info.textContent = `${fileName} opened in the replayer.`;
+  } catch (error) {
+    tab?.close();
+    info.textContent = `Could not open the replayer: ${(error as Error).message}`;
+  }
+}
+
 function saveSongAsMod(): void {
   const s = song();
   const { bytes, warnings } = saveMod(s);
@@ -1858,6 +1892,7 @@ $('#load').addEventListener('click', () => fileInput.click());
 $('#save').addEventListener('click', openFileDialog);
 $('#save-xm').addEventListener('click', saveSong);
 $('#save-mod').addEventListener('click', saveSongAsMod);
+$('#open-replayer').addEventListener('click', () => void openInReplayer());
 exportGo.addEventListener('click', exportAudio);
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];

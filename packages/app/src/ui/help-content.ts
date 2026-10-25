@@ -10,6 +10,8 @@ export interface HelpEntry {
   text: string;
   /** Stable id for linking from the pattern cursor, e.g. "fx-A" or "vol-S". */
   id?: string;
+  /** A page that goes with the entry, relative to the tracker. */
+  link?: { href: string; label: string };
 }
 
 export interface HelpGroup {
@@ -285,6 +287,15 @@ const WORKFLOWS: HelpSection = {
         { code: 'Save', text: 'Download as XM or MOD, export WAV, FLAC or MP3, or go back to one of the autosaved versions.' },
         { code: 'Songs', text: 'Keeps songs in this browser so you can come back to them offline.' },
         { code: 'Share', text: 'Packs the song into a link; whoever opens it gets the song in their tracker.' },
+      ],
+    },
+    {
+      title: 'Demos and intros',
+      intro: 'The replayer plays your songs in your own productions with the same engine as the tracker: one JavaScript file, nothing else to host.',
+      entries: [
+        { code: 'Replayer', text: 'The replayer page has the files to download, a demo player and the API, with a callback on every row to sync effects to the music.', link: { href: './replayer/', label: 'Open the replayer page' } },
+        { code: 'Open in replayer', text: 'Save > Open in replayer opens the song you are working on in the replayer page, to hear it as your production will play it.' },
+        { code: 'Clean up', text: 'Advanced Edit > Clean up removes unused patterns, instruments and samples, so the module loads faster and packs better.' },
       ],
     },
     {

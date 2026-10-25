@@ -63,6 +63,7 @@
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
               <button type="button" class="btn" id="jam-open" aria-pressed="false" title="Edit this song together with others, live">Jam</button>
               <button type="button" class="btn" id="help-open" title="Keys, effects and workflows">Help</button>
+              <a class="btn" id="replayer-link" href="./replayer/" target="_blank" rel="noopener" title="Play your songs in your own demos and intros: the replayer files, a demo and the API">Replayer</a>
               <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
               <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
               <button type="button" class="btn phone-only" data-proxy="keys-toggle" id="keys-proxy" aria-pressed="false">Keys</button>
@@ -222,6 +223,13 @@
         <progress id="export-progress" max="1" value="0" hidden></progress>
       </div>
       <p class="info" id="export-info">Muted channels stay out of the song mix. MP3 renders at 48000 Hz at most.</p>
+
+      <h2 class="ptitle">Use in a demo or intro</h2>
+      <div class="row">
+        <button type="button" class="btn" id="open-replayer" title="Opens the replayer page with this song, to hear it as your demo will play it">Open in replayer</button>
+        <a class="btn" href="./replayer/" target="_blank" rel="noopener" title="Download the replayer and see its API">Replayer page</a>
+      </div>
+      <p class="info" id="replayer-info">The replayer is one JavaScript file that plays your song in your own production, with the same engine as the tracker.</p>
 
       <h2 class="ptitle">Autosaved versions</h2>
       <ol class="list short" id="autosave-list"></ol>

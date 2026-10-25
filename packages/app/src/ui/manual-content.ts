@@ -1,6 +1,6 @@
 // Text of the manual page (manual.html): longer chapters that walk through the
 // tracker, followed there by the full reference from help-content.ts.
-// Text in `backticks` is shown as a key or code.
+// Text in `backticks` is shown as a key or code, [text](href) as a link.
 
 export type ManualBlock = string | { list: string[] } | { steps: string[] } | { tip: string };
 
@@ -36,7 +36,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
         list: [
           '`Position`: the order list. Each line is a position in the song and names the pattern it plays.',
           '`Song`: title, pattern length (`Len`), number of channels (`Chn`), starting tempo (`BPM`) and speed (`Spd`), the octave for the keyboard and `Add`, the number of rows the cursor moves after each note.',
-          '`Transport`: play the song or the pattern, stop, edit mode (`Rec`), and the buttons for files, songs, sharing, jams, Setup and Help.',
+          '`Transport`: play the song or the pattern, stop, edit mode (`Rec`), and the buttons for files, songs, sharing, jams, Setup, Help and the Replayer page.',
           '`Instruments` and `Samples`: the instrument you play with and its samples.',
           'Scopes show what every channel plays. Click a scope to mute its channel, right-click to solo it.',
           '`Pattern`, `Sample` and `Instr` switch the editor between the pattern, the sample editor and the instrument editor.',
@@ -193,7 +193,15 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
     title: 'Music for demos and intros',
     blocks: [
       'The replayer plays your songs in your own productions with the same engine as the tracker. It is a single JavaScript module with nothing else to host: a full version for every format the tracker loads, and a lite version for XM and MOD only.',
-      'The replayer page has the files, a demo and the API: it loads a song, plays and stops it, and calls you back on every row with the current order, pattern, row, speed and tempo, so effects in your demo can sync to the music. Unused effect values such as `E8x` are often used as sync markers.',
+      'The [replayer page](./replayer/) has the files, a demo and the API: it loads a song, plays and stops it, and calls you back on every row with the current order, pattern, row, speed and tempo, so effects in your demo can sync to the music. Unused effect values such as `E8x` are often used as sync markers. The `Replayer` button in the toolbar (in the Menu on a phone) opens the page.',
+      {
+        steps: [
+          'Press `Save` and then `Open in replayer`. The replayer page opens in a new tab with your song, to hear it as your production will play it.',
+          'Press `Save XM` (or `Save MOD` for a ProTracker song) to get the module file for your production.',
+          'Download `webtracker-replayer.js` (or the smaller lite version for XM and MOD) from the replayer page and put it next to the module.',
+          'Load the song with `createReplayer`, start it with `play()` after a click, and use `onRow` to sync your effects.',
+        ],
+      },
       {
         tip: 'Run Advanced Edit > Clean up before releasing a song: smaller modules load faster and pack better.',
       },
