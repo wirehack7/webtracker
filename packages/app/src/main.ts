@@ -362,7 +362,10 @@ function setView(name: string): void {
 }
 
 function showValue(id: string, value: number, decimal = false): void {
-  $<HTMLOutputElement>(`#${id}`).textContent = decimal ? String(value) : hex(value);
+  const text = decimal ? String(value) : hex(value);
+  $<HTMLOutputElement>(`#${id}`).textContent = text;
+  // Phones show the pattern length in the menu sheet instead.
+  if (id === 'pattern-len') $('#len-proxy').textContent = text;
 }
 
 /** Shows the pattern at the current order position and the song fields. */
@@ -504,6 +507,7 @@ function step(key: keyof typeof limits, delta: number): void {
 function setOctave(octave: number, scroll = true): void {
   settings.octave = octave;
   showValue('octave', octave);
+  $('#bar-octave').textContent = `Oct ${octave}`;
   if (scroll) piano.showOctave(octave);
 }
 
@@ -634,8 +638,16 @@ function handleWorkletMessage(message: WorkletMessage): void {
   showPlayerState(message.state);
 }
 
+/** The phone bar has one Play button that turns into Stop. */
+function showPlaying(on: boolean): void {
+  playing = on;
+  const button = $('#bar-play');
+  button.textContent = on ? 'Stop' : 'Play';
+  button.setAttribute('aria-pressed', String(on));
+}
+
 function showPlayerState(state: PlayerState): void {
-  playing = state.playing;
+  showPlaying(state.playing);
   if (!playing) {
     clearScopes();
     return;
@@ -661,12 +673,12 @@ async function play(loopPattern: boolean, row = 0): Promise<void> {
   const node = engine ?? (await ensureEngine());
   if (!node) return;
   node.send({ type: 'play', loopPattern, order: currentOrder, row });
-  playing = true;
+  showPlaying(true);
 }
 
 function stop(): void {
   engine?.send({ type: 'stop' });
-  playing = false;
+  showPlaying(false);
   clearScopes();
   showValue('bpm', song().initialTempo, true);
   showValue('speed', song().initialSpeed);
@@ -675,6 +687,7 @@ function stop(): void {
 function setRecording(on: boolean): void {
   recording = on;
   $('#rec').setAttribute('aria-pressed', String(on));
+  $('#bar-rec').setAttribute('aria-pressed', String(on));
   patternEl.classList.toggle('rec', on);
 }
 
@@ -1277,19 +1290,43 @@ document.addEventListener('click', (event) => {
   if (button && !(button.closest('dialog'))) patternEl.focus({ preventScroll: true });
 });
 
-// A phone on its side has little height, so it starts with the panels folded.
-if (matchMedia('(max-height: 500px) and (orientation: landscape)').matches) app.dataset.tab = 'none';
+// On phones the panels above sit in a sheet behind the Menu button; its tabs pick one.
 for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-tab-target]')) {
   tab.setAttribute('aria-selected', String(tab.dataset.tabTarget === app.dataset.tab));
   tab.addEventListener('click', () => {
-    // The open tab folds the panels away, leaving room for pattern and piano.
-    const open = app.dataset.tab !== tab.dataset.tabTarget;
-    app.dataset.tab = open ? tab.dataset.tabTarget! : 'none';
+    app.dataset.tab = tab.dataset.tabTarget!;
     for (const other of document.querySelectorAll('[data-tab-target]')) {
-      other.setAttribute('aria-selected', String(open && other === tab));
+      other.setAttribute('aria-selected', String(other === tab));
     }
   });
 }
+
+const sheet = $('#sheet');
+const menuButton = $('#bar-menu');
+function setSheet(open: boolean): void {
+  app.classList.toggle('sheet-open', open);
+  menuButton.setAttribute('aria-expanded', String(open));
+  if (open) sheet.scrollTop = 0;
+}
+menuButton.addEventListener('click', () => setSheet(!app.classList.contains('sheet-open')));
+$('#sheet-backdrop').addEventListener('click', () => setSheet(false));
+// Transport buttons start something (playback, a dialog, a file picker), so the sheet gets out of the way.
+$('.transport').addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('.btn')) setSheet(false);
+});
+
+// Phone-only buttons stand in for controls that are hidden on phones.
+for (const button of document.querySelectorAll<HTMLElement>('[data-proxy]')) {
+  button.addEventListener('click', () => $(`#${button.dataset.proxy}`).click());
+}
+for (const button of document.querySelectorAll<HTMLElement>('[data-proxy-step]')) {
+  const [key, delta] = button.dataset.proxyStep!.split(':') as [keyof typeof limits, string];
+  button.addEventListener('click', () => step(key, Number(delta)));
+}
+$('#bar-play').addEventListener('click', () => {
+  if (playing) stop();
+  else void play(false);
+});
 
 // The piano shows by default on touch screens; the Keys button flips that.
 const keysToggle = $<HTMLButtonElement>('#keys-toggle');
@@ -1297,6 +1334,7 @@ const coarse = matchMedia('(pointer: coarse)');
 const syncKeysToggle = (): void => {
   const visible = app.classList.contains('show-piano') || (coarse.matches && !app.classList.contains('hide-piano'));
   keysToggle.setAttribute('aria-pressed', String(visible));
+  $('#keys-proxy').setAttribute('aria-pressed', String(visible));
 };
 keysToggle.addEventListener('click', () => {
   const visible = keysToggle.getAttribute('aria-pressed') === 'true';
@@ -1312,7 +1350,7 @@ const piano = mountPiano($('#piano'), {
   // Swiping the piano also sets the octave for the computer keyboard, and back.
   scrolled: (octave) => setOctave(octave, false),
 });
-piano.showOctave(settings.octave);
+setOctave(settings.octave);
 
 // ---- Keyboard ------------------------------------------------------------
 
@@ -1472,6 +1510,7 @@ window.addEventListener('keydown', (event) => {
 
   switch (event.code) {
     case 'Escape':
+      setSheet(false);
       view.setSelection(null);
       return;
     case 'Space':

@@ -10,68 +10,76 @@
   </head>
   <body>
     <div class="app" id="app" data-tab="song" data-view="pattern">
-      <nav class="tabs" aria-label="Sections">
-        <button type="button" class="btn" data-tab-target="song">Song</button>
-        <button type="button" class="btn" data-tab-target="instruments">Instr</button>
-        <button type="button" class="btn" data-tab-target="scopes">Scopes</button>
-      </nav>
+      <!-- On phones this is a sheet that slides up from the Menu button. -->
+      <div class="sheet" id="sheet">
+        <nav class="tabs" aria-label="Sections">
+          <button type="button" class="btn" data-tab-target="song">Song</button>
+          <button type="button" class="btn" data-tab-target="instruments">Instr</button>
+          <button type="button" class="btn" data-tab-target="scopes">Scopes</button>
+        </nav>
 
-      <section class="top" id="toolbar">
-        <div class="panel orders" data-panel="song">
-          <h2 class="ptitle">Position</h2>
-          <ol class="list" id="orders"></ol>
-          <div class="row">
-            <button type="button" class="btn" id="order-ins" title="Insert position">Ins</button>
-            <button type="button" class="btn" id="order-del" title="Delete position">Del</button>
-            <button type="button" class="btn" id="order-dec" title="Previous pattern number">-</button>
-            <button type="button" class="btn" id="order-inc" title="Next pattern number">+</button>
+        <section class="top" id="toolbar">
+          <div class="panel orders" data-panel="song">
+            <h2 class="ptitle">Position</h2>
+            <ol class="list" id="orders"></ol>
+            <div class="row">
+              <button type="button" class="btn" id="order-ins" title="Insert position">Ins</button>
+              <button type="button" class="btn" id="order-del" title="Delete position">Del</button>
+              <button type="button" class="btn" id="order-dec" title="Previous pattern number">-</button>
+              <button type="button" class="btn" id="order-inc" title="Next pattern number">+</button>
+            </div>
           </div>
-        </div>
 
-        <div class="panel song" data-panel="song">
-          <h2 class="ptitle">Song</h2>
-          <label class="text-field song-title"><span class="label">Title</span><input type="text" class="value text" id="title" maxlength="20" spellcheck="false" /></label>
-          <div class="fields">
-            <span class="label">BPM</span><output class="value" id="bpm">125</output>
-            <button type="button" class="btn sm" data-step="bpm:-1">-</button><button type="button" class="btn sm" data-step="bpm:1">+</button>
-            <span class="label">Spd</span><output class="value" id="speed">06</output>
-            <button type="button" class="btn sm" data-step="speed:-1">-</button><button type="button" class="btn sm" data-step="speed:1">+</button>
-            <span class="label">Add</span><output class="value" id="add">01</output>
-            <button type="button" class="btn sm" data-step="add:-1">-</button><button type="button" class="btn sm" data-step="add:1">+</button>
-            <span class="label">Oct</span><output class="value" id="octave">04</output>
-            <button type="button" class="btn sm" data-step="octave:-1">-</button><button type="button" class="btn sm" data-step="octave:1">+</button>
-            <span class="label">Chn</span><output class="value" id="channels">04</output>
-            <button type="button" class="btn sm" data-step="channels:-1" title="Fewer channels (Shift: 2)">-</button><button type="button" class="btn sm" data-step="channels:1" title="More channels (Shift: 2)">+</button>
+          <div class="panel song" data-panel="song">
+            <h2 class="ptitle">Song</h2>
+            <label class="text-field song-title"><span class="label">Title</span><input type="text" class="value text" id="title" maxlength="20" spellcheck="false" /></label>
+            <div class="fields">
+              <span class="label">BPM</span><output class="value" id="bpm">125</output>
+              <button type="button" class="btn sm" data-step="bpm:-1">-</button><button type="button" class="btn sm" data-step="bpm:1">+</button>
+              <span class="label">Spd</span><output class="value" id="speed">06</output>
+              <button type="button" class="btn sm" data-step="speed:-1">-</button><button type="button" class="btn sm" data-step="speed:1">+</button>
+              <span class="label">Add</span><output class="value" id="add">01</output>
+              <button type="button" class="btn sm" data-step="add:-1">-</button><button type="button" class="btn sm" data-step="add:1">+</button>
+              <span class="label">Oct</span><output class="value" id="octave">04</output>
+              <button type="button" class="btn sm" data-step="octave:-1">-</button><button type="button" class="btn sm" data-step="octave:1">+</button>
+              <span class="label">Chn</span><output class="value" id="channels">04</output>
+              <button type="button" class="btn sm" data-step="channels:-1" title="Fewer channels (Shift: 2)">-</button><button type="button" class="btn sm" data-step="channels:1" title="More channels (Shift: 2)">+</button>
+              <span class="label phone-only">Len</span><output class="value phone-only" id="len-proxy">64</output>
+              <button type="button" class="btn sm phone-only" data-proxy="len-dec">-</button><button type="button" class="btn sm phone-only" data-proxy="len-inc">+</button>
+            </div>
           </div>
-        </div>
 
-        <div class="panel transport" data-panel="song">
-          <h2 class="ptitle">Transport</h2>
-          <div class="buttons">
-            <button type="button" class="btn" id="play-song" title="Play song (Enter)">Play Song</button>
-            <button type="button" class="btn" id="play-pattern" title="Play pattern (Shift+Enter)">Play Pat</button>
-            <button type="button" class="btn" id="stop" title="Stop (Space)">Stop</button>
-            <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
-            <button type="button" class="btn" id="new" title="New song">New</button>
-            <button type="button" class="btn" id="load" title="Load MOD or XM (Ctrl+O)">Load</button>
-            <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
-            <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
-            <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
-            <button type="button" class="btn" id="help-open" title="Keyboard shortcuts">Help</button>
-            <input type="file" id="file" accept=".mod,.xm,.s3m,.stk" hidden />
-            <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.flac,.mp3,.ogg,.opus,audio/*" hidden />
+          <div class="panel transport" data-panel="song">
+            <h2 class="ptitle">Transport</h2>
+            <div class="buttons">
+              <button type="button" class="btn" id="play-song" title="Play song (Enter)">Play Song</button>
+              <button type="button" class="btn" id="play-pattern" title="Play pattern (Shift+Enter)">Play Pat</button>
+              <button type="button" class="btn" id="stop" title="Stop (Space)">Stop</button>
+              <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
+              <button type="button" class="btn" id="new" title="New song">New</button>
+              <button type="button" class="btn" id="load" title="Load MOD or XM (Ctrl+O)">Load</button>
+              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
+              <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
+              <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
+              <button type="button" class="btn" id="help-open" title="Keyboard shortcuts">Help</button>
+              <button type="button" class="btn phone-only" data-proxy="setup-open">Setup</button>
+              <button type="button" class="btn phone-only" data-proxy="edit-tools-open">Edit</button>
+              <button type="button" class="btn phone-only" data-proxy="keys-toggle" id="keys-proxy" aria-pressed="false">Keys</button>
+              <input type="file" id="file" accept=".mod,.xm,.s3m,.stk" hidden />
+              <input type="file" id="sample-file" accept=".wav,.aif,.aiff,.aifc,.8svx,.iff,.xi,.flac,.mp3,.ogg,.opus,audio/*" hidden />
+            </div>
           </div>
-        </div>
 
-        <div class="panel instruments" id="instruments" data-panel="instruments">
-          <h2 class="ptitle">Instruments</h2>
-          <ol class="list" id="instrument-list"></ol>
-          <h2 class="ptitle">Samples</h2>
-          <ol class="list short" id="sample-list"></ol>
-        </div>
-      </section>
+          <div class="panel instruments" id="instruments" data-panel="instruments">
+            <h2 class="ptitle">Instruments</h2>
+            <ol class="list" id="instrument-list"></ol>
+            <h2 class="ptitle">Samples</h2>
+            <ol class="list short" id="sample-list"></ol>
+          </div>
+        </section>
 
-      <section class="panel scopes" id="scopes" data-panel="scopes" aria-label="Channel scopes"></section>
+        <section class="panel scopes" id="scopes" data-panel="scopes" aria-label="Channel scopes"></section>
+      </div>
 
       <section class="panel pattern-panel">
         <div class="pattern-head">
@@ -81,19 +89,32 @@
             <button type="button" class="btn sm" data-view-target="instrument" title="Instrument editor">Instr</button>
           </span>
           <span class="ptitle">Pattern <output class="value" id="pattern-no">00</output></span>
-          <span class="ptitle">
+          <span class="ptitle len">
             Len <output class="value" id="pattern-len">64</output>
             <button type="button" class="btn sm" id="len-dec" title="Shorter (Shift: 16 rows)">-</button><button type="button" class="btn sm" id="len-inc" title="Longer (Shift: 16 rows)">+</button>
           </span>
-          <button type="button" class="btn sm keys-toggle" id="keys-toggle" aria-pressed="false">Keys</button>
-          <button type="button" class="btn sm" id="edit-tools-open" title="Transpose, remap instruments, scale volume (Ctrl+E)">Edit</button>
-          <button type="button" class="btn sm" id="setup-open" title="Colours, mixer, keys and MIDI">Setup</button>
+          <button type="button" class="btn sm keys-toggle head-extra" id="keys-toggle" aria-pressed="false">Keys</button>
+          <button type="button" class="btn sm head-extra" id="edit-tools-open" title="Transpose, remap instruments, scale volume (Ctrl+E)">Edit</button>
+          <button type="button" class="btn sm head-extra" id="setup-open" title="Colours, mixer, keys and MIDI">Setup</button>
         </div>
         <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern editor"></div>
         <div id="editors" class="editors"></div>
       </section>
 
       <section class="piano" id="piano" aria-label="Piano"></section>
+
+      <!-- Phones: the few controls needed while playing; everything else is in the menu sheet. -->
+      <nav class="phone-bar" aria-label="Quick controls">
+        <button type="button" class="btn" id="bar-play" aria-pressed="false">Play</button>
+        <button type="button" class="btn" data-proxy="rec" id="bar-rec" aria-pressed="false">Rec</button>
+        <span class="bar-octave">
+          <button type="button" class="btn" data-proxy-step="octave:-1" aria-label="Octave down">-</button>
+          <output class="value" id="bar-octave">Oct 4</output>
+          <button type="button" class="btn" data-proxy-step="octave:1" aria-label="Octave up">+</button>
+        </span>
+        <button type="button" class="btn" id="bar-menu" aria-expanded="false" aria-controls="sheet">Menu</button>
+      </nav>
+      <div class="sheet-backdrop" id="sheet-backdrop"></div>
 
       <footer class="statusbar">
         <span id="status">Press a key or tap the piano to start audio.</span>

@@ -1162,9 +1162,18 @@ export class Player {
     return out;
   }
 
-  /** Releases the preview note: envelopes go past sustain and fade out. */
+  /**
+   * Releases the preview note: envelopes go past sustain and fade out.
+   * A one-shot sample without a volume envelope plays to its end instead of
+   * being cut, so a quick tap on a touch screen still sounds the whole sample.
+   */
   previewOff(): void {
-    this.keyOff(this.preview);
+    const ch = this.preview;
+    if (ch.instrument && !ch.instrument.volumeEnvelope.enabled && ch.sample?.loopType === LoopType.None) {
+      ch.keyOn = false;
+      return;
+    }
+    this.keyOff(ch);
   }
 
   /**
