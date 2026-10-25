@@ -547,24 +547,13 @@ a.btn {
 
 /* ---- Responsive ------------------------------------------------------ */
 
-/* Interface size from Setup. Auto is compact with a mouse and one step
-   bigger on tablets; the phone rules below override all of these. */
+/* Before the script runs: compact with a mouse, one step bigger on tablets.
+   main.ts then sets --px from Setup's interface size, rounded to whole device
+   pixels so the 8x8 font stays sharp; the phone rules below keep their own. */
 @media (pointer: coarse) {
   :root {
     --px: 1.5px;
   }
-}
-:root[data-ui-size='small'] {
-  --px: 1px;
-}
-:root[data-ui-size='compact'] {
-  --px: 1.25px;
-}
-:root[data-ui-size='medium'] {
-  --px: 1.5px;
-}
-:root[data-ui-size='large'] {
-  --px: 2px;
 }
 
 /* Medium screens: instruments move under the song panels. */
@@ -588,8 +577,7 @@ a.btn {
 /* Phones, upright or on their side: one top panel at a time, chosen with
    the tab bar; tapping the open tab again folds the panels away. */
 @media (max-width: 639px), (max-height: 500px) and (orientation: landscape) {
-  :root,
-  :root[data-ui-size] {
+  :root {
     --px: 1.5px;
   }
   .pattern-view .c {
@@ -771,8 +759,7 @@ a.btn {
 
 /* Narrow phones: one step smaller so a row of controls still fits. */
 @media (max-width: 419px) {
-  :root,
-  :root[data-ui-size] {
+  :root {
     --px: 1.25px;
   }
 }
@@ -996,7 +983,8 @@ a.btn {
 .help {
   border: 0;
   color: var(--text);
-  max-width: min(calc(100vw - 32px), calc(var(--px) * 360));
+  /* Not narrower than 600px, so small interface sizes still leave room for text. */
+  max-width: min(calc(100vw - 32px), max(calc(var(--px) * 360), 600px));
   max-height: calc(100dvh - 32px);
   overflow: auto;
 }
@@ -1024,7 +1012,8 @@ a.btn {
 
 /* The Help dialog keeps its head and tabs in place while the topic scrolls. */
 .help-dialog {
-  width: min(calc(100vw - 32px), calc(var(--px) * 400));
+  width: min(calc(100vw - 32px), max(calc(var(--px) * 560), 960px));
+  max-width: none;
   height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
@@ -1089,7 +1078,7 @@ a.btn {
 
 .help-list {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .help-entry {

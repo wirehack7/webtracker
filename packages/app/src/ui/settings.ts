@@ -20,6 +20,21 @@ export const UI_SIZES = {
 } as const;
 export type UiSize = keyof typeof UI_SIZES;
 
+const UI_PX: Record<Exclude<UiSize, 'auto'>, number> = { small: 1, compact: 1.25, medium: 1.5, large: 2 };
+
+/**
+ * CSS pixels per font pixel for an interface size, rounded to whole device
+ * pixels: the 8x8 font smears when one of its pixels covers part of one.
+ * Below 1280px wide it stays at or under medium so the panels fit.
+ */
+export function uiPixel(size: UiSize, coarse: boolean, dpr: number, width = Infinity): number {
+  const ratio = dpr > 0 ? dpr : 1;
+  const wanted = UI_PX[size === 'auto' ? (coarse ? 'medium' : 'compact') : size];
+  let device = Math.round(wanted * ratio);
+  if (width < 1280) device = Math.min(device, Math.floor(UI_PX.medium * ratio));
+  return Math.max(1, device) / ratio;
+}
+
 /** The colours the scheme editor offers, by CSS custom property, with their labels. */
 export const COLOR_VARS: [string, string][] = [
   ['--desk', 'Panels'],

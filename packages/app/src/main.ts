@@ -60,7 +60,7 @@ import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
-import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
+import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, uiPixel, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
@@ -2574,10 +2574,23 @@ colourFile.addEventListener('change', async (event) => {
   }
 });
 
+// Phones keep the sizes from the stylesheet; bigger screens get Setup's size.
+const phoneLayout = matchMedia('(max-width: 639px), (max-height: 500px) and (orientation: landscape)');
+const coarsePointer = matchMedia('(pointer: coarse)');
+
+function applyUiSize(): void {
+  const root = document.documentElement.style;
+  if (phoneLayout.matches) root.removeProperty('--px');
+  else root.setProperty('--px', `${uiPixel(prefs.uiSize, coarsePointer.matches, devicePixelRatio, innerWidth)}px`);
+}
+
+// Browser zoom changes the device pixel ratio and fires resize.
+for (const query of [phoneLayout, coarsePointer]) query.addEventListener('change', applyUiSize);
+addEventListener('resize', applyUiSize);
+
 function applySettings(): void {
   document.documentElement.dataset.theme = prefs.theme;
-  if (prefs.uiSize === 'auto') delete document.documentElement.dataset.uiSize;
-  else document.documentElement.dataset.uiSize = prefs.uiSize;
+  applyUiSize();
   applyColours();
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--desk').trim());
   view.beat = prefs.beat;
