@@ -1,8 +1,8 @@
-# webtracker
+# chiptrackr
 
 A chiptune tracker for the browser, made for the demoscene. Classic tracker interface, responsive on desktop, tablet and phone, with XM as its native format.
 
-**Start it right in your browser: https://wirehack7.github.io/webtracker/**
+**Start it right in your browser: https://chiptrackr.com/**
 
 The site can be installed as an app and then works offline as well. Songs are backed up in the browser as you work; the Save dialog brings back the latest versions and keeps a library of named songs. The library starts with a demo song, "Pixel Sunrise": four channels of generated chip sounds that try out most of the effects, instrument envelopes and auto-vibrato. Share puts the whole song, compressed, into a link that opens it again, with no server involved.
 
@@ -10,7 +10,7 @@ Jam lets several people edit one song live. The host sends each person an invite
 
 ## Inspiration
 
-webtracker is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([GitHub](https://github.com/milkytracker/MilkyTracker)), the open-source FastTracker II successor. We love MilkyTracker: its interface, its workflow and its sound are the benchmark this project measures itself against. If you want a native tracker on your desktop, go and use it.
+chiptrackr is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([GitHub](https://github.com/milkytracker/MilkyTracker)), the open-source FastTracker II successor. We love MilkyTracker: its interface, its workflow and its sound are the benchmark this project measures itself against. If you want a native tracker on your desktop, go and use it.
 
 ## Development
 
@@ -51,10 +51,10 @@ Every push to `main` is deployed to GitHub Pages.
 
 The replayer plays songs in your own productions with the same engine as the tracker. It is one ES module with the AudioWorklet built in, so there is nothing else to host:
 
-- [webtracker-replayer.js](https://wirehack7.github.io/webtracker/replayer/webtracker-replayer.js) plays every format the tracker loads (about 33 KB gzipped).
-- [webtracker-replayer-lite.js](https://wirehack7.github.io/webtracker/replayer/webtracker-replayer-lite.js) plays XM and MOD only (about 21 KB gzipped).
+- [webtracker-replayer.js](https://chiptrackr.com/replayer/webtracker-replayer.js) plays every format the tracker loads (about 33 KB gzipped).
+- [webtracker-replayer-lite.js](https://chiptrackr.com/replayer/webtracker-replayer-lite.js) plays XM and MOD only (about 21 KB gzipped).
 
-A demo page is at [wirehack7.github.io/webtracker/replayer/](https://wirehack7.github.io/webtracker/replayer/).
+A demo page is at [chiptrackr.com/replayer/](https://chiptrackr.com/replayer/).
 
 ```js
 import { createReplayer } from './webtracker-replayer.js';

@@ -1,6 +1,6 @@
 {
-  "name": "webtracker",
-  "short_name": "webtracker",
+  "name": "chiptrackr",
+  "short_name": "chiptrackr",
   "description": "Chiptune tracker for the browser: XM and MOD, pattern, sample and instrument editors, WAV export.",
   "start_url": "./",
   "scope": "./",

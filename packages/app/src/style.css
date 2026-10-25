@@ -1117,6 +1117,193 @@ output {
   }
 }
 
+/* ---- Manual page (manual.html) --------------------------------------- */
+
+/* The tracker fills the window; the manual is a normal page that scrolls. */
+html:has(.manual-page),
+.manual-page {
+  height: auto;
+  overscroll-behavior: auto;
+}
+
+.manual-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 4) max(16px, calc(var(--px) * 6));
+}
+
+.manual-head .ptitle {
+  flex: 1;
+  margin: 0;
+}
+
+.manual-head a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-link {
+  color: var(--pat-cell) !important;
+}
+
+.manual {
+  display: grid;
+  grid-template-columns: max-content minmax(0, calc(var(--px) * 400));
+  justify-content: center;
+  align-items: start;
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 6) max(16px, calc(var(--px) * 6));
+}
+
+.manual-toc {
+  position: sticky;
+  top: calc(var(--px) * 34);
+  padding: calc(var(--px) * 5);
+  max-height: calc(100dvh - var(--px) * 40);
+  overflow-y: auto;
+}
+
+.manual-toc ol {
+  margin: 0;
+  padding-left: calc(var(--px) * 30);
+  line-height: calc(var(--px) * 14);
+}
+
+.manual-toc a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.manual-toc a:hover,
+.manual-toc a:focus-visible {
+  color: var(--pat-cell);
+}
+
+.manual-body {
+  padding: calc(var(--px) * 6) calc(var(--px) * 8);
+  min-width: 0;
+}
+
+/* Long text reads better in a plain font; headings, keys and codes keep the pixel one. */
+.manual-body p,
+.manual-body li,
+.manual-body .help-entry > span + span {
+  font-family: system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: auto;
+  max-width: 70ch;
+}
+
+.manual-body section {
+  scroll-margin-top: calc(var(--px) * 34);
+}
+
+.manual-body section + section {
+  margin-top: calc(var(--px) * 16);
+}
+
+.manual-body h2.ptitle {
+  color: var(--pat-cell);
+  margin-bottom: calc(var(--px) * 6);
+}
+
+.manual-body h4 {
+  margin: calc(var(--px) * 8) 0 calc(var(--px) * 3);
+  font-size: inherit;
+  font-weight: normal;
+  color: var(--label);
+}
+
+.manual-body li + li {
+  margin-top: calc(var(--px) * 3);
+}
+
+.manual-body code {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--pat-param);
+  background: var(--field-bg);
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.manual-tip {
+  border-left: calc(var(--px) * 2) solid var(--btn-on);
+  padding-left: calc(var(--px) * 6);
+  color: var(--label);
+}
+
+.manual-body .help-list {
+  align-items: baseline;
+}
+
+.manual-body .help-entry b {
+  font-weight: 600;
+}
+
+.manual-body .help-entry:target > span {
+  background: var(--pat-cursor);
+}
+
+.help-manual {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 899px) {
+  .manual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manual-toc {
+    position: static;
+    max-height: none;
+  }
+
+  .manual-body {
+    padding: calc(var(--px) * 5);
+  }
+
+  .manual-body p,
+  .manual-body li,
+  .manual-body .help-entry > span + span {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 639px) {
+  .manual-head h1 {
+    display: none;
+  }
+
+  .manual-head {
+    justify-content: space-between;
+  }
+
+  .manual-body .help-list {
+    display: block;
+  }
+
+  .manual-body .help-entry {
+    display: block;
+    padding: calc(var(--px) * 2) 0;
+  }
+
+  .manual-body .help-entry > span {
+    display: block;
+    padding: 0;
+  }
+
+  .manual-body .help-code {
+    white-space: normal;
+  }
+}
+
 /* ---- Song tabs ------------------------------------------------------- */
 
 .song-tabs {
