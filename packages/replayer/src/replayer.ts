@@ -53,6 +53,7 @@ export class Replayer {
   private last: { state: PlayerState; when: number; songTime: number } | null = null;
   private playing = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
+  private scopeData: Float32Array[] = [];
 
   private constructor(
     readonly song: Song,
@@ -106,6 +107,8 @@ export class Replayer {
         this.last = event;
         this.onRow?.(event.state);
       });
+    } else if (event.type === 'scopes') {
+      this.later(event.when, () => (this.scopeData = event.channels));
     } else {
       this.later(event.when, () => {
         this.playing = false;
@@ -144,6 +147,7 @@ export class Replayer {
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.last = null;
+    this.scopeData = [];
     this.send({ type: 'seek', order, row });
   }
 
@@ -184,6 +188,23 @@ export class Replayer {
   set(settings: Partial<MixerSettings>): void {
     this.settings = { ...this.settings, ...settings };
     this.send({ type: 'mixer', settings: this.settings });
+  }
+
+  /**
+   * Starts keeping the last `frames` frames of each channel, updated `rate`
+   * times a second, for oscilloscopes; `enableScopes(0)` stops it again.
+   */
+  enableScopes(frames = 1024, rate = 30): void {
+    this.scopeData = [];
+    this.send({ type: 'scopes', frames, rate: frames > 0 ? rate : 0 });
+  }
+
+  /**
+   * What each channel played just now, oldest frame first, after volume and
+   * before panning. Empty until scopes are on and the song plays.
+   */
+  get scopes(): readonly Float32Array[] {
+    return this.scopeData;
   }
 
   /** Stops and lets go of the audio node; the context stays open. */

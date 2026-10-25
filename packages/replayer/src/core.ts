@@ -15,6 +15,10 @@ export class ReplayerCore {
   /** Audio clock time of the block being rendered. */
   private now = 0;
   private ended = false;
+  private scopeFrames = 0;
+  private scopeRate = 0;
+  /** Frames left until the next scope snapshot. */
+  private framesToScopes = 0;
 
   constructor(
     private readonly sampleRate: number,
@@ -37,6 +41,7 @@ export class ReplayerCore {
         this.player = player;
         this.frames = 0;
         this.ended = false;
+        if (this.scopeRate > 0) player.enableScopes(this.scopeFrames);
         this.applyMixer();
         break;
       }
@@ -58,6 +63,12 @@ export class ReplayerCore {
       case 'mixer':
         this.mixer = { ...message.settings };
         this.applyMixer();
+        break;
+      case 'scopes':
+        this.scopeFrames = Math.max(0, Math.floor(message.frames));
+        this.scopeRate = this.scopeFrames > 0 ? Math.max(0, message.rate) : 0;
+        this.framesToScopes = 0;
+        this.player?.enableScopes(this.scopeRate > 0 ? this.scopeFrames : 0);
         break;
     }
   }
@@ -82,6 +93,14 @@ export class ReplayerCore {
     const playing = p.playing;
     p.process(left, right, frames);
     if (playing) this.frames += frames;
+    if (this.scopeRate > 0 && playing) {
+      this.framesToScopes -= frames;
+      if (this.framesToScopes <= 0) {
+        this.framesToScopes += this.sampleRate / this.scopeRate;
+        // The snapshot ends with this block, so it is heard at the block's end.
+        this.emit({ type: 'scopes', channels: p.readScopes(), when: now + frames / this.sampleRate });
+      }
+    }
     if (this.ended) {
       this.ended = false;
       p.reset();

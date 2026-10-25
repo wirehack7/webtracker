@@ -76,4 +76,28 @@ describe('ReplayerCore', () => {
     expect(a).toBeGreaterThan(0);
     expect(b).toBeLessThan(a * 0.5);
   });
+
+  it('sends channel snapshots for scopes only while they are on', () => {
+    const events: ReplayerEvent[] = [];
+    const core = new ReplayerCore(RATE, (e) => events.push(e));
+    const song = shortSong();
+    core.handle({ type: 'song', song });
+    core.handle({ type: 'play' });
+    run(core, 100);
+    expect(events.some((e) => e.type === 'scopes')).toBe(false);
+    core.handle({ type: 'scopes', frames: 256, rate: 10 });
+    run(core, Math.ceil(RATE / BLOCK));
+    const snaps = events.filter((e) => e.type === 'scopes');
+    // One a tenth of a second, give or take the block size.
+    expect(snaps.length).toBeGreaterThanOrEqual(9);
+    expect(snaps.length).toBeLessThanOrEqual(11);
+    const first = snaps[0]!;
+    expect(first.channels).toHaveLength(song.channels);
+    expect(first.channels[0]).toHaveLength(256);
+    expect(snaps.some((e) => e.channels.some((c) => c.some((v) => v !== 0)))).toBe(true);
+    events.length = 0;
+    core.handle({ type: 'scopes', frames: 0, rate: 0 });
+    run(core, 100);
+    expect(events.some((e) => e.type === 'scopes')).toBe(false);
+  });
 });

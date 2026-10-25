@@ -71,7 +71,7 @@ function frame() {
 }
 ```
 
-`pause()`, `stop()`, `seek(order, row)`, `volume`, `loop`, `position`, `isPlaying`, `song` (the loaded song, with its patterns for reading sync notes or effects) and `destroy()` complete the API. Build it with `pnpm --filter @webtracker/replayer build`; the files land in `packages/replayer/dist`.
+`pause()`, `stop()`, `seek(order, row)`, `volume`, `loop`, `position`, `isPlaying`, `song` (the loaded song, with its patterns for reading sync notes or effects) and `destroy()` complete the API. For oscilloscopes, call `enableScopes()` and read `music.scopes` in a render loop: one `Float32Array` per channel with what it just played, in step with what is heard; `enableScopes(0)` turns them off again. The demo page uses this: click its view to switch between channel bars, the pattern and scopes. Build it with `pnpm --filter @webtracker/replayer build`; the files land in `packages/replayer/dist`.
 
 ## Usage
 

@@ -16,10 +16,14 @@ export type ReplayerMessage =
   | { type: 'play' }
   | { type: 'pause' }
   | { type: 'seek'; order: number; row: number }
-  | { type: 'mixer'; settings: MixerSettings };
+  | { type: 'mixer'; settings: MixerSettings }
+  // Snapshots of each channel's output, sent `rate` times a second; 0 turns them off.
+  | { type: 'scopes'; frames: number; rate: number };
 
 /** Messages from the worklet to the page. */
 export type ReplayerEvent =
   // `when` is the audio clock time the row starts at, `songTime` how far into the song it is.
   | { type: 'row'; state: PlayerState; when: number; songTime: number }
-  | { type: 'end'; when: number };
+  | { type: 'end'; when: number }
+  // The last frames of each channel up to `when`, oldest first.
+  | { type: 'scopes'; channels: Float32Array[]; when: number };
