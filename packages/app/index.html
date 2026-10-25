@@ -58,7 +58,7 @@
               <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
               <button type="button" class="btn" id="new" title="New song">New</button>
               <button type="button" class="btn" id="load" title="Load a module: MOD, XM, S3M, IT, MTM, 669 or OKT, also packed as ZIP, gzip, MMCMP, PowerPacker or UMX; or an XP pattern / XT track into the current pattern (Ctrl+O)">Load</button>
-              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, autosaved versions (Ctrl+S saves XM)">Save</button>
+              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, FLAC or MP3, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
               <button type="button" class="btn" id="jam-open" aria-pressed="false" title="Edit this song together with others, live">Jam</button>
@@ -182,13 +182,25 @@
       </div>
       <p class="info" id="save-info"></p>
 
-      <h2 class="ptitle">Export WAV</h2>
+      <h2 class="ptitle">Export audio</h2>
       <div class="export-fields">
         <label><span class="label">Format</span>
           <select class="value" id="export-format">
-            <option value="pcm16">16-bit</option>
-            <option value="pcm24">24-bit</option>
-            <option value="float32">32-bit float</option>
+            <optgroup label="WAV">
+              <option value="wav:pcm16">WAV 16-bit</option>
+              <option value="wav:pcm24">WAV 24-bit</option>
+              <option value="wav:float32">WAV 32-bit float</option>
+            </optgroup>
+            <optgroup label="FLAC (lossless, smaller)">
+              <option value="flac:16">FLAC 16-bit</option>
+              <option value="flac:24">FLAC 24-bit</option>
+            </optgroup>
+            <optgroup label="MP3">
+              <option value="mp3:320">MP3 320 kbit/s</option>
+              <option value="mp3:256">MP3 256 kbit/s</option>
+              <option value="mp3:192">MP3 192 kbit/s</option>
+              <option value="mp3:128">MP3 128 kbit/s</option>
+            </optgroup>
           </select>
         </label>
         <label><span class="label">Rate</span>
@@ -209,7 +221,7 @@
         <button type="button" class="btn" id="export-go">Render</button>
         <progress id="export-progress" max="1" value="0" hidden></progress>
       </div>
-      <p class="info" id="export-info">Muted channels stay out of the song mix.</p>
+      <p class="info" id="export-info">Muted channels stay out of the song mix. MP3 renders at 48000 Hz at most.</p>
 
       <h2 class="ptitle">Autosaved versions</h2>
       <ol class="list short" id="autosave-list"></ol>

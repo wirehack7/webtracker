@@ -139,7 +139,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
           '`Songs` keeps named songs in this browser, also offline.',
           '`Save XM` (`Ctrl+S`) downloads the song as an XM module, which every modern tracker and replayer reads. `Save MOD` converts it for ProTracker and Amiga players, keeping what MOD can hold.',
           '`Pattern XP` and `Track XT` save one pattern or one channel, to move parts between songs.',
-          'Export WAV renders the song at 16, 24 or 32 bit and 44.1 to 96 kHz, and on request one extra file per channel (as a ZIP). Muted channels stay out of the mix. Rendering runs in the background, faster than real time.',
+          'Export audio renders the song as WAV (16, 24 or 32 bit), FLAC (lossless and smaller) or MP3 (128 to 320 kbit/s) at 44.1 to 96 kHz, and on request one extra file per channel (as a ZIP). Muted channels stay out of the mix. Rendering runs in the background, faster than real time.',
           '`Share` packs the whole song into a link. Exact keeps every sample as it is; Small (8-bit samples, cut after the loop) and Smallest (also half the sample rate) shrink the samples so longer songs still fit in a link. Whoever opens the link gets the song in their tracker; no server stores it.',
         ],
       },
