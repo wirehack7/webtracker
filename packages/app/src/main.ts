@@ -34,7 +34,7 @@ import {
   type Resampler,
   type Song,
 } from '@webtracker/engine';
-import { encodeWav, importSample, loadModule, sampleFromChannels, saveMod, saveXi, saveXm, type WavFormat } from '@webtracker/formats';
+import { applyTrack, encodeWav, importSample, loadModule, loadXp, loadXt, sampleFromChannels, saveMod, saveXi, saveXm, saveXp, saveXt, type WavFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
@@ -1348,9 +1348,44 @@ $('#save-mod').addEventListener('click', saveSongAsMod);
 exportGo.addEventListener('click', exportWav);
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
-  if (file) void openModule(file);
+  if (file) void (/\.x[pt]$/i.test(file.name) ? importPatternFile(file) : openModule(file));
   fileInput.value = '';
 });
+
+// ---- Pattern and track files (.xp, .xt) -------------------------------------
+
+function savePatternFile(track: boolean): void {
+  const index = view.patternIndex;
+  const pattern = view.pattern;
+  const name = `${safeName(song().title, 'untitled')}-${hex(index, 2)}${track ? `-ch${view.channel + 1}` : ''}`;
+  if (track) download(saveXt(song(), pattern, view.channel), `${name}.xt`, 'application/octet-stream');
+  else download(saveXp(song(), pattern), `${name}.xp`, 'application/octet-stream');
+  $('#save-info').textContent = status.textContent = track
+    ? `Saved channel ${view.channel + 1} of pattern ${hex(index, 2)} as ${name}.xt.`
+    : `Saved pattern ${hex(index, 2)} as ${name}.xp.`;
+}
+
+/** An .xp file replaces the current pattern, an .xt file the cursor's channel; both undo. */
+async function importPatternFile(file: File): Promise<void> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  try {
+    if (/\.xt$/i.test(file.name)) {
+      const cells = loadXt(bytes);
+      const channel = view.channel;
+      editor.editPattern(view.patternIndex, 'load track', (p) => applyTrack(song(), p, channel, cells));
+      status.textContent = `Loaded ${file.name} into channel ${channel + 1}.`;
+    } else {
+      const { pattern, droppedChannels } = loadXp(bytes, song().channels);
+      editor.editPattern(view.patternIndex, 'load pattern', () => pattern);
+      status.textContent = `Loaded ${file.name}, ${pattern.rows} rows${droppedChannels ? `; ${droppedChannels} channels past ${song().channels} were left out` : ''}.`;
+    }
+    showPosition();
+  } catch (error) {
+    status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
+  }
+}
+$('#save-xp').addEventListener('click', () => savePatternFile(false));
+$('#save-xt').addEventListener('click', () => savePatternFile(true));
 window.addEventListener('dragover', (event) => event.preventDefault());
 const sampleInput = $<HTMLInputElement>('#sample-file');
 sampleInput.addEventListener('change', () => {
@@ -1363,6 +1398,7 @@ window.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0];
   if (!file) return;
   if (/\.(mod|xm|s3m|it|mtm|669|okt|stk|zip|gz|mdz|xmz|s3z|itz|mdgz|xmgz|s3gz|itgz)$/i.test(file.name)) void openModule(file);
+  else if (/\.x[pt]$/i.test(file.name)) void importPatternFile(file);
   else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
