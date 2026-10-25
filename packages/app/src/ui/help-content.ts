@@ -315,6 +315,7 @@ const WORKFLOWS: HelpSection = {
         { code: 'Menu', text: 'Opens the sheet with the Song, Instr and Scopes panels and every button of the toolbar.' },
         { code: 'Rec, Oct', text: 'The bar at the bottom switches edit mode and the octave of the piano.' },
         { code: 'Keys', text: 'Shows or hides the piano.' },
+        { code: 'Pattern', text: 'Tap the pattern number above the editor to pick the pattern for this position, or to add an empty one or a copy with New and Clone.' },
         { code: 'Tap', text: 'Tap a field in the pattern to move the cursor there.' },
         { code: 'Rec', text: 'In edit mode a pad under the pattern shows the cursor cell in big fields. Tap Ins, Vol, Fx or Val and a keypad takes the place of the piano; it fills both digits, then moves down by Step. Fx, then two digits, enters a whole effect.' },
         { code: 'Step', text: 'How many rows the cursor moves after each entry (Add on the Song panel); the arrows move by one row or channel.' },

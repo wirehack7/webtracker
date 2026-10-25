@@ -6,6 +6,7 @@ import {
   copyBlock,
   createSong,
   deleteRow,
+  emptyPattern,
   emptySample,
   insertRow,
   interpolateBlock,
@@ -40,6 +41,7 @@ import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import { parseAudioFormat } from './audio/audio-format.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
+import { freePattern, patternInfos } from './editor/patterns.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, type Invite } from './collab/links.ts';
 import { JamSession, type JamDocument, type Link } from './collab/session.ts';
@@ -62,6 +64,7 @@ const $ = <T extends HTMLElement>(selector: string): T => document.querySelector
 
 const app = $<HTMLDivElement>('#app');
 const insPicker = $<HTMLDialogElement>('#ins-picker');
+const patPicker = $<HTMLDialogElement>('#pat-picker');
 const status = $<HTMLSpanElement>('#status');
 const patternEl = $<HTMLDivElement>('#pattern');
 const view = new PatternEditor(patternEl);
@@ -356,6 +359,7 @@ function selectListItem(list: HTMLElement, index: number): void {
 function fillOrders(): void {
   const s = song();
   fillList($('#orders'), s.orders.length, 0, (i) => hex(s.orders[i] ?? 0), currentOrder);
+  if (patPicker.open) fillPatternPicker();
 }
 
 function instrumentCount(): number {
@@ -554,10 +558,69 @@ $('#ins-next').addEventListener('click', () => stepInstrument(1));
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view-target]')) {
   b.addEventListener('click', () => setView(b.dataset.viewTarget!));
 }
-$('#orders').addEventListener('select', (event) => {
-  currentOrder = (event as CustomEvent<number>).detail;
+function goToOrder(order: number): void {
+  currentOrder = order;
   if (playing) engine?.send({ type: 'seek', order: currentOrder });
   showPosition();
+}
+$('#orders').addEventListener('select', (event) => goToOrder((event as CustomEvent<number>).detail));
+
+// The pattern number opens a list of all patterns for the current position.
+function fillPatternPicker(): void {
+  const s = song();
+  const infos = patternInfos(s);
+  const list = $('#pat-list');
+  fillList(list, infos.length, 0, () => '', currentPatternIndex());
+  for (const li of list.children) {
+    const info = infos[Number((li as HTMLElement).dataset.index)]!;
+    const rows = document.createElement('span');
+    rows.className = 'rows';
+    rows.textContent = `${String(info.rows).padStart(3, '0')} rows `;
+    const at = info.positions.length ? `@ ${info.positions.map((p) => hex(p)).join(' ')}` : 'unused';
+    li.append(rows, at);
+    li.classList.toggle('empty', info.empty);
+  }
+  $('#pat-pos').textContent = hex(currentOrder);
+  $('#pat-pos-count').textContent = hex(s.orders.length);
+  $<HTMLButtonElement>('#pat-pos-prev').disabled = currentOrder <= 0;
+  $<HTMLButtonElement>('#pat-pos-next').disabled = currentOrder >= s.orders.length - 1;
+  const full = freePattern(s) === null;
+  $<HTMLButtonElement>('#pat-new').disabled = full;
+  $<HTMLButtonElement>('#pat-clone').disabled = full;
+}
+
+$('#pat-pick').addEventListener('click', () => {
+  fillPatternPicker();
+  patPicker.showModal();
+  $('#pat-list').querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' });
+});
+$('#pat-list').addEventListener('select', (event) => {
+  const next = (event as CustomEvent<number>).detail;
+  const at = currentOrder;
+  editor.editOrders('pattern number', (o) => o.map((p, i) => (i === at ? next : p)));
+  patPicker.close();
+});
+for (const [id, delta] of [['#pat-pos-prev', -1], ['#pat-pos-next', 1]] as const) {
+  $(id).addEventListener('click', () => {
+    goToOrder(Math.max(0, Math.min(song().orders.length - 1, currentOrder + delta)));
+    fillOrders();
+  });
+}
+for (const [id, clone] of [['#pat-new', false], ['#pat-clone', true]] as const) {
+  $(id).addEventListener('click', () => {
+    const s = song();
+    const index = freePattern(s);
+    if (index === null) return;
+    const source = s.patterns[currentPatternIndex()] ?? emptyPattern(64, s.channels);
+    const pattern = clone ? source : emptyPattern(source.rows, s.channels);
+    editor.placePattern(currentOrder, index, pattern, clone ? 'clone pattern' : 'new pattern');
+    patPicker.close();
+  });
+}
+patPicker.addEventListener('click', (event) => {
+  const r = patPicker.getBoundingClientRect();
+  const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+  if (event.target === patPicker && !inside) patPicker.close();
 });
 
 $('#order-ins').addEventListener('click', () => {

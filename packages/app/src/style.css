@@ -1769,6 +1769,75 @@ select.value {
   display: none;
 }
 
+/* ---- Pattern picker ---------------------------------------------------- */
+
+/* The pattern number in the editor head opens the picker. */
+.pat-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+/* A small down arrow says the number opens a list. */
+.pat-pick::after {
+  content: '';
+  display: inline-block;
+  margin-left: calc(var(--px) * 2);
+  border: calc(var(--px) * 3) solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--label);
+  vertical-align: middle;
+}
+
+.pat-picker-pos {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.pat-picker-pos .ptitle {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+}
+
+.pat-picker-pos .btn {
+  min-width: calc(var(--px) * 20);
+  min-height: calc(var(--px) * 20);
+}
+
+.pat-picker .list .rows {
+  color: var(--dim);
+}
+
+.picker-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+}
+
+@media (max-width: 479px) {
+  .picker-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.picker-actions .btn {
+  min-height: calc(var(--px) * 20);
+}
+
+.pat-picker .btn:disabled {
+  opacity: 0.4;
+  color: var(--dim);
+  cursor: default;
+}
+
+.pat-picker .info {
+  max-width: min(calc(100vw - 64px), calc(var(--px) * 280));
+}
+
 canvas.drawing {
   cursor: crosshair;
 }

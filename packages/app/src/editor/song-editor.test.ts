@@ -60,6 +60,23 @@ describe('SongEditor', () => {
     expect(editor.song.orders).toEqual([0]);
   });
 
+  it('places a cloned pattern at a position as one undo step', () => {
+    const { editor, sent } = setup();
+    editor.editOrders('order', (o) => [...o, 0]);
+    writeCell(editor.song, editor.song.patterns[0]!, 3, 0, { note: 49 });
+    editor.placePattern(1, 2, editor.song.patterns[0]!, 'clone pattern');
+    expect(editor.song.orders).toEqual([0, 2]);
+    expect(editor.song.patterns).toHaveLength(3);
+    expect(readCell(editor.song, editor.song.patterns[2]!, 3, 0).note).toBe(49);
+    expect(editor.song.patterns[2]!.data).not.toBe(editor.song.patterns[0]!.data);
+    expect(sent.at(-1)).toEqual({ type: 'orders', orders: [0, 2], restartPosition: 0 });
+    expect(editor.undo()).toBe('clone pattern');
+    expect(editor.song.orders).toEqual([0, 0]);
+    expect(readCell(editor.song, editor.song.patterns[2]!, 3, 0).note).toBe(0);
+    expect(editor.redo()).toBe('clone pattern');
+    expect(readCell(editor.song, editor.song.patterns[2]!, 3, 0).note).toBe(49);
+  });
+
   it('never leaves the order list empty', () => {
     const { editor } = setup();
     editor.editOrders('delete', () => []);

@@ -1,4 +1,4 @@
-import { CELL_SIZE, emptyInstrument, ensurePattern, MAX_ORDERS, MAX_PATTERNS, setChannelCount, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
+import { CELL_SIZE, emptyInstrument, emptyPattern, ensurePattern, MAX_ORDERS, MAX_PATTERNS, setChannelCount, type Instrument, type Pattern, type Sample, type Song } from '@webtracker/engine';
 import type { EngineMessage } from '../audio/messages.ts';
 import { History } from './history.ts';
 
@@ -315,6 +315,31 @@ export class SongEditor {
     };
     this.history.push({ label, undo: () => apply(before), redo: () => apply(after) });
     apply(after);
+  }
+
+  /**
+   * Fills pattern `index` with a copy of `pattern` and plays it at order
+   * position `at`, as one undo step: a new or cloned pattern from the picker.
+   */
+  placePattern(at: number, index: number, pattern: Pattern, label: string): void {
+    if (index < 0 || index >= MAX_PATTERNS || at < 0 || at >= this.song.orders.length) return;
+    const beforeOrders = [...this.song.orders];
+    const afterOrders = beforeOrders.map((p, i) => (i === at ? index : p));
+    const existing = this.song.patterns[index];
+    const beforePattern = existing ? clonePattern(existing) : emptyPattern(64, this.song.channels);
+    const afterPattern = clonePattern(pattern);
+    const apply = (orders: number[], content: Pattern) => {
+      const known = this.song.patterns.length;
+      ensurePattern(this.song, index);
+      this.song.patterns[index] = clonePattern(content);
+      for (let p = known; p < index; p++) this.sendPattern(p);
+      this.sendPattern(index);
+      this.song.orders = [...orders];
+      this.sendOrders();
+      this.changed(label);
+    };
+    this.history.push({ label, undo: () => apply(beforeOrders, beforePattern), redo: () => apply(afterOrders, afterPattern) });
+    apply(afterOrders, afterPattern);
   }
 
   /** Initial speed and BPM; FT2 does not undo these, so neither do we. */
