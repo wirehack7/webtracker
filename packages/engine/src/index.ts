@@ -6,3 +6,4 @@ export * from './edit.ts';
 export * from './sample-edit.ts';
 export { renderSong, type RenderOptions, type Rendered } from './render.ts';
 export { cleanupSong, cleanupPreview, type CleanupOptions, type CleanupResult } from './cleanup.ts';
+export { createDemoSong, DEMO_SONG_TITLE } from './demo-song.ts';
