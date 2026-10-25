@@ -658,6 +658,33 @@ output {
   }
   .pattern-head {
     gap: calc(var(--px) * 4);
+    align-items: stretch;
+  }
+  .pattern-head .ptitle {
+    align-self: center;
+  }
+  /* The current instrument takes what is left of the head row. */
+  .pattern-head .ins-quick {
+    display: flex;
+    flex: 1 1 calc(var(--px) * 90);
+    min-width: 0;
+    gap: calc(var(--px) * 1);
+  }
+  .ins-quick .btn {
+    min-height: calc(var(--px) * 20);
+  }
+  .ins-quick > .btn:not(.ins-pick) {
+    flex: none;
+    min-width: calc(var(--px) * 20);
+    padding-inline: 0;
+  }
+  .ins-quick .ins-pick {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
   }
   .phone-bar {
     display: flex;
@@ -1171,4 +1198,43 @@ select.value {
   width: calc(var(--px) * 8);
   height: calc(var(--px) * 8);
   accent-color: var(--btn-on);
+}
+
+/* ---- Instrument picker (phones) --------------------------------------- */
+
+.ins-picker .list {
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+  height: min(50dvh, calc(var(--px) * 16 * 16));
+}
+
+.ins-picker .list li {
+  line-height: calc(var(--px) * 16);
+}
+
+.ins-picker .list li.empty {
+  color: var(--dim);
+}
+
+.ins-pick .idx,
+.picker-samples .idx {
+  color: var(--pat-param);
+}
+
+.picker-samples {
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+}
+
+.picker-samples .btn {
+  flex: 1 1 calc(var(--px) * 60);
+  min-width: 0;
+  min-height: calc(var(--px) * 20);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.ins-picker.one-sample .picker-samples-title,
+.ins-picker.one-sample .picker-samples {
+  display: none;
 }

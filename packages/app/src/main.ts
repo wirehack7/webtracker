@@ -55,6 +55,7 @@ import { loadSettings, midiToNote, saveSettings, THEMES, velocityToVolume, type 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 
 const app = $<HTMLDivElement>('#app');
+const insPicker = $<HTMLDialogElement>('#ins-picker');
 const status = $<HTMLSpanElement>('#status');
 const patternEl = $<HTMLDivElement>('#pattern');
 const view = new PatternEditor(patternEl);
@@ -345,10 +346,22 @@ function fillOrders(): void {
   fillList($('#orders'), s.orders.length, 0, (i) => hex(s.orders[i] ?? 0), currentOrder);
 }
 
+function instrumentCount(): number {
+  return Math.max(128, song().instruments.length);
+}
+
 function fillInstruments(): void {
   const s = song();
-  fillList($('#instrument-list'), Math.max(128, s.instruments.length), 1, (i) => s.instruments[i - 1]?.name ?? '', instrument);
+  fillList($('#instrument-list'), instrumentCount(), 1, (i) => s.instruments[i - 1]?.name ?? '', instrument);
   fillSampleList();
+  showQuickInstrument();
+  if (insPicker.open) fillPicker();
+}
+
+/** The phone-only instrument button above the editor. */
+function showQuickInstrument(): void {
+  $('#ins-pick-no').textContent = hex(instrument);
+  $('#ins-pick-name').textContent = song().instruments[instrument - 1]?.name ?? '';
 }
 
 function fillSampleList(): void {
@@ -434,18 +447,85 @@ editor.onChange = (label) => {
   renderEditors();
 };
 
-$('#instrument-list').addEventListener('select', (event) => {
-  instrument = (event as CustomEvent<number>).detail;
+function selectInstrument(index: number): void {
+  instrument = index;
   sampleSlot = 0;
+  selectListItem($('#instrument-list'), instrument);
   fillSampleList();
+  showQuickInstrument();
   sampleEditor.resetView();
   renderEditors();
-});
-$('#sample-list').addEventListener('select', (event) => {
-  sampleSlot = (event as CustomEvent<number>).detail;
+}
+
+function selectSample(slot: number): void {
+  sampleSlot = slot;
+  selectListItem($('#sample-list'), sampleSlot);
   sampleEditor.resetView();
   renderEditors();
+}
+
+$('#instrument-list').addEventListener('select', (event) => selectInstrument((event as CustomEvent<number>).detail));
+$('#sample-list').addEventListener('select', (event) => selectSample((event as CustomEvent<number>).detail));
+
+// Phones: step through instruments or pick one without opening the menu sheet.
+function fillPicker(): void {
+  const s = song();
+  const list = $('#picker-list');
+  fillList(list, instrumentCount(), 1, (i) => s.instruments[i - 1]?.name ?? '', instrument);
+  for (const li of list.children) {
+    const ins = s.instruments[Number((li as HTMLElement).dataset.index) - 1];
+    li.classList.toggle('empty', !ins?.samples.some((sample) => sample.data.length > 0));
+  }
+  // Only instruments with several samples need a choice of sample.
+  const samples = s.instruments[instrument - 1]?.samples ?? [];
+  const buttons = samples.map((sample, slot) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn';
+    b.dataset.slot = String(slot);
+    b.setAttribute('aria-pressed', String(slot === sampleSlot));
+    const idx = document.createElement('span');
+    idx.className = 'idx';
+    idx.textContent = hex(slot, 1);
+    b.append(idx, ` ${sample.name}`);
+    return b;
+  });
+  $('#picker-samples').replaceChildren(...buttons);
+  insPicker.classList.toggle('one-sample', samples.length <= 1);
+}
+
+$('#ins-pick').addEventListener('click', () => {
+  fillPicker();
+  insPicker.showModal();
+  $('#picker-list').querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' });
 });
+$('#picker-list').addEventListener('select', (event) => {
+  selectInstrument((event as CustomEvent<number>).detail);
+  insPicker.close();
+});
+$('#picker-samples').addEventListener('click', (event) => {
+  const b = (event.target as HTMLElement).closest<HTMLElement>('[data-slot]');
+  if (!b) return;
+  selectSample(Number(b.dataset.slot));
+  insPicker.close();
+});
+// A tap on the backdrop closes the picker.
+insPicker.addEventListener('click', (event) => {
+  const r = insPicker.getBoundingClientRect();
+  const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+  if (event.target === insPicker && !inside) insPicker.close();
+});
+/** The arrows stop one slot after the last instrument with samples, ready for a new one. */
+function stepInstrument(delta: number): void {
+  const instruments = song().instruments;
+  let used = instruments.length;
+  while (used > 0 && !instruments[used - 1]!.samples.some((sample) => sample.data.length > 0)) used--;
+  const last = Math.min(instrumentCount(), Math.max(used + 1, instrument));
+  const next = Math.max(1, Math.min(last, instrument + delta));
+  if (next !== instrument) selectInstrument(next);
+}
+$('#ins-prev').addEventListener('click', () => stepInstrument(-1));
+$('#ins-next').addEventListener('click', () => stepInstrument(1));
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view-target]')) {
   b.addEventListener('click', () => setView(b.dataset.viewTarget!));
 }
