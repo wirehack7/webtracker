@@ -1,8 +1,8 @@
 /**
  * Module replayer. XM songs follow FastTracker 2's replayer closely, quirks
- * included (see the FastTracker 2 section). MOD files, and songs imported
- * from S3M or IT (`song.compat`), use a simpler shared path with Amiga
- * periods and the ProTracker differences switched on via `song.format`.
+ * included (see the FastTracker 2 section), and MOD songs ProTracker 2's,
+ * with Paula's sample DMA (see the ProTracker 2 section). Songs imported
+ * from S3M or IT (`song.compat`) use a simpler shared path.
  *
  * The player has no Web Audio dependency so it runs both inside the
  * AudioWorklet and in Node (tests, offline rendering).
@@ -16,6 +16,7 @@ import {
   type Sample,
   type Song,
 } from './song.ts';
+import { PT_PERIODS, PT_VIBRATO } from './protracker.ts';
 
 // Vibrato/tremolo waveforms, 64 steps, amplitude +-255.
 const WAVEFORMS: Int16Array[] = (() => {
@@ -44,6 +45,13 @@ const FT2_AUTO_VIB_SINE = Int8Array.from({ length: 256 }, (_, i) => Math.round(-
 
 /** Periods of FT2's note table: 120 notes in 16 finetune steps each, plus 16 entries below. */
 const FT2_NOTES = 12 * 10 * 16 + 16;
+/** ProTracker's lowest note, C-1 (period 856), as a note number. */
+const PT_LOW_NOTE = 37;
+const AMIGA_PAL_CLOCK = 3546895;
+/** Period limits for MODs that use notes outside ProTracker's three octaves. */
+const PT_MIN_EXTENDED = 14;
+const PT_MAX_EXTENDED = 6848;
+const EMPTY_CELL = new Uint8Array(CELL_SIZE);
 function ft2PeriodTable(linear: boolean): Float64Array {
   const t = new Float64Array(FT2_NOTES);
   // Index 784 is C-4 at finetune 0. Amiga periods are FT2's divided by four.
@@ -253,6 +261,34 @@ class Channel {
   rowNote = 0;
   rowInstrument = 0;
 
+  // ProTracker 2 state, for MOD songs: the n_* variables of its replayer.
+  // `period`/`volume` are n_period/n_volume, `outPeriod`/`outVolume` what was
+  // last written to Paula.
+  ptNote = 0;
+  ptFinetune = 0;
+  ptStart: Sample | null = null;
+  ptStartPos = 0;
+  ptLength = 0;
+  ptLoop: Sample | null = null;
+  ptLoopPos = 0;
+  ptReplen = 0;
+  ptLoopIns = 0;
+  ptWaveControl = 0;
+  ptGlissFunk = 0;
+  ptVibratoCmd = 0;
+  ptTremoloCmd = 0;
+  ptTrigger = false;
+  dmaPos = 0;
+  dmaLength = 0;
+  // Paula: the run being played ends at `runEnd`; then the latched loop
+  // starts, which a later instrument number can replace in the meantime.
+  runEnd = 0;
+  latch: Sample | null = null;
+  latchPos = 0;
+  latchLength = 0;
+  latchIns = 0;
+  dmaOn = false;
+
   // Current row.
   effect = 0;
   param = 0;
@@ -317,6 +353,14 @@ export class Player {
   private posJumpFlag = false;
   private pattDelTime = 0;
   private pattDelTime2 = 0;
+  /** ProTracker 2 semantics, for MOD songs. */
+  private pt: boolean;
+  /** A MOD with more than four channels or notes outside C-1..B-3: periods and slides go past Amiga limits. */
+  private ptExtended = false;
+  /** ProTracker's song position and next row, which run ahead of `order`/`row` during a row. */
+  private ptPos = 0;
+  private ptRow = 0;
+  private ptTempo = 0;
   private rampSamples: number;
   /** ProTracker E0x: the LED filter, on with E00, off with E01. */
   ledFilter = false;
@@ -336,6 +380,9 @@ export class Player {
     this.sampleRate = sampleRate;
     this.isMod = song.format === 'mod';
     this.ft2 = !this.isMod && !song.compat;
+    this.pt = this.isMod;
+    const outsideAmiga = (v: number, i: number) => i % CELL_SIZE === 0 && v > 0 && v <= 96 && (v < PT_LOW_NOTE || v >= PT_LOW_NOTE + 36);
+    this.ptExtended = this.pt && (song.channels !== 4 || song.patterns.some((p) => p.data.some(outsideAmiga)));
     this.ft2Periods = ft2PeriodTable(song.linearFrequency);
     this.rampSamples = Math.max(1, Math.round(sampleRate * RAMP_SECONDS));
     // Four full-volume channels in phase stay just under full scale.
@@ -372,6 +419,9 @@ export class Player {
     this.posJumpFlag = false;
     this.pattDelTime = 0;
     this.pattDelTime2 = 0;
+    this.ptPos = this.order;
+    this.ptRow = this.row;
+    this.ptTempo = 0;
     this.loops = 0;
     this.ledFilter = false;
     this.filterState.fill(0);
@@ -482,6 +532,10 @@ export class Player {
       this.ft2DoTick();
       return;
     }
+    if (this.pt) {
+      this.ptDoTick();
+      return;
+    }
     if (this.tick === 0) {
       if (this.repeatingRow) {
         for (const ch of this.channels) this.tickEffects(ch);
@@ -570,6 +624,8 @@ export class Player {
   private frequency(period: number): number {
     if (period <= 0) return 0;
     if (this.song.linearFrequency) return 8363 * Math.pow(2, (4608 - period) / 768);
+    // MODs play at the PAL Amiga's clock, like ProTracker; C-4 (period 428) is about 8287 Hz.
+    if (this.isMod) return AMIGA_PAL_CLOCK / period;
     return (8363 * 428) / period;
   }
 
@@ -1866,6 +1922,506 @@ export class Player {
     this.setGains(ch, gain);
   }
 
+  // ------------------------------------------------------------ ProTracker 2
+  //
+  // MOD songs follow ProTracker 2's replayer: the effects work on n_period and
+  // n_volume and write to Paula only where ProTracker does, and Paula plays a
+  // sample run, then the loop latched last. An instrument number without a
+  // note therefore changes volume and finetune at once, but the new sample
+  // only starts when the current one reaches its (loop) end.
+
+  private ptDoTick(): void {
+    if (this.ptTempo > 0) {
+      // ProTracker sets a new tempo one tick late.
+      this.tempo = this.ptTempo;
+      this.ptTempo = 0;
+    }
+    const song = this.song;
+    if (this.tick === 0) {
+      if (this.pattDelTime2 === 0) {
+        if (this.ptPos >= song.orders.length) this.ptPos = this.ptRow = 0;
+        this.order = this.ptPos;
+        this.row = this.ptRow;
+        this.onRow?.(this.getState());
+        const pattern = song.patterns[song.orders[this.order] ?? 0];
+        const base = this.row * song.channels * CELL_SIZE;
+        this.channels.forEach((ch, c) => {
+          const o = base + c * CELL_SIZE;
+          this.ptPlayVoice(ch, pattern && this.row < pattern.rows ? pattern.data.subarray(o, o + CELL_SIZE) : EMPTY_CELL);
+          ch.outVolume = ch.volume;
+        });
+        this.ptSetDma();
+      } else {
+        for (const ch of this.channels) this.ptCheckEffects(ch);
+      }
+      this.ptRow++;
+      if (this.pattDelTime > 0) {
+        this.pattDelTime2 = this.pattDelTime;
+        this.pattDelTime = 0;
+      }
+      if (this.pattDelTime2 > 0 && --this.pattDelTime2 > 0) this.ptRow--;
+      if (this.breakFlag) {
+        this.ptRow = this.breakPos;
+        this.breakPos = 0;
+        this.breakFlag = false;
+      }
+      const rows = song.patterns[song.orders[this.ptPos] ?? 0]?.rows ?? 64;
+      if (this.ptRow >= rows || this.posJumpFlag) this.ptNextPosition();
+    } else {
+      for (const ch of this.channels) this.ptCheckEffects(ch);
+      if (this.posJumpFlag) this.ptNextPosition();
+    }
+
+    for (const ch of this.channels) this.ptUpdate(ch);
+    this.updateChannel(this.preview);
+
+    this.tick++;
+    if (this.tick >= this.speed) this.tick = 0;
+  }
+
+  private ptNextPosition(): void {
+    const song = this.song;
+    this.ptRow = this.breakPos;
+    this.breakPos = 0;
+    this.posJumpFlag = false;
+    if (!this.loopPattern) {
+      let pos = this.jumpOrder >= 0 ? this.jumpOrder : this.ptPos + 1;
+      if (this.jumpOrder >= 0 && pos <= this.ptPos) this.loops++;
+      if (pos >= song.orders.length) {
+        pos = song.restartPosition < song.orders.length ? song.restartPosition : 0;
+        this.loops++;
+      }
+      this.ptPos = pos;
+    }
+    this.jumpOrder = -1;
+    const rows = song.patterns[song.orders[this.ptPos] ?? 0]?.rows ?? 64;
+    if (this.ptRow >= rows) this.ptRow = 0;
+  }
+
+  /** n_note: the period of a note at finetune 0, as stored in a MOD; 0 for none. */
+  private ptNotePeriod(note: number): number {
+    if (note <= 0 || note > 96) return 0;
+    if (note >= PT_LOW_NOTE && note < PT_LOW_NOTE + 36) return PT_PERIODS[note - PT_LOW_NOTE]!;
+    return Math.round(856 * Math.pow(2, -(note - PT_LOW_NOTE) / 12));
+  }
+
+  /** Index into a finetune's 37 periods: the first not above `period`, as ProTracker searches. */
+  private ptFind(period: number, finetune: number, last = 37): number {
+    const base = finetune * 37;
+    for (let i = 0; i < last; i++) if (period >= PT_PERIODS[base + i]!) return i;
+    return last;
+  }
+
+  /** The period for n_note at the channel's finetune, outside ProTracker's three octaves too. */
+  private ptPeriod(ch: Channel): number {
+    const note = ch.ptNote;
+    if (this.ptExtended && (note > 856 || note < 113)) {
+      const fine = ch.ptFinetune > 7 ? ch.ptFinetune - 16 : ch.ptFinetune;
+      return Math.round(note * Math.pow(2, -fine / 96));
+    }
+    return PT_PERIODS[ch.ptFinetune * 37 + this.ptFind(note, 0)]!;
+  }
+
+  private ptPlayVoice(ch: Channel, cell: Uint8Array): void {
+    const [note = 0, instrument = 0, vol = 0, effect = 0, param = 0] = cell;
+    if (ch.ptNote === 0 && ch.effect === 0 && ch.param === 0) ch.outPeriod = ch.period;
+    ch.ptNote = this.ptNotePeriod(note);
+    ch.effect = effect;
+    ch.param = param;
+    if (note > 0 && note <= 96) ch.note = note;
+
+    if (note > 0 && note <= 96 && (note < PT_LOW_NOTE || note >= PT_LOW_NOTE + 36)) this.ptExtended = true;
+    if (instrument >= 1 && instrument <= 31) {
+      // An empty sample slot loads too: it silences the channel.
+      const s = this.song.instruments[instrument - 1]?.samples[0];
+      const words = s ? s.data.length >> 1 : 0;
+      const looped = !!s && s.loopType !== LoopType.None && s.loopLength > 2;
+      const repeat = looped ? s.loopStart >> 1 : 0;
+      ch.instrumentNumber = instrument;
+      ch.ptStart = words > 0 ? s! : null;
+      ch.ptStartPos = 0;
+      ch.ptFinetune = ((s?.finetune ?? 0) >> 4) & 15;
+      // The volume of an empty slot is not kept, so the channel keeps its own.
+      if (s) ch.volume = s.volume;
+      ch.ptLength = words;
+      ch.ptReplen = looped ? s.loopLength >> 1 : 1;
+      ch.ptLoop = ch.ptStart;
+      ch.ptLoopPos = repeat * 2;
+      ch.ptLoopIns = instrument;
+      if (repeat > 0) ch.ptLength = repeat + ch.ptReplen;
+    }
+    // MODs have no volume column, but one entered in the editor still sets the volume.
+    if (vol >= 0x10 && vol <= 0x50) ch.volume = vol - 0x10;
+
+    if (ch.ptNote > 0) {
+      if (effect === 0x0e && param >> 4 === 0x05) {
+        ch.ptFinetune = param & 15;
+        this.ptSetPeriod(ch);
+      } else if (effect === 0x03 || effect === 0x05) {
+        this.ptSetTonePorta(ch);
+        this.ptCheckMoreEffects(ch);
+      } else if (effect === 0x09) {
+        this.ptCheckMoreEffects(ch);
+        this.ptSetPeriod(ch);
+      } else {
+        this.ptSetPeriod(ch);
+      }
+    } else {
+      this.ptCheckMoreEffects(ch);
+    }
+  }
+
+  private ptSetPeriod(ch: Channel): void {
+    ch.period = this.ptPeriod(ch);
+    if (!(ch.effect === 0x0e && ch.param >> 4 === 0x0d)) {
+      if (!(ch.ptWaveControl & 0x04)) ch.vibratoPos = 0;
+      if (!(ch.ptWaveControl & 0x40)) ch.tremoloPos = 0;
+      if (!ch.ptStart) {
+        ch.ptLoop = null;
+        ch.ptReplen = 1;
+      }
+      // Paula gets the sample pointer now: the 9xx that runs again below only moves n_start for later notes.
+      ch.outPeriod = ch.period;
+      ch.ptTrigger = true;
+      ch.dmaPos = ch.ptStartPos;
+      ch.dmaLength = ch.ptStart ? ch.ptLength : 1;
+    }
+    this.ptCheckMoreEffects(ch);
+  }
+
+  /** Starts the triggered voices and latches every channel's loop, as ProTracker does after each row. */
+  private ptSetDma(): void {
+    for (const ch of this.channels) {
+      if (ch.ptTrigger) {
+        ch.ptTrigger = false;
+        this.paulaStart(ch, ch.ptStart, ch.dmaPos, ch.dmaLength, ch.instrumentNumber);
+      }
+      this.paulaLatch(ch);
+    }
+  }
+
+  private paulaStart(ch: Channel, sample: Sample | null, pos: number, words: number, ins: number): void {
+    ch.dmaOn = true;
+    ch.sample = sample;
+    ch.pos = pos;
+    ch.dir = 1;
+    ch.runEnd = pos + words * 2;
+    ch.instrumentNumber = ins;
+    ch.instrument = this.song.instruments[ins - 1] ?? null;
+    ch.active = sample !== null && words > 0;
+    // Start from silence so a retriggered sample does not click.
+    ch.gainL = ch.gainR = 0;
+    ch.targetL = ch.targetR = -1;
+    ch.rampLeft = 0;
+  }
+
+  private paulaLatch(ch: Channel): void {
+    ch.latch = ch.ptLoop;
+    ch.latchPos = ch.ptLoopPos;
+    ch.latchLength = ch.ptReplen;
+    ch.latchIns = ch.ptLoopIns;
+    // A voice that ran out loops a silent word, so a new loop starts at once.
+    if (ch.dmaOn && !ch.active) this.paulaNext(ch);
+  }
+
+  /** Moves Paula on to the latched loop; false if that loop is silent. */
+  private paulaNext(ch: Channel): boolean {
+    const s = ch.latch;
+    if (!s || ch.latchLength <= 1) {
+      ch.active = false;
+      return false;
+    }
+    ch.sample = s;
+    ch.pos = ch.latchPos;
+    ch.runEnd = ch.latchPos + ch.latchLength * 2;
+    ch.instrumentNumber = ch.latchIns;
+    ch.instrument = this.song.instruments[ch.latchIns - 1] ?? null;
+    ch.active = true;
+    return true;
+  }
+
+  private ptRetrigger(ch: Channel): void {
+    this.paulaStart(ch, ch.ptStart, ch.ptStartPos, ch.ptStart ? ch.ptLength : 1, ch.instrumentNumber);
+    ch.outPeriod = ch.period;
+    this.paulaLatch(ch);
+  }
+
+  /** Effects on tick 0 (checkmoreeffects). */
+  private ptCheckMoreEffects(ch: Channel): void {
+    const param = ch.param;
+    switch (ch.effect) {
+      case 0x09:
+        if (param) ch.offsetMem = param;
+        {
+          const offset = ch.offsetMem << 7;
+          if (offset < ch.ptLength) {
+            ch.ptLength -= offset;
+            ch.ptStartPos += offset * 2;
+          } else {
+            ch.ptLength = 1;
+          }
+        }
+        return;
+      case 0x0b:
+        this.jumpOrder = param;
+        this.breakPos = 0;
+        this.posJumpFlag = true;
+        return;
+      case 0x0d: {
+        const row = (param >> 4) * 10 + (param & 15);
+        this.breakPos = row > 63 ? 0 : row;
+        this.posJumpFlag = true;
+        return;
+      }
+      case 0x0e:
+        this.ptECommand(ch);
+        return;
+      case 0x0f:
+        if (param === 0) return;
+        if (param < 32) this.speed = param;
+        else this.ptTempo = param;
+        return;
+      case 0x0c:
+        ch.volume = Math.min(64, param);
+        return;
+    }
+    ch.outPeriod = ch.period;
+  }
+
+  /** Effects on the other ticks, and on tick 0 of a row repeated by EEx (checkeffects). */
+  private ptCheckEffects(ch: Channel): void {
+    const effect = ch.effect;
+    if (effect !== 0 || ch.param !== 0) {
+      switch (effect) {
+        case 0x00: this.ptArpeggio(ch); break;
+        case 0x01: this.ptPortaUp(ch, ch.param); break;
+        case 0x02: this.ptPortaDown(ch, ch.param); break;
+        case 0x03:
+          if (ch.param) {
+            ch.tonePortaSpeed = ch.param;
+            ch.param = 0;
+          }
+          this.ptTonePorta(ch);
+          break;
+        case 0x04:
+          if (ch.param & 15) ch.ptVibratoCmd = (ch.ptVibratoCmd & 0xf0) | (ch.param & 15);
+          if (ch.param & 0xf0) ch.ptVibratoCmd = (ch.param & 0xf0) | (ch.ptVibratoCmd & 15);
+          this.ptVibrato(ch);
+          break;
+        case 0x05:
+          this.ptTonePorta(ch);
+          this.ptVolumeSlide(ch);
+          break;
+        case 0x06:
+          this.ptVibrato(ch);
+          this.ptVolumeSlide(ch);
+          break;
+        case 0x0e:
+          this.ptECommand(ch);
+          break;
+        default:
+          ch.outPeriod = ch.period;
+          if (effect === 0x07) this.ptTremolo(ch);
+          else if (effect === 0x0a) this.ptVolumeSlide(ch);
+      }
+    }
+    if (effect !== 0x07) ch.outVolume = ch.volume;
+  }
+
+  private ptECommand(ch: Channel): void {
+    const x = ch.param >> 4;
+    const y = ch.param & 15;
+    const tick0 = this.tick === 0;
+    switch (x) {
+      case 0x0:
+        if (tick0) this.ledFilter = (y & 1) === 0;
+        break;
+      case 0x1:
+        if (tick0) this.ptPortaUp(ch, y);
+        break;
+      case 0x2:
+        if (tick0) this.ptPortaDown(ch, y);
+        break;
+      case 0x3:
+        ch.ptGlissFunk = (ch.ptGlissFunk & 0xf0) | y;
+        break;
+      case 0x4:
+        ch.ptWaveControl = (ch.ptWaveControl & 0xf0) | y;
+        break;
+      case 0x5:
+        ch.ptFinetune = y;
+        break;
+      case 0x6:
+        if (!tick0) break;
+        if (y === 0) {
+          ch.loopRow = this.ptRow;
+        } else {
+          if (ch.loopCount === 0) ch.loopCount = y;
+          else if (--ch.loopCount === 0) break;
+          this.breakPos = ch.loopRow;
+          this.breakFlag = true;
+        }
+        break;
+      case 0x7:
+        ch.ptWaveControl = (y << 4) | (ch.ptWaveControl & 15);
+        break;
+      case 0x9:
+        if (y === 0 || (tick0 && ch.ptNote > 0)) break;
+        if (this.tick % y === 0) this.ptRetrigger(ch);
+        break;
+      case 0xa:
+        if (tick0) ch.volume = Math.min(64, ch.volume + y);
+        break;
+      case 0xb:
+        if (tick0) ch.volume = Math.max(0, ch.volume - y);
+        break;
+      case 0xc:
+        if (this.tick === y) ch.volume = 0;
+        break;
+      case 0xd:
+        if (this.tick === y && ch.ptNote > 0) this.ptRetrigger(ch);
+        break;
+      case 0xe:
+        if (tick0 && this.pattDelTime2 === 0) this.pattDelTime = y + 1;
+        break;
+      // E8x (Karplus-Strong) and EFx (invert loop) rewrite the sample data, so they are left out.
+    }
+  }
+
+  private ptVolumeSlide(ch: Channel): void {
+    const p = ch.param;
+    if (p >> 4 === 0) ch.volume = Math.max(0, ch.volume - (p & 15));
+    else ch.volume = Math.min(64, ch.volume + (p >> 4));
+  }
+
+  private ptPortaUp(ch: Channel, amount: number): void {
+    if (this.ptExtended) {
+      ch.period = Math.max(PT_MIN_EXTENDED, ch.period - amount);
+    } else {
+      // ProTracker compares without the sign, so a period below zero is not clamped.
+      let p = ((ch.period - amount) << 16) >> 16;
+      if ((p & 0xfff) < 113) p = (p & 0xf000) | 113;
+      ch.period = (p << 16) >> 16;
+    }
+    ch.outPeriod = ch.period & (this.ptExtended ? 0xffff : 0xfff);
+  }
+
+  private ptPortaDown(ch: Channel, amount: number): void {
+    if (this.ptExtended) {
+      ch.period = Math.min(PT_MAX_EXTENDED, ch.period + amount);
+    } else {
+      let p = ((ch.period + amount) << 16) >> 16;
+      if ((p & 0xfff) > 856) p = (p & 0xf000) | 856;
+      ch.period = (p << 16) >> 16;
+    }
+    ch.outPeriod = ch.period & (this.ptExtended ? 0xffff : 0xfff);
+  }
+
+  private ptSetTonePorta(ch: Channel): void {
+    const note = ch.ptNote;
+    let target: number;
+    if (this.ptExtended && (note > 856 || note < 113)) {
+      target = this.ptPeriod(ch);
+    } else {
+      let i = this.ptFind(note, ch.ptFinetune);
+      if (i >= 37) i = 35;
+      if (ch.ptFinetune & 8 && i > 0) i--;
+      target = PT_PERIODS[ch.ptFinetune * 37 + i]!;
+    }
+    ch.targetPeriod = target;
+    ch.portaDirection = 0;
+    if (ch.period === target) ch.targetPeriod = 0;
+    else if (ch.period > target) ch.portaDirection = 1;
+  }
+
+  private ptTonePorta(ch: Channel): void {
+    if (ch.targetPeriod <= 0) return;
+    if (ch.portaDirection > 0) {
+      ch.period -= ch.tonePortaSpeed;
+      if (ch.period <= ch.targetPeriod) {
+        ch.period = ch.targetPeriod;
+        ch.targetPeriod = 0;
+      }
+    } else {
+      ch.period += ch.tonePortaSpeed;
+      if (ch.period >= ch.targetPeriod) {
+        ch.period = ch.targetPeriod;
+        ch.targetPeriod = 0;
+      }
+    }
+    if (ch.ptGlissFunk & 15 && !(this.ptExtended && (ch.period > 907 || ch.period < 108))) {
+      let i = this.ptFind(ch.period, ch.ptFinetune);
+      if (i >= 37) i = 35;
+      ch.outPeriod = PT_PERIODS[ch.ptFinetune * 37 + i]!;
+    } else {
+      ch.outPeriod = ch.period;
+    }
+  }
+
+  private ptArpeggio(ch: Channel): void {
+    const step = this.tick % 3;
+    if (step === 0) {
+      ch.outPeriod = ch.period;
+      return;
+    }
+    const semis = step === 1 ? ch.param >> 4 : ch.param & 15;
+    if (this.ptExtended && (ch.period > 907 || ch.period < 108)) {
+      ch.outPeriod = Math.round(ch.period * Math.pow(2, -semis / 12));
+      return;
+    }
+    // Past B-3 ProTracker reads on into the next finetune's periods and what follows the table.
+    const base = ch.ptFinetune * 37;
+    for (let i = 0; i < 37; i++) {
+      if (ch.period >= PT_PERIODS[base + i]!) {
+        ch.outPeriod = PT_PERIODS[base + i + semis]!;
+        return;
+      }
+    }
+  }
+
+  private ptVibrato(ch: Channel): void {
+    const pos = ch.vibratoPos;
+    const index = (pos >> 2) & 31;
+    let v: number;
+    switch (ch.ptWaveControl & 3) {
+      case 0: v = PT_VIBRATO[index]!; break;
+      case 1: v = pos < 128 ? index << 3 : 255 - (index << 3); break;
+      default: v = 255;
+    }
+    v = (v * (ch.ptVibratoCmd & 15)) >> 7;
+    ch.outPeriod = (pos < 128 ? ch.period + v : ch.period - v) & 0xffff;
+    ch.vibratoPos = (pos + ((ch.ptVibratoCmd >> 2) & 0x3c)) & 0xff;
+  }
+
+  private ptTremolo(ch: Channel): void {
+    if (ch.param & 15) ch.ptTremoloCmd = (ch.ptTremoloCmd & 0xf0) | (ch.param & 15);
+    if (ch.param & 0xf0) ch.ptTremoloCmd = (ch.param & 0xf0) | (ch.ptTremoloCmd & 15);
+    const pos = ch.tremoloPos;
+    const index = (pos >> 2) & 31;
+    let v: number;
+    switch ((ch.ptWaveControl >> 4) & 3) {
+      case 0: v = PT_VIBRATO[index]!; break;
+      // ProTracker bug: the ramp direction follows the vibrato position.
+      case 1: v = ch.vibratoPos < 128 ? index << 3 : 255 - (index << 3); break;
+      default: v = 255;
+    }
+    v = (v * (ch.ptTremoloCmd & 15)) >> 6;
+    ch.outVolume = pos < 128 ? Math.min(64, ch.volume + v) : Math.max(0, ch.volume - v);
+    ch.tremoloPos = (pos + ((ch.ptTremoloCmd >> 2) & 0x3c)) & 0xff;
+  }
+
+  /** Paula's registers to mixer step and gains. */
+  private ptUpdate(ch: Channel): void {
+    ch.keyOn = true;
+    let period = ch.outPeriod & 0xffff;
+    // Paula reads period 0 as 65536; below 113 it cannot fetch samples any faster.
+    if (period === 0) period = 65536;
+    else if (period < 113 && !this.ptExtended) period = 113;
+    ch.step = this.frequency(period) / this.sampleRate;
+    ch.outPanning = ch.panning;
+    this.setGains(ch, (ch.outVolume / 64) * (this.globalVolume / 64) * (ch.channelVolume / 64));
+  }
+
   // -------------------------------------------------------- per tick output
 
   private updateChannel(ch: Channel): void {
@@ -1965,6 +2521,10 @@ export class Player {
     tap?: Float32Array,
     silent = false,
   ): void {
+    if (this.pt && ch !== this.preview) {
+      this.mixPaula(ch, left, right, offset, count, tap, silent);
+      return;
+    }
     const sample = ch.sample;
     if (!ch.active || !sample) return;
     const data = sample.data;
@@ -2069,6 +2629,93 @@ export class Player {
 
     ch.pos = pos;
     ch.dir = dir;
+    ch.held = held;
+    ch.blepNext = blepNext;
+    ch.gainL = gainL;
+    ch.gainR = gainR;
+  }
+
+  /** Mixes a MOD channel the way Paula plays it: the current run, then the latched loop. */
+  private mixPaula(
+    ch: Channel,
+    left: Float32Array,
+    right: Float32Array,
+    offset: number,
+    count: number,
+    tap?: Float32Array,
+    silent = false,
+  ): void {
+    if (!ch.active || !ch.sample) return;
+    let data = ch.sample.data;
+    let pos = ch.pos;
+    let end = ch.runEnd;
+    let gainL = ch.gainL;
+    let gainR = ch.gainR;
+    const step = ch.step;
+    const mode = this.activeResampler;
+    // Frame j of the run, continuing into the latched loop past its end.
+    const at = (j: number): number => {
+      if (j < end) return j >= 0 && j < data.length ? data[j]! : 0;
+      const loop = ch.latch;
+      if (!loop || ch.latchLength <= 1) return 0;
+      const k = ch.latchPos + ((j - end) % (ch.latchLength * 2));
+      return k < loop.data.length ? loop.data[k]! : 0;
+    };
+    let held = ch.held;
+    let blepNext = ch.blepNext;
+
+    for (let i = offset, stop = offset + count; i < stop; i++) {
+      while (pos >= end) {
+        const over = pos - end;
+        if (!this.paulaNext(ch)) break;
+        data = ch.sample.data;
+        pos = ch.pos + over;
+        end = ch.runEnd;
+      }
+      if (!ch.active) break;
+      const idx = pos | 0;
+      const frac = pos - idx;
+      const a = at(idx);
+      let s = a;
+      if (mode === 'linear') {
+        s = a + (at(idx + 1) - a) * frac;
+      } else if (mode === 'cubic') {
+        const p0 = at(idx - 1), b = at(idx + 1), p3 = at(idx + 2);
+        const t = frac;
+        s = a + 0.5 * t * (b - p0 + t * (2 * p0 - 5 * a + 4 * b - p3 + t * (3 * (a - b) + p3 - p0)));
+      } else if (mode === 'sinc') {
+        const k = Math.round(frac * SINC_PHASES) * SINC_TAPS;
+        s = 0;
+        for (let t = 0; t < SINC_TAPS; t++) s += SINC_TABLE[k + t]! * at(idx - 3 + t);
+      } else if (mode === 'amiga') {
+        s += blepNext;
+        blepNext = 0;
+        if (a !== held) {
+          const delta = a - held;
+          const d = Math.min(1, frac / step);
+          s -= (delta * (1 - d) * (1 - d)) / 2;
+          blepNext = (delta * d * d) / 2;
+          held = a;
+        }
+      }
+
+      if (ch.rampLeft > 0) {
+        gainL += ch.rampL;
+        gainR += ch.rampR;
+        if (--ch.rampLeft === 0) {
+          gainL = ch.targetL;
+          gainR = ch.targetR;
+        }
+      }
+      if (!silent) {
+        left[i]! += s * gainL;
+        right[i]! += s * gainR;
+        if (tap) tap[i] = s * (gainL + gainR);
+      }
+      pos += step;
+    }
+
+    ch.pos = pos;
     ch.held = held;
     ch.blepNext = blepNext;
     ch.gainL = gainL;

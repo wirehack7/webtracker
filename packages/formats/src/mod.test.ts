@@ -42,11 +42,11 @@ describe('MOD loader', () => {
 });
 
 describe('MOD playback', () => {
-  it('plays C-4 at 8363 Hz sample rate', () => {
+  it('plays C-4 at the PAL Amiga rate', () => {
     const song = modWith([[{ note: C4, ins: 1 }]]);
     const { left } = render(song, 0.5);
-    // 32-sample cycle played at 8363 Hz.
-    expect(estimateFrequency(left, SR * 0.05)).toBeCloseTo(8363 / 32, 0);
+    // 32-sample cycle at period 428 of the PAL clock, about 8287 Hz.
+    expect(estimateFrequency(left, SR * 0.05)).toBeCloseTo(3546895 / 428 / 32, 0);
   });
 
   it('plays an octave higher one octave up', () => {
