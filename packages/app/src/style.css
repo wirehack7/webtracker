@@ -798,6 +798,134 @@ output {
   white-space: nowrap;
 }
 
+/* The Help dialog keeps its head and tabs in place while the topic scrolls. */
+.help-dialog {
+  width: min(calc(100vw - 32px), calc(var(--px) * 400));
+  height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.help-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4) calc(var(--px) * 4) 0;
+}
+
+.help-head .ptitle {
+  margin: 0;
+}
+
+.help-search.value.text {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  padding: calc(var(--px) * 2);
+}
+
+.help-tabs {
+  display: flex;
+  flex: none;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 4);
+  overflow-x: auto;
+}
+
+.help-tabs .btn {
+  flex: none;
+}
+
+.help-context {
+  margin: 0 calc(var(--px) * 4) calc(var(--px) * 2);
+  color: var(--pat-fx);
+}
+
+.help-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 calc(var(--px) * 4) calc(var(--px) * 4);
+  line-height: 1.6;
+}
+
+.help-group + .help-group {
+  margin-top: calc(var(--px) * 6);
+}
+
+.help-intro {
+  margin: calc(var(--px) * 2) 0;
+  color: var(--label);
+}
+
+.help-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+}
+
+.help-entry {
+  display: contents;
+}
+
+.help-entry[hidden] {
+  display: none;
+}
+
+.help-entry > span {
+  padding: calc(var(--px) * 2) calc(var(--px) * 4) calc(var(--px) * 2) 0;
+}
+
+.help-code {
+  color: var(--pat-param);
+  white-space: nowrap;
+}
+
+.help-entry b {
+  color: var(--pat-instr);
+  font-weight: normal;
+}
+
+.help-entry.hit > span {
+  background: var(--pat-cursor);
+}
+
+.help-empty {
+  color: var(--dim);
+}
+
+/* Narrow screens stack the key or effect above its text. */
+@media (max-width: 639px) {
+  .help-dialog {
+    width: calc(100vw - 16px);
+    max-width: none;
+    height: calc(100dvh - 16px);
+    max-height: none;
+  }
+
+  .help-list {
+    display: block;
+  }
+
+  .help-entry {
+    display: block;
+    padding: calc(var(--px) * 2) 0;
+  }
+
+  .help-entry > span {
+    display: block;
+    padding: 0;
+  }
+
+  .help-code {
+    white-space: normal;
+  }
+}
+
 /* ---- Song tabs ------------------------------------------------------- */
 
 .song-tabs {
