@@ -110,6 +110,32 @@
       </section>
 
       <section class="piano" id="piano" aria-label="Piano"></section>
+      <!-- Touch entry in edit mode: the cursor cell in big fields, step tools, and
+           a keypad that takes the piano's place outside the note column. -->
+      <section class="entry-pad" id="entry-pad" aria-label="Touch entry">
+        <div class="entry-fields">
+          <button type="button" class="btn" data-pad="left" aria-label="Previous channel"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1 4 6 0v8z" fill="currentColor"/></svg></button>
+          <button type="button" class="btn field n" data-field="0"><small>Ch 1</small><span>---</span></button>
+          <button type="button" class="btn field i" data-field="1"><small>Ins</small><span>..</span></button>
+          <button type="button" class="btn field v" data-field="3"><small>Vol</small><span>..</span></button>
+          <button type="button" class="btn field e" data-field="5"><small>Fx</small><span>.</span></button>
+          <button type="button" class="btn field x" data-field="6"><small>Val</small><span>..</span></button>
+          <button type="button" class="btn" data-pad="right" aria-label="Next channel"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="M7 4 2 8V0z" fill="currentColor"/></svg></button>
+        </div>
+        <div class="entry-tools">
+          <button type="button" class="btn" data-pad="up" aria-label="Row up"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="M4 1 8 6H0z" fill="currentColor"/></svg></button>
+          <button type="button" class="btn" data-pad="down" aria-label="Row down"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="M0 2h8L4 7z" fill="currentColor"/></svg></button>
+          <span class="entry-step">
+            <button type="button" class="btn" data-proxy-step="add:-1" aria-label="Smaller step">-</button>
+            <output class="value" id="pad-step"><small>Step</small><span>1</span></output>
+            <button type="button" class="btn" data-proxy-step="add:1" aria-label="Bigger step">+</button>
+          </span>
+          <button type="button" class="btn" data-pad="off" title="Key off">Off</button>
+          <button type="button" class="btn" data-pad="clear" title="Clear the field">Del</button>
+          <button type="button" class="btn" data-pad="undo">Undo</button>
+        </div>
+      </section>
+      <section class="entry-keys" id="entry-keys" aria-label="Value keys"></section>
 
       <!-- Phones: the few controls needed while playing; everything else is in the menu sheet. -->
       <nav class="phone-bar" aria-label="Quick controls">

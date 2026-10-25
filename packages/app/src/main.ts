@@ -38,14 +38,15 @@ import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadX
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
-import { enterEffect, enterInstrument, enterParam, enterVolume } from './editor/entry.ts';
+import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
+import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountHelp } from './ui/help.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
-import { Column, hex } from './ui/pattern-view.ts';
+import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
 import { BLOCKED } from './storage/db.ts';
@@ -170,6 +171,15 @@ function advance(): void {
 
 /** Hex and letter entry into the instrument, volume and effect columns. */
 function typeIntoColumn(key: string): boolean {
+  const change = columnChange(key);
+  if (!change) return false;
+  editCell('entry', change);
+  advance();
+  return true;
+}
+
+/** What typing `key` at the cursor changes in the cell, if the column takes it. */
+function columnChange(key: string): Partial<Cell> | null {
   const cell = cursorCell();
   const column = view.column;
   const high = column === Column.InsHi || column === Column.VolHi || column === Column.ParamHi;
@@ -187,10 +197,7 @@ function typeIntoColumn(key: string): boolean {
     const v = enterParam(cell.param, high, key);
     if (v !== null) change = { param: v };
   }
-  if (!change) return false;
-  editCell('entry', change);
-  advance();
-  return true;
+  return change;
 }
 
 /** Del: clears the selection, or the field under the cursor. */
@@ -391,6 +398,7 @@ function showValue(id: string, value: number, decimal = false): void {
   $<HTMLOutputElement>(`#${id}`).textContent = text;
   // Phones show the pattern length in the menu sheet instead.
   if (id === 'pattern-len') $('#len-proxy').textContent = text;
+  if (id === 'add') $('#pad-step span').textContent = String(value);
 }
 
 /** Shows the pattern at the current order position and the song fields. */
@@ -799,7 +807,99 @@ function setRecording(on: boolean): void {
   $('#rec').setAttribute('aria-pressed', String(on));
   $('#bar-rec').setAttribute('aria-pressed', String(on));
   patternEl.classList.toggle('rec', on);
+  showEntryPad();
 }
+
+// ---- Touch entry -----------------------------------------------------------
+// In edit mode with the on-screen piano, a pad below the pattern shows the
+// cursor cell in big fields. Outside the note column a keypad takes the
+// piano's place and fills a field digit by digit, then steps down.
+
+const entryPad = $('#entry-pad');
+const entryKeys = $('#entry-keys');
+let entryKeysFor = '';
+
+function showEntryPad(): void {
+  const on = recording && keysToggle.getAttribute('aria-pressed') === 'true';
+  app.classList.toggle('touch-entry', on);
+  app.classList.toggle('value-entry', on && view.column !== Column.Note);
+  if (on) drawEntryPad();
+}
+
+function drawEntryPad(): void {
+  const cell = cursorCell();
+  const fx = formatEffect(cell.effect, cell.param);
+  const texts = [
+    cell.note ? noteName(cell.note) : '---',
+    cell.instrument ? hex(cell.instrument) : '..',
+    formatVolume(cell.volume),
+    fx.slice(0, 1),
+    fx.slice(1),
+  ];
+  const fields = entryPad.querySelectorAll<HTMLElement>('[data-field]');
+  // The field the cursor is in: note, instrument, volume, effect or parameter.
+  const at = [Column.Note, Column.InsLo, Column.VolLo, Column.Effect, Column.ParamLo].findIndex((last) => view.column <= last);
+  fields.forEach((field, i) => {
+    field.querySelector('span')!.textContent = texts[i]!;
+    field.setAttribute('aria-pressed', String(i === at));
+  });
+  fields[0]!.querySelector('small')!.textContent = `Ch ${view.channel + 1}`;
+  app.classList.toggle('value-entry', view.column !== Column.Note);
+  const keysFor = `${view.column}:${cell.effect}`;
+  if (view.column !== Column.Note && keysFor !== entryKeysFor) {
+    renderPadKeys(entryKeys, padKeys(view.column, cell.effect));
+  }
+  entryKeysFor = view.column === Column.Note ? '' : keysFor;
+}
+
+view.onDraw = () => {
+  if (app.classList.contains('touch-entry')) drawEntryPad();
+};
+
+entryPad.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLElement>('[data-field], [data-pad]');
+  if (!button) return;
+  if (button.dataset.field) {
+    view.moveTo(view.row, view.channel, Number(button.dataset.field));
+    return;
+  }
+  switch (button.dataset.pad) {
+    case 'up':
+      view.moveTo(view.row - 1, view.channel);
+      break;
+    case 'down':
+      view.moveTo(view.row + 1, view.channel);
+      break;
+    case 'left':
+      view.moveTo(view.row, view.channel - 1);
+      break;
+    case 'right':
+      view.moveTo(view.row, view.channel + 1);
+      break;
+    case 'off':
+      editCell('key off', { note: NOTE_KEY_OFF, instrument: 0 });
+      advance();
+      break;
+    case 'clear':
+      clearAtCursor();
+      break;
+    case 'undo': {
+      const label = editor.undo();
+      status.textContent = label ? `Undo: ${label}` : 'Nothing to undo.';
+      break;
+    }
+  }
+});
+
+entryKeys.addEventListener('click', (event) => {
+  const key = (event.target as HTMLElement).closest<HTMLElement>('[data-key]')?.dataset.key;
+  if (key === undefined) return;
+  const change = columnChange(key);
+  if (!change) return;
+  editCell('entry', change);
+  const next = nextAfterPadKey(view.column);
+  view.moveTo(next.advance ? view.row + Math.max(0, settings.add) : view.row, view.channel, next.column);
+});
 
 // ---- Files ---------------------------------------------------------------
 
@@ -1674,7 +1774,9 @@ const syncKeysToggle = (): void => {
   const visible = app.classList.contains('show-piano') || (coarse.matches && !app.classList.contains('hide-piano'));
   keysToggle.setAttribute('aria-pressed', String(visible));
   $('#keys-proxy').setAttribute('aria-pressed', String(visible));
+  showEntryPad();
 };
+coarse.addEventListener('change', syncKeysToggle);
 keysToggle.addEventListener('click', () => {
   const visible = keysToggle.getAttribute('aria-pressed') === 'true';
   app.classList.toggle('show-piano', !visible);

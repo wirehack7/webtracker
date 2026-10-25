@@ -2,7 +2,7 @@
 // values. Volume bytes follow XM: 0x10..0x50 set volume 0..64, 0x60..0xF0
 // are commands whose first character comes from VOLUME_COMMANDS.
 
-import { VOLUME_COMMANDS } from '../ui/pattern-view.ts';
+import { Column, VOLUME_COMMANDS } from '../ui/pattern-view.ts';
 
 const HEX = '0123456789ABCDEF';
 const EFFECTS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -50,4 +50,28 @@ export function enterEffect(key: string): number | null {
 export function enterParam(current: number, high: boolean, key: string): number | null {
   const d = hexDigit(key);
   return d === null ? null : setNibble(current, high, d);
+}
+
+/**
+ * Where the touch keypad goes after a key: through the digits of a field,
+ * then back to the field's first column one step further down. An effect
+ * letter leads on to its parameter, so A, 0, F fill a whole effect.
+ */
+export function nextAfterPadKey(column: number): { column: number; advance: boolean } {
+  switch (column) {
+    case Column.InsHi:
+      return { column: Column.InsLo, advance: false };
+    case Column.InsLo:
+      return { column: Column.InsHi, advance: true };
+    case Column.VolHi:
+      return { column: Column.VolLo, advance: false };
+    case Column.VolLo:
+      return { column: Column.VolHi, advance: true };
+    case Column.Effect:
+      return { column: Column.ParamHi, advance: false };
+    case Column.ParamHi:
+      return { column: Column.ParamLo, advance: false };
+    default:
+      return { column: Column.Effect, advance: column === Column.ParamLo };
+  }
 }

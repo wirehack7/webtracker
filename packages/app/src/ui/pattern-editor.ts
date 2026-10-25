@@ -21,6 +21,8 @@ export class PatternEditor {
   patternIndex = 0;
   /** Called when the cursor moves through the mouse. */
   onCursor: (() => void) | null = null;
+  /** Called after every redraw and cursor move, however it came about. */
+  onDraw: (() => void) | null = null;
   /** Prospective view: the end of the previous and the start of the next pattern, dimmed around this one. */
   prospective = false;
   /** The patterns before and after this one in the order list, for the prospective view. */
@@ -132,6 +134,7 @@ export class PatternEditor {
       ...this.ghostRows(after, 0, GHOST_ROWS),
     );
     this.scrollToCursor();
+    this.onDraw?.();
   }
 
   private renderRow(r: number): void {
@@ -164,6 +167,7 @@ export class PatternEditor {
       this.renderRow(before.row);
       this.renderRow(this.row);
       this.scrollToCursor();
+      this.onDraw?.();
     }
   }
 
