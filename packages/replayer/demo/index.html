@@ -495,6 +495,8 @@ button.onclick = () => music.play();   // browsers need a click first
         $('info').textContent = info;
         await music.play();
         setPlaying(true);
+        // Announced for the site's optional tracking code; does nothing without a listener.
+        dispatchEvent(new CustomEvent('chiptrackr:track', { detail: { name: 'replayer-play' } }));
       };
       $('stop').onclick = () => {
         music?.stop();
