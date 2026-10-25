@@ -1,7 +1,8 @@
 /**
- * Module replayer with FastTracker 2 semantics. MOD files are played through
- * the same code with Amiga periods and the few ProTracker differences
- * (no effect memory for slides) switched on via `song.format`.
+ * Module replayer. XM songs follow FastTracker 2's replayer closely, quirks
+ * included (see the FastTracker 2 section). MOD files, and songs imported
+ * from S3M or IT (`song.compat`), use a simpler shared path with Amiga
+ * periods and the ProTracker differences switched on via `song.format`.
  *
  * The player has no Web Audio dependency so it runs both inside the
  * AudioWorklet and in Node (tests, offline rendering).
@@ -32,6 +33,31 @@ const [SINE, RAMP_DOWN, SQUARE] = WAVEFORMS as [Int16Array, Int16Array, Int16Arr
 
 // Instrument auto-vibrato uses a different waveform order: sine, square, ramp down, ramp up.
 const AUTO_VIBRATO_WAVEFORMS: Int16Array[] = [SINE, SQUARE, RAMP_DOWN, RAMP_DOWN.map((v) => -v)];
+
+// FastTracker 2 tables: the half sine of vibrato and tremolo (32 steps), and
+// the 256 step sine of instrument auto-vibrato, which starts downwards.
+const FT2_VIB_TAB = [
+  0, 24, 49, 74, 97, 120, 141, 161, 180, 197, 212, 224, 235, 244, 250, 253,
+  255, 253, 250, 244, 235, 224, 212, 197, 180, 161, 141, 120, 97, 74, 49, 24,
+];
+const FT2_AUTO_VIB_SINE = Int8Array.from({ length: 256 }, (_, i) => Math.round(-64 * Math.sin((2 * Math.PI * i) / 256)));
+
+/** Periods of FT2's note table: 120 notes in 16 finetune steps each, plus 16 entries below. */
+const FT2_NOTES = 12 * 10 * 16 + 16;
+function ft2PeriodTable(linear: boolean): Float64Array {
+  const t = new Float64Array(FT2_NOTES);
+  // Index 784 is C-4 at finetune 0. Amiga periods are FT2's divided by four.
+  for (let i = 0; i < FT2_NOTES; i++) t[i] = linear ? 7744 - 4 * i : Math.round(1712 * Math.pow(2, -(i - 784) / 192)) / 4;
+  return t;
+}
+
+/** Where an FT2 envelope is: tick counter, point index, 8.8 value and per tick delta. */
+class EnvState {
+  tick = 0;
+  pos = 0;
+  value = 0;
+  delta = 0;
+}
 
 /**
  * How sample frames are turned into output frames. 'amiga' holds each frame
@@ -116,6 +142,12 @@ function envelopeValue(env: Envelope, tick: number): number {
     }
   }
   return pts[pts.length - 1]!.y;
+}
+
+/** The tick an FT2 envelope shows: its counter runs on while it holds at sustain or the end. */
+function envelopeTick(env: Envelope, st: EnvState): number {
+  const pt = env.points[Math.min(st.pos, env.points.length - 1)];
+  return Math.max(0, pt ? Math.min(st.tick, pt.x) : st.tick);
 }
 
 function envelopeAdvance(env: Envelope, tick: number, keyOn: boolean): number {
@@ -203,6 +235,24 @@ class Channel {
   vibratoOffset = 0;
   tremoloOffset = 0;
 
+  // FastTracker 2 state. In XM songs `period`/`volume` are FT2's real period and
+  // volume, while `outPeriod`/`outVolume` keep what vibrato, arpeggio, tremolo
+  // and tremor last made of them, until the next command resets them.
+  oldVolume = 0;
+  oldPanning = 128;
+  glissando = false;
+  retrigCount = 0;
+  retrigSpeed = 0;
+  retrigVolume = 0;
+  volEnv = new EnvState();
+  panEnv = new EnvState();
+  autoVibAmp = 0;
+  /** Off for a released preview note that should ring out instead of fading. */
+  fading = true;
+  /** Note and instrument of the current row, for note delay. */
+  rowNote = 0;
+  rowInstrument = 0;
+
   // Current row.
   effect = 0;
   param = 0;
@@ -258,6 +308,15 @@ export class Player {
   private jumpOrder = -1;
   private breakRow = -1;
   private loopJumpRow = -1;
+  /** FastTracker 2 semantics, for XM songs that were not imported from S3M or IT. */
+  private ft2: boolean;
+  private ft2Periods: Float64Array;
+  // FT2 sequencing: break row, jump flags and the two pattern delay counters.
+  private breakPos = 0;
+  private breakFlag = false;
+  private posJumpFlag = false;
+  private pattDelTime = 0;
+  private pattDelTime2 = 0;
   private rampSamples: number;
   /** ProTracker E0x: the LED filter, on with E00, off with E01. */
   ledFilter = false;
@@ -276,6 +335,8 @@ export class Player {
     this.song = song;
     this.sampleRate = sampleRate;
     this.isMod = song.format === 'mod';
+    this.ft2 = !this.isMod && !song.compat;
+    this.ft2Periods = ft2PeriodTable(song.linearFrequency);
     this.rampSamples = Math.max(1, Math.round(sampleRate * RAMP_SECONDS));
     // Four full-volume channels in phase stay just under full scale.
     this.masterGain = 0.8 / Math.sqrt(Math.max(4, song.channels));
@@ -306,6 +367,11 @@ export class Player {
     this.jumpOrder = -1;
     this.breakRow = -1;
     this.loopJumpRow = -1;
+    this.breakPos = 0;
+    this.breakFlag = false;
+    this.posJumpFlag = false;
+    this.pattDelTime = 0;
+    this.pattDelTime2 = 0;
     this.loops = 0;
     this.ledFilter = false;
     this.filterState.fill(0);
@@ -412,6 +478,10 @@ export class Player {
   // ---------------------------------------------------------------- sequencing
 
   private doTick(): void {
+    if (this.ft2) {
+      this.ft2DoTick();
+      return;
+    }
     if (this.tick === 0) {
       if (this.repeatingRow) {
         for (const ch of this.channels) this.tickEffects(ch);
@@ -484,7 +554,8 @@ export class Player {
     const base = this.row * song.channels * CELL_SIZE;
     for (let c = 0; c < song.channels; c++) {
       const cell = pattern.data.subarray(base + c * CELL_SIZE, base + (c + 1) * CELL_SIZE);
-      this.processCell(this.channels[c]!, cell);
+      if (this.ft2) this.ft2Row(this.channels[c]!, cell);
+      else this.processCell(this.channels[c]!, cell);
     }
   }
 
@@ -995,9 +1066,813 @@ export class Player {
     ch.tremoloPos = (ch.tremoloPos + ch.tremoloSpeed) & 63;
   }
 
+  // ------------------------------------------------------- FastTracker 2
+  //
+  // XM songs follow FT2's replayer closely, quirks included, since that is
+  // what XM music was written against: arpeggio counts ticks backwards,
+  // vibrato and tremolo results stick until a command resets them, pattern
+  // loops leak their row into the next pattern, and so on.
+
+  private ft2DoTick(): void {
+    if (this.tick === 0 && this.pattDelTime2 === 0) this.processRow();
+    else for (const ch of this.channels) this.ft2Effects(ch);
+
+    for (const ch of this.channels) this.updateChannel(ch);
+    this.updateChannel(this.preview);
+
+    this.tick++;
+    if (this.tick >= this.speed) {
+      this.tick = 0;
+      this.ft2NextPos();
+    }
+  }
+
+  private ft2NextPos(): void {
+    const song = this.song;
+    this.row++;
+    if (this.pattDelTime > 0) {
+      this.pattDelTime2 = this.pattDelTime;
+      this.pattDelTime = 0;
+    }
+    if (this.pattDelTime2 > 0 && --this.pattDelTime2 > 0) this.row--;
+    if (this.breakFlag) {
+      this.breakFlag = false;
+      this.row = this.breakPos;
+    }
+    const rows = song.patterns[song.orders[this.order] ?? 0]?.rows ?? 64;
+    if (this.row < rows && !this.posJumpFlag) return;
+
+    // FT2 keeps the break row of a pattern loop, so the next pattern can start there.
+    this.row = this.breakPos;
+    this.breakPos = 0;
+    this.posJumpFlag = false;
+    if (!this.loopPattern) {
+      const target = this.jumpOrder >= 0 ? this.jumpOrder : this.order + 1;
+      if (this.jumpOrder >= 0 && target <= this.order) this.loops++;
+      this.order = target;
+      if (this.order >= song.orders.length) {
+        this.order = song.restartPosition < song.orders.length ? song.restartPosition : 0;
+        this.loops++;
+      }
+    }
+    this.jumpOrder = -1;
+    const pattern = song.patterns[song.orders[this.order] ?? 0];
+    if (pattern && this.row >= pattern.rows) this.row = 0;
+  }
+
+  /** Period of a 0-based note (C-0 = 0); FT2 drops the low three bits of the finetune. */
+  private ft2Period(note: number, finetune: number): number {
+    return this.ft2Periods[Math.max(0, Math.min(FT2_NOTES - 1, note * 16 + (finetune >> 3) + 16))]!;
+  }
+
+  /** FT2's relocateTon: the note nearest to `period`, plus `semis` semitones, as a period. */
+  private ft2Relocate(period: number, semis: number, ch: Channel): number {
+    const table = this.ft2Periods;
+    const fine = (ch.finetune >> 3) + 16;
+    let hi = 8 * 12 * 16;
+    let lo = 0;
+    for (let i = 0; i < 8; i++) {
+      const tmp = (((lo + hi) >> 1) & ~15) + fine;
+      if (period >= table[Math.max(0, tmp - 8)]!) hi = (tmp - fine) & ~15;
+      else lo = (tmp - fine) & ~15;
+    }
+    let tmp = lo + fine + (semis << 4);
+    // FT2's search only covers 8 octaves, so arpeggio never goes above B-7.
+    if (tmp >= 8 * 12 * 16 + 15 - 1) tmp = 8 * 12 * 16 + 16 - 1;
+    return table[tmp]!;
+  }
+
+  private ft2Frequency(period: number): number {
+    if (period <= 0) return 0;
+    if (!this.song.linearFrequency) return (8363 * 428) / period;
+    // FT2 computes in 16 bits, so periods past the bottom of the range wrap around.
+    const inv = (9216 - Math.round(period)) & 0xffff;
+    const shift = (14 - Math.floor(inv / 768)) & 31;
+    return 8363 * Math.pow(2, 8 - shift + (inv % 768) / 768);
+  }
+
+  /** The highest period slides may reach, 31999 in FT2's units. */
+  private get ft2MaxPeriod(): number {
+    return this.song.linearFrequency ? 31999 : 31999 / 4;
+  }
+
+  private ft2Row(ch: Channel, cell: Uint8Array): void {
+    const [note = 0, instrument = 0, vol = 0, effect = 0, param = 0] = cell;
+    ch.volCmd = vol;
+    // Arpeggio or vibrato that stops here puts the pitch back.
+    if (ch.effect === 0) {
+      if (ch.param > 0) ch.outPeriod = ch.period;
+    } else if ((ch.effect === 0x04 || ch.effect === 0x06) && effect !== 0x04 && effect !== 0x06) {
+      ch.outPeriod = ch.period;
+    }
+    ch.effect = effect;
+    ch.param = param;
+    ch.rowNote = note;
+    ch.rowInstrument = instrument;
+    ch.delayedCell = null;
+
+    let ins = instrument;
+    if (ins > 0) {
+      if (ins <= 128) ch.instrumentNumber = ins;
+      else ins = 0;
+    }
+
+    let checkEffects = true;
+    if (effect === 0x0e) {
+      if (param >= 0xd1 && param <= 0xdf) return; // note delay, see ft2Effects
+      if (param === 0x90) checkEffects = false;
+    }
+    if (checkEffects) {
+      if (vol >> 4 === 0x0f) {
+        if (vol & 0x0f) ch.tonePortaSpeed = (vol & 0x0f) << 4;
+        this.ft2PreparePorta(ch, note, ins);
+        this.ft2TickZero(ch);
+        return;
+      }
+      if (effect === 0x03 || effect === 0x05) {
+        if (effect === 0x03 && param) ch.tonePortaSpeed = param;
+        this.ft2PreparePorta(ch, note, ins);
+        this.ft2TickZero(ch);
+        return;
+      }
+      if (effect === 0x14 && param === 0) {
+        this.ft2KeyOff(ch);
+        if (ins) this.ft2ResetVolumes(ch);
+        this.ft2TickZero(ch);
+        return;
+      }
+      if (note === 0) {
+        if (ins) {
+          this.ft2ResetVolumes(ch);
+          this.ft2TriggerInstrument(ch);
+        }
+        this.ft2TickZero(ch);
+        return;
+      }
+    }
+    if (note === NOTE_KEY_OFF) {
+      this.ft2KeyOff(ch);
+      if (ins) this.ft2ResetVolumes(ch);
+      this.ft2TickZero(ch);
+      return;
+    }
+    // The first note on a channel takes the instrument's defaults even
+    // without an instrument number of its own.
+    const first = ch.sample === null;
+    this.ft2TriggerNote(ch, note, effect, param);
+    if (ins || (first && ch.sample)) {
+      this.ft2ResetVolumes(ch);
+      this.ft2TriggerInstrument(ch);
+    }
+    this.ft2TickZero(ch);
+  }
+
+  /** Starts `note` (0 = the channel's last note) with the instrument last named. */
+  private ft2TriggerNote(ch: Channel, note: number, effect: number, param: number): void {
+    if (note === NOTE_KEY_OFF) {
+      this.ft2KeyOff(ch);
+      return;
+    }
+    if (note === 0) {
+      note = ch.note;
+      if (note === 0) return;
+    }
+    ch.note = note;
+    const ins = this.song.instruments[ch.instrumentNumber - 1] ?? null;
+    ch.instrument = ins;
+    if (note > 96) note = 96;
+    const sample = ins ? (ins.samples[ins.keymap[note - 1] ?? 0] ?? null) : null;
+    ch.relativeNote = sample?.relativeNote ?? 0;
+    const note2 = note + ch.relativeNote;
+    if (note2 >= 120) return;
+    if (!sample || sample.data.length === 0) {
+      ch.sample = sample;
+      ch.active = false;
+      ch.oldVolume = sample?.volume ?? 0;
+      return;
+    }
+    ch.oldVolume = sample.volume;
+    ch.oldPanning = sample.usePanning === false ? ch.panning : sample.panning;
+    ch.finetune = effect === 0x0e && param >> 4 === 0x05 ? (param & 0x0f) * 16 - 128 : sample.finetune;
+    if (note2 > 0) ch.period = ch.outPeriod = this.ft2Period(note2 - 1, ch.finetune);
+
+    let start = 0;
+    if (effect === 0x09) {
+      if (param) ch.offsetMem = param;
+      start = ch.offsetMem << 8;
+    }
+    ch.sample = sample;
+    // An offset past the end stops the note, looped or not.
+    if (start >= sample.data.length) {
+      ch.active = false;
+      return;
+    }
+    this.startVoice(ch, start);
+  }
+
+  private startVoice(ch: Channel, pos: number): void {
+    ch.pos = pos;
+    ch.dir = 1;
+    ch.active = true;
+    // Start from silence so a retriggered sample does not click.
+    ch.gainL = ch.gainR = 0;
+    ch.targetL = ch.targetR = -1; // forces a new ramp in updateChannel
+    ch.rampLeft = 0;
+  }
+
+  private ft2PreparePorta(ch: Channel, note: number, ins: number): void {
+    if (note === NOTE_KEY_OFF) {
+      this.ft2KeyOff(ch);
+    } else if (note > 0) {
+      const real = note - 1 + ch.relativeNote;
+      if (real >= 0 && real < 120) {
+        ch.targetPeriod = this.ft2Period(real, ch.finetune);
+        ch.portaDirection = ch.targetPeriod === ch.period ? 0 : ch.targetPeriod > ch.period ? 1 : 2;
+      }
+    }
+    if (ins) {
+      this.ft2ResetVolumes(ch);
+      if (note !== NOTE_KEY_OFF) this.ft2TriggerInstrument(ch);
+    }
+  }
+
+  private ft2ResetVolumes(ch: Channel): void {
+    ch.volume = ch.outVolume = ch.oldVolume;
+    ch.panning = ch.oldPanning;
+  }
+
+  /** Restarts envelopes, fadeout and auto-vibrato of the instrument that plays. */
+  private ft2TriggerInstrument(ch: Channel): void {
+    if (!(ch.vibratoWave & 4)) ch.vibratoPos = 0;
+    if (!(ch.tremoloWave & 4)) ch.tremoloPos = 0;
+    ch.tremorPos = 0;
+    ch.keyOn = true;
+    const ins = ch.instrument;
+    if (!ins) return;
+    if (ins.volumeEnvelope.enabled) {
+      ch.volEnv.tick = -1;
+      ch.volEnv.pos = 0;
+    }
+    if (ins.panningEnvelope.enabled) {
+      ch.panEnv.tick = -1;
+      ch.panEnv.pos = 0;
+    }
+    ch.fading = true;
+    ch.fadeout = 32768;
+    if (ins.vibratoDepth > 0) {
+      ch.autoVibPos = 0;
+      if (ins.vibratoSweep > 0) {
+        ch.autoVibAmp = 0;
+        ch.autoVibSweep = Math.floor((ins.vibratoDepth << 8) / ins.vibratoSweep);
+      } else {
+        ch.autoVibAmp = ins.vibratoDepth << 8;
+        ch.autoVibSweep = 0;
+      }
+    }
+  }
+
+  private ft2KeyOff(ch: Channel): void {
+    ch.keyOn = false;
+    const ins = ch.instrument;
+    const ve = ins?.volumeEnvelope;
+    if (ve?.enabled && ve.points.length) {
+      const x = ve.points[Math.min(ch.volEnv.pos, ve.points.length - 1)]!.x;
+      if (ch.volEnv.tick >= x) ch.volEnv.tick = x - 1;
+    } else {
+      ch.volume = ch.outVolume = 0;
+    }
+    const pe = ins?.panningEnvelope;
+    if (pe?.enabled && pe.points.length) {
+      const x = pe.points[Math.min(ch.panEnv.pos, pe.points.length - 1)]!.x;
+      if (ch.panEnv.tick >= x) ch.panEnv.tick = x - 1;
+    }
+  }
+
+  private ft2SetVolume(ch: Channel, volume: number): void {
+    ch.volume = ch.outVolume = Math.max(0, Math.min(64, volume));
+  }
+
+  private ft2SetPeriod(ch: Channel, period: number): void {
+    ch.period = ch.outPeriod = Math.max(1, Math.min(this.ft2MaxPeriod, period));
+  }
+
+  private ft2TickZero(ch: Channel): void {
+    const vol = ch.volCmd;
+    const v = vol & 0x0f;
+    switch (vol >> 4) {
+      case 0x1: case 0x2: case 0x3: case 0x4:
+        this.ft2SetVolume(ch, vol - 0x10);
+        break;
+      case 0x5:
+        if (vol === 0x50) this.ft2SetVolume(ch, 64);
+        break;
+      case 0x8:
+        this.ft2SetVolume(ch, ch.volume - v);
+        break;
+      case 0x9:
+        this.ft2SetVolume(ch, ch.volume + v);
+        break;
+      case 0xa:
+        if (v) ch.vibratoSpeed = v << 2;
+        break;
+      case 0xc:
+        ch.panning = v << 4;
+        break;
+    }
+
+    const effect = ch.effect;
+    const param = ch.param;
+    const x = param >> 4;
+    const y = param & 0x0f;
+    switch (effect) {
+      case 0x08:
+        ch.panning = param;
+        break;
+      case 0x0b:
+        this.jumpOrder = param;
+        this.breakPos = 0;
+        this.posJumpFlag = true;
+        break;
+      case 0x0c:
+        this.ft2SetVolume(ch, param);
+        break;
+      case 0x0d: {
+        const row = x * 10 + y;
+        this.breakPos = row <= 63 ? row : 0;
+        this.posJumpFlag = true;
+        break;
+      }
+      case 0x0e:
+        switch (x) {
+          case 0x1:
+            if (y) ch.fineUpMem = y;
+            this.ft2SetPeriod(ch, ch.period - this.slideUnits(ch.fineUpMem));
+            break;
+          case 0x2:
+            if (y) ch.fineDownMem = y;
+            this.ft2SetPeriod(ch, ch.period + this.slideUnits(ch.fineDownMem));
+            break;
+          case 0x3:
+            ch.glissando = y !== 0;
+            break;
+          case 0x4:
+            ch.vibratoWave = y;
+            break;
+          case 0x6:
+            if (y === 0) {
+              ch.loopRow = this.row;
+            } else if (ch.loopCount === 0) {
+              ch.loopCount = y;
+              this.breakPos = ch.loopRow;
+              this.breakFlag = true;
+            } else if (--ch.loopCount > 0) {
+              this.breakPos = ch.loopRow;
+              this.breakFlag = true;
+            }
+            break;
+          case 0x7:
+            ch.tremoloWave = y;
+            break;
+          case 0x8:
+            ch.panning = y * 17;
+            break;
+          case 0xa:
+            if (y) ch.fineVolUpMem = y;
+            this.ft2SetVolume(ch, ch.volume + ch.fineVolUpMem);
+            break;
+          case 0xb:
+            if (y) ch.fineVolDownMem = y;
+            this.ft2SetVolume(ch, ch.volume - ch.fineVolDownMem);
+            break;
+          case 0xc:
+            if (y === 0) this.ft2SetVolume(ch, 0);
+            break;
+          case 0xe:
+            if (this.pattDelTime2 === 0) this.pattDelTime = y + 1;
+            break;
+        }
+        break;
+      case 0x0f:
+        if (param >= 32) this.tempo = param;
+        else if (param > 0) this.speed = param;
+        break;
+      case 0x10: // Gxx
+        this.globalVolume = Math.min(64, param);
+        break;
+      case 0x15: // Lxx
+        this.ft2SetEnvelopePos(ch, param);
+        break;
+      case 0x1b:
+        this.ft2MultiRetrig(ch, param, true);
+        break;
+      case 0x16: // Mxx: channel volume (IT)
+        ch.channelVolume = Math.min(64, param);
+        break;
+      case 0x17: // Nxy: channel volume slide (IT), NxF and NFy fine
+        if (param) ch.channelVolSlideMem = param;
+        {
+          const m = ch.channelVolSlideMem;
+          if ((m & 0x0f) === 0x0f && m >> 4) ch.channelVolume = Math.min(64, ch.channelVolume + (m >> 4));
+          else if (m >> 4 === 0x0f && m & 0x0f) ch.channelVolume = Math.max(0, ch.channelVolume - (m & 0x0f));
+        }
+        break;
+      case 0x21: // X1y / X2y
+        if (x === 1) {
+          if (y) ch.extraFineUpMem = y;
+          this.ft2SetPeriod(ch, ch.period - (this.song.linearFrequency ? ch.extraFineUpMem : ch.extraFineUpMem / 4));
+        } else if (x === 2) {
+          if (y) ch.extraFineDownMem = y;
+          this.ft2SetPeriod(ch, ch.period + (this.song.linearFrequency ? ch.extraFineDownMem : ch.extraFineDownMem / 4));
+        }
+        break;
+    }
+  }
+
+  /** Effects of the ticks after the first, and of the first tick of rows repeated by EEx. */
+  private ft2Effects(ch: Channel): void {
+    const t = this.tick;
+    const vol = ch.volCmd;
+    const v = vol & 0x0f;
+    switch (vol >> 4) {
+      case 0x6:
+        this.ft2SetVolume(ch, ch.volume - v);
+        break;
+      case 0x7:
+        this.ft2SetVolume(ch, ch.volume + v);
+        break;
+      case 0xb:
+        if (v) ch.vibratoDepth = v;
+        this.ft2Vibrato(ch);
+        break;
+      case 0xd:
+        ch.panning = Math.max(0, ch.panning - v);
+        break;
+      case 0xe:
+        ch.panning = Math.min(255, ch.panning + v);
+        break;
+      case 0xf:
+        this.ft2Porta(ch);
+        break;
+    }
+
+    const effect = ch.effect;
+    const param = ch.param;
+    if (effect === 0 && param === 0) return;
+    const x = param >> 4;
+    const y = param & 0x0f;
+    switch (effect) {
+      case 0x00: {
+        // FT2 reads its arpeggio table with the tick counter running backwards.
+        let pos = this.speed - t;
+        pos = pos > 16 ? 2 : pos === 16 ? 0 : pos % 3;
+        ch.outPeriod = pos === 0 ? ch.period : this.ft2Relocate(ch.period, pos === 1 ? x : y, ch);
+        break;
+      }
+      case 0x01:
+        if (param) ch.portaUpMem = param;
+        this.ft2SetPeriod(ch, ch.period - this.slideUnits(ch.portaUpMem));
+        break;
+      case 0x02:
+        if (param) ch.portaDownMem = param;
+        this.ft2SetPeriod(ch, ch.period + this.slideUnits(ch.portaDownMem));
+        break;
+      case 0x03:
+        this.ft2Porta(ch);
+        break;
+      case 0x04:
+        if (y) ch.vibratoDepth = y;
+        if (x) ch.vibratoSpeed = x << 2;
+        this.ft2Vibrato(ch);
+        break;
+      case 0x05:
+        this.ft2Porta(ch);
+        this.ft2VolSlide(ch, param);
+        break;
+      case 0x06:
+        this.ft2Vibrato(ch);
+        this.ft2VolSlide(ch, param);
+        break;
+      case 0x07:
+        this.ft2Tremolo(ch, param);
+        break;
+      case 0x0a:
+        this.ft2VolSlide(ch, param);
+        break;
+      case 0x0e:
+        if (x === 0x9) {
+          if (y && t % y === 0) {
+            this.ft2TriggerNote(ch, 0, 0, 0);
+            this.ft2TriggerInstrument(ch);
+          }
+        } else if (x === 0xc) {
+          if (t === y) this.ft2SetVolume(ch, 0);
+        } else if (x === 0xd) {
+          if (t === y) this.ft2NoteDelay(ch);
+        }
+        break;
+      case 0x11: {
+        const p = param || ch.globalVolSlideMem;
+        ch.globalVolSlideMem = p;
+        if (p & 0xf0) this.globalVolume = Math.min(64, this.globalVolume + (p >> 4));
+        else this.globalVolume = Math.max(0, this.globalVolume - p);
+        break;
+      }
+      case 0x14:
+        if (t === (param & 31)) this.ft2KeyOff(ch);
+        break;
+      case 0x17: {
+        const m = ch.channelVolSlideMem;
+        if ((m & 0x0f) === 0x0f || m >> 4 === 0x0f) break; // fine slides act on tick 0
+        if (m >> 4) ch.channelVolume = Math.min(64, ch.channelVolume + (m >> 4));
+        else ch.channelVolume = Math.max(0, ch.channelVolume - (m & 0x0f));
+        break;
+      }
+      case 0x19: {
+        const p = param || ch.panSlideMem;
+        ch.panSlideMem = p;
+        if (p & 0xf0) ch.panning = Math.min(255, ch.panning + (p >> 4));
+        else ch.panning = Math.max(0, ch.panning - p);
+        break;
+      }
+      case 0x1b:
+        this.ft2MultiRetrig(ch, param);
+        break;
+      case 0x1d: {
+        const p = param || ch.tremorMem;
+        ch.tremorMem = p;
+        let on = ch.tremorPos & 0x80;
+        let left = (ch.tremorPos & 0x7f) - 1;
+        if (left < 0) {
+          if (on) {
+            on = 0;
+            left = p & 0x0f;
+          } else {
+            on = 0x80;
+            left = p >> 4;
+          }
+        }
+        ch.tremorPos = on | left;
+        ch.outVolume = on ? ch.volume : 0;
+        break;
+      }
+    }
+  }
+
+  private ft2NoteDelay(ch: Channel): void {
+    // Unlike a note on tick 0, a delayed note restarts the envelopes even without an instrument.
+    this.ft2TriggerNote(ch, ch.rowNote, 0, 0);
+    if (ch.rowInstrument) this.ft2ResetVolumes(ch);
+    this.ft2TriggerInstrument(ch);
+    const vol = ch.volCmd;
+    if (vol >= 0x10 && vol <= 0x50) this.ft2SetVolume(ch, vol - 0x10);
+    else if (vol >> 4 === 0xc) ch.panning = (vol & 0x0f) << 4;
+  }
+
+  /** Rxy, which counts ticks since its last retrigger, with FT2's odd first tick. */
+  private ft2MultiRetrig(ch: Channel, param: number, firstTick = false): void {
+    if (param & 0x0f) ch.retrigSpeed = param & 0x0f;
+    if (param >> 4) ch.retrigVolume = param >> 4;
+    let count = ch.retrigCount;
+    const vol = ch.volCmd;
+    if (firstTick) {
+      if (ch.rowInstrument && ch.rowNote !== NOTE_KEY_OFF) count = 1;
+      // A set volume other than zero holds the counter on the first tick.
+      if (vol > 0x10 && vol <= 0x50) {
+        ch.retrigCount = count;
+        return;
+      }
+    }
+    const note = ch.rowNote > 0 && ch.rowNote !== NOTE_KEY_OFF;
+    if (count >= ch.retrigSpeed && !(firstTick && note)) {
+      count = 0;
+      this.ft2Retrig(ch);
+    }
+    ch.retrigCount = count + 1;
+  }
+
+  private ft2Retrig(ch: Channel): void {
+    let v = ch.volume;
+    switch (ch.retrigVolume) {
+      case 0x1: v -= 1; break;
+      case 0x2: v -= 2; break;
+      case 0x3: v -= 4; break;
+      case 0x4: v -= 8; break;
+      case 0x5: v -= 16; break;
+      case 0x6: v = (v >> 1) + (v >> 3) + (v >> 4); break;
+      case 0x7: v >>= 1; break;
+      case 0x9: v += 1; break;
+      case 0xa: v += 2; break;
+      case 0xb: v += 4; break;
+      case 0xc: v += 8; break;
+      case 0xd: v += 16; break;
+      case 0xe: v = (v >> 1) + v; break;
+      case 0xf: v += v; break;
+    }
+    this.ft2SetVolume(ch, v);
+    const vol = ch.volCmd;
+    if (vol >= 0x10 && vol <= 0x50) this.ft2SetVolume(ch, vol - 0x10);
+    else if (vol >> 4 === 0xc) ch.panning = (vol & 0x0f) << 4;
+    this.ft2TriggerNote(ch, 0, 0, 0);
+  }
+
+  private ft2VolSlide(ch: Channel, param: number): void {
+    const p = param || ch.volSlideMem;
+    ch.volSlideMem = p;
+    if (p & 0xf0) this.ft2SetVolume(ch, ch.volume + (p >> 4));
+    else this.ft2SetVolume(ch, ch.volume - p);
+  }
+
+  private ft2Porta(ch: Channel): void {
+    if (ch.portaDirection === 0) return;
+    const speed = this.slideUnits(ch.tonePortaSpeed);
+    if (ch.portaDirection > 1) {
+      ch.period -= speed;
+      if (ch.period <= ch.targetPeriod) {
+        ch.portaDirection = 1;
+        ch.period = ch.targetPeriod;
+      }
+    } else {
+      ch.period += speed;
+      if (ch.period >= ch.targetPeriod) {
+        ch.portaDirection = 1;
+        ch.period = ch.targetPeriod;
+      }
+    }
+    ch.outPeriod = ch.glissando ? this.ft2Relocate(ch.period, 0, ch) : ch.period;
+  }
+
+  private ft2Vibrato(ch: Channel): void {
+    const pos = ch.vibratoPos;
+    let v = (pos >> 2) & 0x1f;
+    switch (ch.vibratoWave & 3) {
+      case 0: v = FT2_VIB_TAB[v]!; break;
+      case 1: v <<= 3; if (pos >= 128) v = ~v & 0xff; break;
+      default: v = 255;
+    }
+    v = (v * ch.vibratoDepth) >> 5;
+    const offset = this.song.linearFrequency ? v : v / 4;
+    ch.outPeriod = pos >= 128 ? ch.period - offset : ch.period + offset;
+    ch.vibratoPos = (pos + ch.vibratoSpeed) & 0xff;
+  }
+
+  private ft2Tremolo(ch: Channel, param: number): void {
+    if (param & 0x0f) ch.tremoloDepth = param & 0x0f;
+    if (param >> 4) ch.tremoloSpeed = (param >> 4) << 2;
+    const pos = ch.tremoloPos;
+    let v = (pos >> 2) & 0x1f;
+    switch ((ch.tremoloWave) & 3) {
+      case 0: v = FT2_VIB_TAB[v]!; break;
+      // FT2 bug: the ramp looks at the vibrato position for its direction.
+      case 1: v <<= 3; if (ch.vibratoPos >= 128) v = ~v & 0xff; break;
+      default: v = 255;
+    }
+    v = (v * ch.tremoloDepth) >> 6;
+    ch.outVolume = pos >= 128 ? Math.max(0, ch.volume - v) : Math.min(64, ch.volume + v);
+    ch.tremoloPos = (pos + ch.tremoloSpeed) & 0xff;
+  }
+
+  /** Lxx: FT2 moves the volume envelope, and the panning envelope only if the volume one has sustain. */
+  private ft2SetEnvelopePos(ch: Channel, param: number): void {
+    const ins = ch.instrument;
+    if (!ins) return;
+    const set = (env: Envelope, st: EnvState) => {
+      const pts = env.points;
+      if (!pts.length) return;
+      st.tick = param - 1;
+      let point = 0;
+      let update = true;
+      let tick = param;
+      if (pts.length > 1) {
+        point++;
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (tick < pts[point]!.x) {
+            point--;
+            tick -= pts[point]!.x;
+            if (tick === 0) {
+              update = false;
+              break;
+            }
+            const dx = pts[point + 1]!.x - pts[point]!.x;
+            if (dx <= 0) break;
+            const y0 = pts[point]!.y;
+            st.delta = Math.trunc(((pts[point + 1]!.y - y0) * 256) / dx);
+            st.value = st.delta * (tick - 1) + y0 * 256;
+            point++;
+            update = false;
+            break;
+          }
+          point++;
+        }
+        if (update) point--;
+      }
+      if (update) {
+        st.delta = 0;
+        st.value = pts[point]!.y * 256;
+      }
+      st.pos = Math.max(0, Math.min(point, pts.length - 1));
+    };
+    if (ins.volumeEnvelope.enabled) set(ins.volumeEnvelope, ch.volEnv);
+    if (ins.volumeEnvelope.sustain && ins.panningEnvelope.enabled) set(ins.panningEnvelope, ch.panEnv);
+  }
+
+  /** One tick of an FT2 envelope; returns its value, 0..64. */
+  private ft2Envelope(env: Envelope, st: EnvState, keyOn: boolean): number {
+    const pts = env.points;
+    const len = pts.length;
+    if (!len) return 64;
+    let pos = Math.min(st.pos, len - 1);
+    let interpolated = false;
+    if (++st.tick === pts[pos]!.x) {
+      st.value = pts[pos]!.y * 256;
+      pos++;
+      if (env.loop) {
+        pos--;
+        if (pos === env.loopEnd && (!env.sustain || pos !== env.sustainPoint || !keyOn)) {
+          pos = Math.min(env.loopStart, len - 1);
+          st.tick = pts[pos]!.x;
+          st.value = pts[pos]!.y * 256;
+        }
+        pos++;
+      }
+      if (pos < len) {
+        if (env.sustain && keyOn && pos - 1 === env.sustainPoint) {
+          st.delta = 0;
+        } else {
+          st.pos = pos;
+          const dx = pts[pos]!.x - pts[pos - 1]!.x;
+          if (dx > 0) {
+            st.delta = Math.trunc(((pts[pos]!.y - pts[pos - 1]!.y) * 256) / dx);
+            interpolated = true;
+          } else {
+            st.delta = 0;
+          }
+        }
+      } else {
+        st.delta = 0;
+      }
+    }
+    if (!interpolated) st.value = Math.max(0, Math.min(64 * 256, st.value + st.delta));
+    return st.value / 256;
+  }
+
+  private ft2Update(ch: Channel): void {
+    const ins = ch.instrument;
+    let period = ch.outPeriod;
+    let envVol = 64;
+    let envPan = 32;
+    if (ins) {
+      const ve = ins.volumeEnvelope;
+      // The fadeout speed comes from the instrument that plays now, which a
+      // note without instrument number can change after key off.
+      if (!ch.keyOn && ch.fading && ins.fadeout > 0) ch.fadeout = Math.max(0, ch.fadeout - ins.fadeout);
+      if (ve.enabled) envVol = this.ft2Envelope(ve, ch.volEnv, ch.keyOn);
+      if (ins.panningEnvelope.enabled) envPan = this.ft2Envelope(ins.panningEnvelope, ch.panEnv, ch.keyOn);
+
+      if (ins.vibratoDepth > 0) {
+        let amp: number;
+        if (ch.autoVibSweep > 0) {
+          amp = ch.autoVibSweep;
+          // FT2 bug: after key off the sweep step itself is used as depth.
+          if (ch.keyOn) {
+            amp += ch.autoVibAmp;
+            if (amp >> 8 > ins.vibratoDepth) {
+              amp = ins.vibratoDepth << 8;
+              ch.autoVibSweep = 0;
+            }
+            ch.autoVibAmp = amp;
+          }
+        } else {
+          amp = ch.autoVibAmp;
+        }
+        const pos = (ch.autoVibPos = (ch.autoVibPos + ins.vibratoRate) & 0xff);
+        let wave: number;
+        switch (ins.vibratoType & 3) {
+          case 1: wave = pos > 127 ? 64 : -64; break;
+          case 2: wave = (((pos >> 1) + 64) & 127) - 64; break;
+          case 3: wave = ((64 - (pos >> 1)) & 127) - 64; break;
+          default: wave = FT2_AUTO_VIB_SINE[pos]!;
+        }
+        const delta = (wave * amp) >> 14;
+        period += this.song.linearFrequency ? delta : delta / 4;
+      }
+    }
+    if (period >= this.ft2MaxPeriod + 1) period = 0;
+
+    ch.step = this.ft2Frequency(period) / this.sampleRate;
+    const gain =
+      (ch.outVolume / 64) * (envVol / 64) * (ch.fadeout / 32768) * (this.globalVolume / 64) * (ch.channelVolume / 64);
+    const pan = ch.panning;
+    ch.outPanning = Math.max(0, Math.min(255, pan + ((envPan - 32) * (128 - Math.abs(pan - 128))) / 32));
+    this.setGains(ch, gain);
+  }
+
   // -------------------------------------------------------- per tick output
 
   private updateChannel(ch: Channel): void {
+    if (this.ft2) {
+      this.ft2Update(ch);
+      return;
+    }
     // Vibrato/tremolo offsets are computed during tickEffects of this tick only.
     const vibrato = ch.vibratoOffset;
     const tremolo = ch.tremoloOffset;
@@ -1057,6 +1932,11 @@ export class Player {
 
     const pan = ch.panning;
     ch.outPanning = Math.max(0, Math.min(255, pan + ((envPan - 32) * (128 - Math.abs(pan - 128))) / 32));
+    this.setGains(ch, gain);
+  }
+
+  /** Sets the channel's target gains from `gain` and its output panning, ramped unless ramps are off. */
+  private setGains(ch: Channel, gain: number): void {
     const p = ch.outPanning / 255;
     const targetL = ch.active ? gain * Math.sqrt(1 - p) : 0;
     const targetR = ch.active ? gain * Math.sqrt(p) : 0;
@@ -1176,7 +2056,8 @@ export class Player {
             pos = loopStart + (loopStart - pos);
             dir = 1;
           }
-          if (pos < loopStart || pos >= loopEnd) pos = loopStart;
+          // Before the loop is first reached the sample plays from its start.
+          if (pos >= loopEnd || (dir < 0 && pos < loopStart)) pos = loopStart;
         } else if (pos >= loopEnd) {
           pos = loopStart + ((pos - loopStart) % sample.loopLength);
         }
@@ -1202,6 +2083,15 @@ export class Player {
     ch.effect = 0;
     ch.param = 0;
     ch.delayedCell = null;
+    if (this.ft2) {
+      ch.volCmd = 0;
+      this.ft2TriggerNote(ch, note, 0, 0);
+      if (ch.active) {
+        this.ft2ResetVolumes(ch);
+        this.ft2TriggerInstrument(ch);
+      }
+      return;
+    }
     this.triggerNote(ch, note, null);
     if (ch.instrument && ch.active) this.resetInstrumentState(ch, ch.instrument);
   }
@@ -1219,8 +2109,8 @@ export class Player {
         sample: ch.instrument.samples.indexOf(ch.sample),
         note: ch.note,
         pos: ch.pos,
-        volEnvTick: ch.volEnvTick,
-        panEnvTick: ch.panEnvTick,
+        volEnvTick: this.ft2 ? envelopeTick(ch.instrument.volumeEnvelope, ch.volEnv) : ch.volEnvTick,
+        panEnvTick: this.ft2 ? envelopeTick(ch.instrument.panningEnvelope, ch.panEnv) : ch.panEnvTick,
       });
     };
     if (this.playing) this.channels.forEach(add);
@@ -1237,9 +2127,11 @@ export class Player {
     const ch = this.preview;
     if (ch.instrument && !ch.instrument.volumeEnvelope.enabled && ch.sample?.loopType === LoopType.None) {
       ch.keyOn = false;
+      ch.fading = false;
       return;
     }
-    this.keyOff(ch);
+    if (this.ft2) this.ft2KeyOff(ch);
+    else this.keyOff(ch);
   }
 
   /**

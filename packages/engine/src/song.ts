@@ -90,6 +90,11 @@ export interface Song {
   channelVolume?: number[];
   /** Global volume at song start, 0..64 (S3M and IT store one; XM always starts at 64). */
   initialGlobalVolume?: number;
+  /**
+   * For songs imported from S3M or IT: plays effects closer to the original
+   * tracker instead of with FastTracker 2's quirks. Saving as XM drops it.
+   */
+  compat?: 's3m' | 'it';
 }
 
 export interface Cell {

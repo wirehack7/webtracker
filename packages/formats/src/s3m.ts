@@ -256,5 +256,6 @@ export function loadS3m(buffer: ArrayBuffer): Song {
     initialTempo,
     channelPanning,
     initialGlobalVolume: globalVolume,
+    compat: 's3m',
   };
 }
