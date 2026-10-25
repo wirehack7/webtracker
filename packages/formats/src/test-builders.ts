@@ -769,3 +769,135 @@ export function buildOkt(opts: {
   }
   return new Uint8Array(out).buffer;
 }
+
+/**
+ * Packs data as MMCMP with the widest code size, so every value is stored
+ * directly or with the escape for the top values. 16-bit data is packed as
+ * 16-bit words without delta coding.
+ */
+export function packMmcmp(data: Uint8Array, sixteen = false): Uint8Array {
+  const bitsOut: number[] = [];
+  const put = (value: number, n: number) => {
+    for (let i = 0; i < n; i++) bitsOut.push((value >> i) & 1);
+  };
+  if (sixteen) {
+    for (let i = 0; i + 1 < data.length; i += 2) {
+      // Stored values are zigzag coded and XORed with 0x8000.
+      const signed = (((data[i]! | (data[i + 1]! << 8)) ^ 0x8000) << 16) >> 16;
+      const code = signed < 0 ? -signed * 2 - 1 : signed * 2;
+      if (code < 0xfff0) put(code, 16);
+      else {
+        put(0xffff, 16);
+        put(code === 0xffff ? 0x0f : code - 0xfff0, 4);
+        if (code === 0xffff) put(0, 1);
+      }
+    }
+    put(0xffff, 16);
+    put(0x0f, 4);
+    put(1, 1);
+  } else {
+    for (const b of data) {
+      if (b < 0xf8) put(b, 8);
+      else {
+        put(0xff, 8);
+        put(b === 0xff ? 7 : b - 0xf8, 3);
+        if (b === 0xff) put(0, 1);
+      }
+    }
+    put(0xff, 8);
+    put(7, 3);
+    put(1, 1);
+  }
+  const packed = new Uint8Array(Math.ceil(bitsOut.length / 8));
+  bitsOut.forEach((bit, i) => (packed[i >> 3]! |= bit << (i & 7)));
+  const table = sixteen ? new Uint8Array(0) : Uint8Array.from({ length: 256 }, (_, i) => i);
+  const size = data.length & (sixteen ? ~1 : ~0);
+  const header = 24;
+  const block = header + 4;
+  const out = new Uint8Array(block + 20 + 8 + table.length + packed.length);
+  const v = new DataView(out.buffer);
+  writeString(out, 0, 'ziRCONia', 8);
+  v.setUint16(8, 14, true);
+  v.setUint16(10, 0x1310, true);
+  v.setUint16(12, 1, true);
+  v.setUint32(14, size, true);
+  v.setUint32(18, header, true);
+  v.setUint32(header, block, true);
+  v.setUint32(block, size, true);
+  v.setUint32(block + 4, table.length + packed.length, true);
+  v.setUint16(block + 12, 1, true);
+  v.setUint16(block + 14, sixteen ? 0x0005 : 0x0001, true);
+  v.setUint16(block + 16, table.length, true);
+  v.setUint16(block + 18, sixteen ? 15 : 7, true);
+  v.setUint32(block + 20, 0, true);
+  v.setUint32(block + 24, size, true);
+  out.set(table, block + 28);
+  out.set(packed, block + 28 + table.length);
+  return out;
+}
+
+/** Packs data as PowerPacker PP20 with a greedy matcher, working from the end like the unpacker. */
+export function packPp20(data: Uint8Array): Uint8Array {
+  const modes = [9, 10, 11, 12];
+  const bitsOut: number[] = [];
+  // The unpacker reads values most significant bit first.
+  const put = (value: number, n: number) => {
+    for (let i = n - 1; i >= 0; i--) bitsOut.push((value >> i) & 1);
+  };
+  const putCount = (extra: number, width: number) => {
+    const max = (1 << width) - 1;
+    for (; extra >= max; extra -= max) put(max, width);
+    put(extra, width);
+  };
+  const findMatch = (p: number): [number, number] => {
+    let best: [number, number] = [0, 0];
+    for (let offset = 0; offset < 1 << modes[3]! && p + offset < data.length; offset++) {
+      let len = 0;
+      while (len < p && len < 60 && data[p - 1 - len] === data[p + offset - len]) len++;
+      if (len >= 2 && len > best[0] && (len >= 5 || offset < 1 << modes[len - 2]!)) best = [len, offset];
+    }
+    return best;
+  };
+  let p = data.length;
+  let literals: number[] = [];
+  const flush = () => {
+    put(0, 1);
+    putCount(literals.length - 1, 2);
+    for (const b of literals) put(b, 8);
+    literals = [];
+  };
+  while (p > 0) {
+    const [len, offset] = findMatch(p);
+    if (len < 2) {
+      literals.push(data[--p]!);
+      continue;
+    }
+    if (literals.length) flush();
+    else put(1, 1);
+    if (len >= 5) {
+      put(3, 2);
+      put(1, 1);
+      put(offset, modes[3]!);
+      putCount(len - 5, 3);
+    } else {
+      put(len - 2, 2);
+      put(offset, modes[len - 2]!);
+    }
+    p -= len;
+  }
+  if (literals.length) flush();
+  // Bytes are consumed from the end of the stream backwards, each from its lowest bit.
+  const stream = new Uint8Array(Math.ceil(bitsOut.length / 8));
+  bitsOut.forEach((bit, i) => (stream[stream.length - 1 - (i >> 3)]! |= bit << (i & 7)));
+  const pad = (8 + stream.length + 4) % 2;
+  const out = new Uint8Array(8 + pad + stream.length + 4);
+  writeString(out, 0, 'PP20', 4);
+  out.set(modes, 4);
+  out.set(stream, 8 + pad);
+  const n = out.length;
+  out[n - 4] = data.length >> 16;
+  out[n - 3] = (data.length >> 8) & 0xff;
+  out[n - 2] = data.length & 0xff;
+  out[n - 1] = 0;
+  return out;
+}
