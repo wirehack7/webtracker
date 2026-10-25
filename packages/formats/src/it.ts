@@ -500,5 +500,6 @@ export function loadIt(buffer: ArrayBuffer): Song {
     channelPanning,
     channelVolume: Array.from({ length: channels }, (_, c) => Math.min(64, u8(0x80 + c))),
     initialGlobalVolume: globalVolume || 64,
+    compat: 'it',
   };
 }
