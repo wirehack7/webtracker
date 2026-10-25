@@ -775,6 +775,165 @@ output {
   }
 }
 
+/* ---- Touch entry ----------------------------------------------------- */
+
+/* Edit mode with the on-screen piano: the cursor cell in big fields and step
+   tools; outside the note column a keypad takes the piano's place. */
+.entry-pad,
+.entry-keys {
+  display: none;
+}
+
+.app.touch-entry[data-view='pattern'] .entry-pad {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 2);
+  background: var(--desk);
+}
+
+.entry-fields,
+.entry-tools,
+.entry-step {
+  display: flex;
+  gap: calc(var(--px) * 2);
+  min-width: 0;
+}
+
+.entry-pad .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  min-height: calc(var(--px) * 22);
+  padding-inline: 0;
+}
+
+.entry-pad svg {
+  display: block;
+  width: calc(var(--px) * 8);
+  height: calc(var(--px) * 8);
+  margin: auto;
+}
+
+.entry-pad small,
+.entry-keys small {
+  display: block;
+  font-size: calc(var(--px) * 5);
+  line-height: calc(var(--px) * 7);
+  color: var(--dim);
+}
+
+/* The fields look like the pattern: black, in the column colours. */
+.entry-fields .field {
+  flex: 1.4 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--pat-bg);
+  box-shadow: inset 0 0 0 var(--px) var(--pat-sep);
+}
+.entry-fields .field.n { flex-grow: 2; color: var(--pat-note); }
+.entry-fields .field.i { color: var(--pat-instr); }
+.entry-fields .field.v { color: var(--pat-vol); }
+.entry-fields .field.e { flex-grow: 1; color: var(--pat-fx); }
+.entry-fields .field.x { color: var(--pat-param); }
+
+.entry-fields .field[aria-pressed='true'] {
+  padding: 0;
+  background: var(--pat-cursor);
+  box-shadow: inset 0 0 0 var(--px) var(--pat-cell);
+}
+
+.entry-tools .entry-step {
+  flex: 2.2 1 0;
+}
+
+.entry-tools > [data-pad='up'],
+.entry-tools > [data-pad='down'] {
+  flex-grow: 0.7;
+}
+
+.entry-tools > [data-pad='off'],
+.entry-tools > [data-pad='clear'],
+.entry-tools > [data-pad='undo'] {
+  flex-grow: 1.2;
+}
+
+.entry-step .value {
+  flex: 1.4 1 0;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.app.touch-entry.value-entry[data-view='pattern'] .piano {
+  display: none;
+}
+
+.app.touch-entry.value-entry[data-view='pattern'] .entry-keys {
+  display: grid;
+  grid-template-columns: repeat(var(--pad-cols, 8), minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: calc(var(--px) * 2);
+  flex: none;
+  height: calc(var(--px) * 52);
+  padding: calc(var(--px) * 2);
+  background: var(--desk-lo);
+}
+
+.pad-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+  font-size: calc(var(--px) * 10);
+  line-height: calc(var(--px) * 12);
+}
+
+.pad-key:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pad-key small {
+  color: var(--label);
+}
+
+@media (pointer: coarse) and (max-width: 639px) {
+  .app.touch-entry.value-entry[data-view='pattern'] .entry-keys {
+    height: calc(var(--px) * 96);
+  }
+  /* Taller rows are easier to hit with a finger. */
+  .pattern-view .r {
+    line-height: calc(var(--px) * 14);
+  }
+}
+
+/* Phones on their side: fields and tools share one row, the keypad is flatter. */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  .app.touch-entry[data-view='pattern'] .entry-pad {
+    flex-direction: row;
+  }
+  .entry-fields {
+    flex: 0.9 1 0;
+  }
+  .entry-tools {
+    flex: 1.1 1 0;
+  }
+  .app.touch-entry.value-entry[data-view='pattern'] .entry-keys {
+    height: calc(var(--px) * 60);
+    grid-template-columns: repeat(var(--pad-cols-wide, 8), minmax(0, 1fr));
+  }
+}
+
 /* ---- Editing --------------------------------------------------------- */
 
 .pattern-view {

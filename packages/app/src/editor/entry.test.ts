@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { enterEffect, enterInstrument, enterParam, enterVolume } from './entry.ts';
+import { Column } from '../ui/pattern-view.ts';
+import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './entry.ts';
 
 describe('instrument entry', () => {
   it('sets high and low digits and stops at 80', () => {
@@ -34,5 +35,20 @@ describe('effect entry', () => {
     expect(enterEffect('-')).toBeNull();
     expect(enterParam(0x00, true, 'c')).toBe(0xc0);
     expect(enterParam(0xc0, false, '3')).toBe(0xc3);
+  });
+});
+
+describe('touch keypad steps', () => {
+  it('fills both digits before moving down', () => {
+    expect(nextAfterPadKey(Column.InsHi)).toEqual({ column: Column.InsLo, advance: false });
+    expect(nextAfterPadKey(Column.InsLo)).toEqual({ column: Column.InsHi, advance: true });
+    expect(nextAfterPadKey(Column.VolHi)).toEqual({ column: Column.VolLo, advance: false });
+    expect(nextAfterPadKey(Column.VolLo)).toEqual({ column: Column.VolHi, advance: true });
+  });
+
+  it('goes from the effect letter through its parameter', () => {
+    expect(nextAfterPadKey(Column.Effect)).toEqual({ column: Column.ParamHi, advance: false });
+    expect(nextAfterPadKey(Column.ParamHi)).toEqual({ column: Column.ParamLo, advance: false });
+    expect(nextAfterPadKey(Column.ParamLo)).toEqual({ column: Column.Effect, advance: true });
   });
 });
