@@ -145,6 +145,19 @@ describe('IT loader', () => {
     expect(level(70)).toBe(0);
   });
 
+  it('applies channel volume (Mxx) on top of the note volume', () => {
+    const song = (cmd?: string) =>
+      loadModule(
+        buildIt({
+          samples: [{ data: squareWave(32), loop: [0, 32] }],
+          patterns: [{ cells: [[cmd ? { note: C5, ins: 1, cmd, info: 0x20 } : { note: C5, ins: 1 }]] }],
+          orders: [0],
+        }),
+      );
+    const level = (s: ReturnType<typeof loadModule>) => Math.max(...Array.from(render(s, 0.3).left.subarray(SR * 0.1), Math.abs));
+    expect(level(song('M')) / level(song())).toBeCloseTo(0.5, 2);
+  });
+
   it('plays compressed samples', () => {
     const data = squareWave(32);
     const song = loadModule(
@@ -175,7 +188,8 @@ describe('IT loader', () => {
     expect(c('S', 0x91)).toEqual([0, 0]);
     expect(c('S', 0xd2)).toEqual([0x0e, 0xd2]);
     expect(c('D', 0xf2)).toEqual([0x0e, 0xb2]);
-    expect(c('M', 0x20)).toEqual([0, 0]);
+    expect(c('M', 0x20)).toEqual([0x16, 0x20]);
+    expect(c('N', 0x0f)).toEqual([0x17, 0x0f]);
     expect(convertVolume(64)).toEqual({ volume: 0x50 });
     expect(convertVolume(67)).toEqual({ volume: 0x92 });
     expect(convertVolume(80)).toEqual({ volume: 0x85 });

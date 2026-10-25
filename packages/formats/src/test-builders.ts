@@ -595,3 +595,177 @@ export function buildIt(opts: {
   });
   return new Uint8Array(w.bytes).buffer;
 }
+
+/** Cell for the small formats: raw note and instrument numbers as the format stores them. */
+export interface TestRawCell {
+  note?: number;
+  ins?: number;
+  vol?: number;
+  eff?: number;
+  param?: number;
+}
+
+export function buildMtm(opts: {
+  samples: { data: Int8Array; volume?: number; finetune?: number; loop?: [number, number] }[];
+  patterns: (TestRawCell | undefined)[][][]; // [pattern][row][channel]
+  orders: number[];
+  channels?: number;
+  pan?: number[];
+  rows?: number;
+}): ArrayBuffer {
+  const w = new ByteWriter();
+  const channels = opts.channels ?? 4;
+  // One track per pattern channel.
+  const tracks: number[][] = [];
+  const sequence: number[] = [];
+  for (const pattern of opts.patterns) {
+    for (let c = 0; c < 32; c++) {
+      if (c >= channels) {
+        sequence.push(0);
+        continue;
+      }
+      const track: number[] = [];
+      for (let row = 0; row < 64; row++) {
+        const cell = pattern[row]?.[c];
+        const note = cell?.note ?? 0;
+        const ins = cell?.ins ?? 0;
+        track.push((note << 2) | (ins >> 4), ((ins & 0x0f) << 4) | (cell?.eff ?? 0), cell?.param ?? 0);
+      }
+      tracks.push(track);
+      sequence.push(tracks.length);
+    }
+  }
+  w.str('MTM', 3);
+  w.u8(0x10);
+  w.str('mtm test', 20);
+  w.u16(tracks.length);
+  w.u8(opts.patterns.length - 1);
+  w.u8(opts.orders.length - 1);
+  w.u16(0);
+  w.u8(opts.samples.length);
+  w.u8(0);
+  w.u8(opts.rows ?? 64);
+  w.u8(channels);
+  for (let c = 0; c < 32; c++) w.u8(opts.pan?.[c] ?? (c & 1 ? 12 : 3));
+  opts.samples.forEach((s, i) => {
+    w.str(`sample${i + 1}`, 22);
+    w.u32(s.data.length);
+    w.u32(s.loop?.[0] ?? 0);
+    w.u32(s.loop?.[1] ?? 0);
+    w.u8((s.finetune ?? 0) & 0xff);
+    w.u8(s.volume ?? 64);
+    w.u8(0);
+  });
+  for (let i = 0; i < 128; i++) w.u8(opts.orders[i] ?? 0);
+  for (const track of tracks) for (const b of track) w.u8(b);
+  for (const t of sequence) w.u16(t);
+  for (const s of opts.samples) for (const v of s.data) w.u8(v + 128);
+  return new Uint8Array(w.bytes).buffer;
+}
+
+export function build669(opts: {
+  samples: { data: Int8Array; loop?: [number, number] }[];
+  patterns: { cells: (TestRawCell | undefined)[][]; speed?: number; breakRow?: number }[];
+  orders: number[];
+}): ArrayBuffer {
+  const w = new ByteWriter();
+  w.str('if', 2);
+  w.str('669 test', 108);
+  w.u8(opts.samples.length);
+  w.u8(opts.patterns.length);
+  w.u8(0);
+  for (let i = 0; i < 128; i++) w.u8(opts.orders[i] ?? 0xff);
+  for (let i = 0; i < 128; i++) w.u8(opts.patterns[i]?.speed ?? 4);
+  for (let i = 0; i < 128; i++) w.u8(opts.patterns[i]?.breakRow ?? 63);
+  opts.samples.forEach((s, i) => {
+    w.str(`s${i + 1}.smp`, 13);
+    w.u32(s.data.length);
+    w.u32(s.loop?.[0] ?? 0);
+    w.u32(s.loop?.[1] ?? 0xfffff);
+  });
+  for (const pattern of opts.patterns) {
+    for (let row = 0; row < 64; row++) {
+      for (let c = 0; c < 8; c++) {
+        const cell = pattern.cells[row]?.[c];
+        if (cell?.note !== undefined) {
+          const ins = cell.ins ?? 0;
+          w.u8((cell.note << 2) | (ins >> 4));
+          w.u8(((ins & 0x0f) << 4) | (cell.vol ?? 15));
+        } else if (cell?.vol !== undefined) {
+          w.u8(0xfe);
+          w.u8(cell.vol);
+        } else {
+          w.u8(0xff);
+          w.u8(0);
+        }
+        w.u8(cell?.eff !== undefined ? (cell.eff << 4) | (cell.param ?? 0) : 0xff);
+      }
+    }
+  }
+  for (const s of opts.samples) for (const v of s.data) w.u8(v + 128);
+  return new Uint8Array(w.bytes).buffer;
+}
+
+export function buildOkt(opts: {
+  split?: number[];
+  samples: { data: Int8Array; volume?: number; loop?: [number, number]; type?: number }[];
+  patterns: { rows?: number; cells: (TestRawCell | undefined)[][] }[];
+  orders: number[];
+  speed?: number;
+}): ArrayBuffer {
+  const out: number[] = [];
+  const be16 = (v: number) => out.push((v >> 8) & 0xff, v & 0xff);
+  const be32 = (v: number) => {
+    be16(v >>> 16);
+    be16(v & 0xffff);
+  };
+  const str = (s: string, n: number) => {
+    for (let i = 0; i < n; i++) out.push(i < s.length ? s.charCodeAt(i) : 0);
+  };
+  const split = opts.split ?? [0, 0, 0, 0];
+  const channels = 4 + split.reduce((a, b) => a + b, 0);
+  str('OKTASONG', 8);
+  str('CMOD', 4);
+  be32(8);
+  for (const s of split) be16(s);
+  str('SAMP', 4);
+  be32(opts.samples.length * 32);
+  opts.samples.forEach((s, i) => {
+    str(`sample${i + 1}`, 20);
+    be32(s.data.length);
+    be16((s.loop?.[0] ?? 0) / 2);
+    be16((s.loop?.[1] ?? 0) / 2);
+    be16(s.volume ?? 64);
+    be16(s.type ?? 2);
+  });
+  str('SPEE', 4);
+  be32(2);
+  be16(opts.speed ?? 6);
+  str('SLEN', 4);
+  be32(2);
+  be16(opts.patterns.length);
+  str('PLEN', 4);
+  be32(2);
+  be16(opts.orders.length);
+  str('PATT', 4);
+  be32(128);
+  for (let i = 0; i < 128; i++) out.push(opts.orders[i] ?? 0);
+  for (const pattern of opts.patterns) {
+    const rows = pattern.rows ?? 64;
+    str('PBOD', 4);
+    be32(2 + rows * channels * 4);
+    be16(rows);
+    for (let row = 0; row < rows; row++) {
+      for (let c = 0; c < channels; c++) {
+        const cell = pattern.cells[row]?.[c];
+        out.push(cell?.note ?? 0, cell?.ins ?? 0, cell?.eff ?? 0, cell?.param ?? 0);
+      }
+    }
+  }
+  for (const s of opts.samples) {
+    str('SBOD', 4);
+    be32(s.data.length);
+    for (const v of s.data) out.push(v & 0xff);
+  }
+  return new Uint8Array(out).buffer;
+}

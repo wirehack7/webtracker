@@ -128,6 +128,9 @@ class Channel {
   volume = 0;
   outVolume = 0;
   panning = 128;
+  /** IT-style channel volume, 0..64, on top of the note volume. */
+  channelVolume = 64;
+  channelVolSlideMem = 0;
   outPanning = 128;
 
   // Instrument envelopes.
@@ -257,7 +260,11 @@ export class Player {
   /** Starts over at `order`, optionally at `row` of that position's pattern. */
   reset(order = 0, row = 0): void {
     const song = this.song;
-    this.channels = song.channelPanning.map((p) => new Channel(p));
+    this.channels = song.channelPanning.map((p, i) => {
+      const ch = new Channel(p);
+      ch.channelVolume = Math.min(64, song.channelVolume?.[i] ?? 64);
+      return ch;
+    });
     if (this.scopeRings.length) this.enableScopes(this.scopeRings[0]!.length);
     this.order = Math.min(order, song.orders.length - 1);
     const rows = song.patterns[song.orders[this.order] ?? 0]?.rows ?? 64;
@@ -710,6 +717,17 @@ export class Player {
         // FT2 bug: the panning envelope only follows when the volume envelope has sustain on.
         if (ch.instrument?.volumeEnvelope.sustain) ch.panEnvTick = param;
         break;
+      case 0x16: // Mxx: channel volume
+        ch.channelVolume = Math.min(64, param);
+        break;
+      case 0x17: // Nxy: channel volume slide, NxF and NFy fine
+        if (param) ch.channelVolSlideMem = param;
+        {
+          const m = ch.channelVolSlideMem;
+          if ((m & 0x0f) === 0x0f && m >> 4) ch.channelVolume = Math.min(64, ch.channelVolume + (m >> 4));
+          else if (m >> 4 === 0x0f && m & 0x0f) ch.channelVolume = Math.max(0, ch.channelVolume - (m & 0x0f));
+        }
+        break;
       case 0x19: // Pxy
         if (param) ch.panSlideMem = param;
         break;
@@ -849,6 +867,13 @@ export class Player {
       case 0x14:
         if (tick === param) this.keyOff(ch);
         break;
+      case 0x17: {
+        const m = ch.channelVolSlideMem;
+        if ((m & 0x0f) === 0x0f || m >> 4 === 0x0f) break; // fine slides act on tick 0
+        if (m >> 4) ch.channelVolume = Math.min(64, ch.channelVolume + (m >> 4));
+        else ch.channelVolume = Math.max(0, ch.channelVolume - (m & 0x0f));
+        break;
+      }
       case 0x19: {
         const p = ch.panSlideMem;
         if (p >> 4) ch.panning = Math.min(255, ch.panning + (p >> 4));
@@ -1001,7 +1026,7 @@ export class Player {
     let volume = Math.max(0, Math.min(64, ch.volume + tremolo));
     if (ch.effect === 0x1d && !ch.tremorOn) volume = 0;
     ch.outVolume = volume;
-    const gain = (volume / 64) * (envVol / 64) * (ch.fadeout / 32768) * (this.globalVolume / 64);
+    const gain = (volume / 64) * (envVol / 64) * (ch.fadeout / 32768) * (this.globalVolume / 64) * (ch.channelVolume / 64);
 
     const pan = ch.panning;
     ch.outPanning = Math.max(0, Math.min(255, pan + ((envPan - 32) * (128 - Math.abs(pan - 128))) / 32));

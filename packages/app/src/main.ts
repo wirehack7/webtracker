@@ -1222,7 +1222,7 @@ window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
   if (!file) return;
-  if (/\.(mod|xm|s3m|it|stk)$/i.test(file.name)) void openModule(file);
+  if (/\.(mod|xm|s3m|it|mtm|669|okt|stk)$/i.test(file.name)) void openModule(file);
   else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
