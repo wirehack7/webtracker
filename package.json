@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @webtracker/app dev",
-    "build": "pnpm --filter @webtracker/app build",
+    "build": "pnpm --filter @webtracker/app build && pnpm --filter @webtracker/replayer build",
     "preview": "pnpm --filter @webtracker/app preview",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",

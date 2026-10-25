@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>webtracker replayer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10141f;
+        --panel: #1b2333;
+        --line: #3d5578;
+        --text: #e6ecf8;
+        --dim: #8496b4;
+        --hot: #ffd84a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      p {
+        color: var(--dim);
+        margin: 0 0 16px;
+      }
+      a {
+        color: var(--hot);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      button,
+      label.file {
+        font: inherit;
+        color: var(--text);
+        background: var(--line);
+        border: 0;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #stage {
+        position: relative;
+        height: 160px;
+        margin-top: 16px;
+        background: #000;
+        overflow: hidden;
+      }
+      .bar {
+        position: absolute;
+        bottom: 0;
+        width: calc(100% / var(--channels, 8) - 2px);
+        background: var(--hot);
+        transition: height 0.25s ease-out, opacity 0.25s ease-out;
+      }
+      #pos {
+        font-size: 22px;
+        color: var(--hot);
+        min-width: 13ch;
+      }
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        color: var(--text);
+      }
+      .drop {
+        outline: 2px dashed var(--hot);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>webtracker replayer</h1>
+      <p>A small module player for your own demos and intros. It plays songs exactly like the tracker does, and tells you when each row is heard so effects can sync to the music. <a href="../">Open the tracker</a></p>
+
+      <section class="panel" id="player">
+        <div class="row">
+          <button type="button" id="play" disabled>Play</button>
+          <button type="button" id="stop" disabled>Stop</button>
+          <label class="file">Load module<input type="file" id="file" hidden /></label>
+          <label><input type="checkbox" id="loop" checked /> Loop</label>
+          <span id="pos">--:--</span>
+        </div>
+        <p id="info" style="margin: 8px 0 0">Loading the demo song…</p>
+        <div id="stage"></div>
+      </section>
+
+      <section class="panel">
+        <pre><code>import { createReplayer } from './webtracker-replayer.js';
+
+const music = await createReplayer('song.xm', { loop: true });
+music.onRow = ({ order, row }) => {
+  // Sync your effects here: this runs when the row is heard.
+  if (row % 16 === 0) flash();
+};
+button.onclick = () => music.play();   // browsers need a click first
+
+// In a render loop: music.time is the song time in seconds.</code></pre>
+      </section>
+      <p>
+        <a href="webtracker-replayer.js" download>webtracker-replayer.js</a> plays MOD, XM, S3M, IT, MTM, 669 and OKT, also zipped or packed.
+        <a href="webtracker-replayer-lite.js" download>webtracker-replayer-lite.js</a> plays XM and MOD only and is smaller.
+      </p>
+    </main>
+    <script type="module">
+      import { createReplayer } from './webtracker-replayer.js';
+
+      const $ = (id) => document.getElementById(id);
+      const stage = $('stage');
+      let music = null;
+      let context = null;
+
+      async function open(source, name) {
+        music?.destroy();
+        music = null;
+        $('play').disabled = $('stop').disabled = true;
+        try {
+          context ??= new AudioContext();
+          music = await createReplayer(source, { context, loop: $('loop').checked });
+        } catch (error) {
+          $('info').textContent = `${name}: ${error.message}`;
+          return;
+        }
+        const song = music.song;
+        $('info').textContent = `${song.title || name} · ${song.formatName} · ${song.channels} channels`;
+        stage.style.setProperty('--channels', song.channels);
+        stage.replaceChildren(
+          ...Array.from({ length: song.channels }, (_, c) => {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            bar.style.left = `calc(${c} * 100% / ${song.channels})`;
+            bar.style.height = '0';
+            return bar;
+          }),
+        );
+        music.onRow = ({ pattern, row }) => {
+          // Each note that starts on this row lights its channel.
+          const p = song.patterns[pattern];
+          for (let c = 0; c < song.channels; c++) {
+            const note = p?.data[(row * song.channels + c) * 5] ?? 0;
+            const bar = stage.children[c];
+            if (note >= 1 && note <= 96) {
+              bar.style.transition = 'none';
+              bar.style.height = `${20 + (note / 96) * 80}%`;
+              bar.style.opacity = '1';
+              bar.getBoundingClientRect();
+              bar.style.transition = '';
+            }
+            bar.style.height = `${parseFloat(bar.style.height) * 0.7}%`;
+            bar.style.opacity = String(Math.max(0.2, parseFloat(bar.style.opacity || '1') * 0.8));
+          }
+        };
+        music.onEnd = () => ($('play').textContent = 'Play');
+        $('play').disabled = $('stop').disabled = false;
+        $('play').textContent = 'Play';
+      }
+
+      function clock() {
+        if (music) {
+          const t = music.time;
+          const p = music.position;
+          $('pos').textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}` + (p ? `  ${String(p.order).padStart(2, '0')}/${String(p.row).padStart(2, '0')}` : '');
+        }
+        requestAnimationFrame(clock);
+      }
+      clock();
+
+      $('play').onclick = async () => {
+        if (!music) return;
+        if (music.isPlaying) {
+          music.pause();
+          $('play').textContent = 'Play';
+        } else {
+          await music.play();
+          $('play').textContent = 'Pause';
+        }
+      };
+      $('stop').onclick = () => {
+        music?.stop();
+        $('play').textContent = 'Play';
+      };
+      $('loop').onchange = () => music && (music.loop = $('loop').checked);
+      $('file').onchange = async () => {
+        const file = $('file').files[0];
+        if (file) await open(await file.arrayBuffer(), file.name);
+      };
+      const panel = $('player');
+      panel.ondragover = (event) => {
+        event.preventDefault();
+        panel.classList.add('drop');
+      };
+      panel.ondragleave = () => panel.classList.remove('drop');
+      panel.ondrop = async (event) => {
+        event.preventDefault();
+        panel.classList.remove('drop');
+        const file = event.dataTransfer.files[0];
+        if (file) await open(await file.arrayBuffer(), file.name);
+      };
+
+      open('demo.xm', 'demo.xm');
+    </script>
+  </body>
+</html>
