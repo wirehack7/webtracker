@@ -43,10 +43,13 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install browsers
         timeout-minutes: 15
-        # A download sometimes hangs; give each try four minutes and try again.
+        # A download sometimes hangs; give each try four minutes and try again. The system
+        # packages go first and without a time limit: killing apt halfway leaves its lock behind
+        # and the next try waits on it until the step times out.
         run: |
+          pnpm exec playwright install-deps chromium webkit firefox
           for try in 1 2 3; do
-            timeout 240 pnpm exec playwright install --with-deps chromium webkit firefox && exit 0
+            timeout 240 pnpm exec playwright install chromium webkit firefox && exit 0
             echo "Browser install try $try failed, retrying"
           done
           exit 1
