@@ -143,7 +143,8 @@ await check('playback follows the order list', async () => {
     // Each order list item shows its position, then its pattern number.
     const order = await page.evaluate(() => [...document.querySelectorAll('#orders li')].map((li) => li.textContent.slice(-2)));
     const want = [5, 6].map((i) => `${i}:${order[i]}`);
-    assert(seen.join(' ') === want.join(' '), `played ${seen.join(' ')}, expected ${want.join(' ')}`);
+    const state = await page.evaluate(() => `playing ${document.querySelector('#bar-play')?.getAttribute('aria-pressed')}, status "${document.querySelector('#status')?.textContent}"`);
+    assert(seen.join(' ') === want.join(' '), `played ${seen.join(' ')}, expected ${want.join(' ')} (${state})`);
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
   } finally {
     await context.close();
