@@ -4,7 +4,7 @@
  * the song stays between the people who have the link.
  */
 
-import { LoopType, type Song } from '@webtracker/engine';
+import { cleanedCopy, type Song } from '@webtracker/engine';
 import { t } from '../i18n/i18n.ts';
 import type { AutosaveOrigin } from './autosave.ts';
 
@@ -20,29 +20,19 @@ const VERSION = 1;
  */
 export type ShareQuality = 'lossless' | 'small' | 'smallest';
 
-/** Long enough that halving the rate leaves the sound recognisable; short chip loops stay. */
-const HALVE_FROM = 512;
-
 /** A copy of the song made smaller for a link at the given quality. */
 export function shrinkSong(song: Song, quality: ShareQuality): Song {
   if (quality === 'lossless') return song;
-  const copy = structuredClone(song);
-  for (const ins of copy.instruments) {
-    for (const s of ins.samples) {
-      if (s.loopType !== LoopType.None && s.loopLength > 0) s.data = s.data.slice(0, s.loopStart + s.loopLength);
-      // MOD periods are clamped to the Amiga range, so an octave down would not play back right.
-      if (quality === 'smallest' && song.format === 'xm' && s.data.length >= HALVE_FROM && s.relativeNote - 12 >= -96) {
-        const half = new Float32Array(s.data.length >> 1);
-        for (let i = 0; i < half.length; i++) half[i] = (s.data[2 * i]! + s.data[2 * i + 1]!) / 2;
-        s.data = half;
-        s.loopStart >>= 1;
-        s.loopLength >>= 1;
-        s.relativeNote -= 12;
-      }
-      s.data = s.data.map((v) => Math.max(-128, Math.min(127, Math.round(v * 128))) / 128);
-    }
-  }
-  return copy;
+  return cleanedCopy(song, {
+    unusedPatterns: false,
+    duplicatePatterns: false,
+    unusedInstruments: false,
+    compactInstruments: false,
+    unusedSamples: false,
+    sampleTails: true,
+    halveRate: quality === 'smallest',
+    eightBit: true,
+  }).song;
 }
 
 export async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {

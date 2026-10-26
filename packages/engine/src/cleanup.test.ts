@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanupPreview, cleanupSong, type CleanupOptions } from './cleanup.ts';
+import { cleanedCopy, cleanupPreview, cleanupSong, songUsage, type CleanupOptions } from './cleanup.ts';
 import { createSong, writeCell } from './edit.ts';
 import { emptyInstrument } from './sample-edit.ts';
 import { LoopType, emptyPattern, readCell, type Sample, type Song } from './song.ts';
@@ -89,5 +89,43 @@ describe('cleanupSong', () => {
     const result = cleanupPreview(s, { ...none, unusedPatterns: true, unusedInstruments: true });
     expect(result).toMatchObject({ patterns: 1, instruments: 2 });
     expect(s.patterns).toHaveLength(4);
+  });
+
+  it('halves long samples and keeps their pitch, but not samples started with an offset', () => {
+    const s = song();
+    s.instruments[1]!.samples = [sample(1000, [200, 600])];
+    s.instruments[3]!.samples = [sample(1000)];
+    s.instruments[0]!.samples = [sample(100)];
+    writeCell(s, s.patterns[2]!, 0, 1, { note: 49, instrument: 4, effect: 0x9, param: 2 });
+    const result = cleanupSong(s, { ...none, halveRate: true });
+    expect(result).toMatchObject({ halved: 1, frames: 500 });
+    expect(s.instruments[1]!.samples[0]).toMatchObject({ loopStart: 100, loopLength: 300, relativeNote: -12 });
+    expect(s.instruments[1]!.samples[0]!.data).toHaveLength(500);
+    expect(s.instruments[3]!.samples[0]!.data).toHaveLength(1000);
+    expect(s.instruments[0]!.samples[0]!.data).toHaveLength(100);
+    s.format = 'mod';
+    expect(cleanupSong(s, { ...none, halveRate: true }).halved).toBe(0);
+  });
+
+  it('rounds samples to 8 bits', () => {
+    const s = song();
+    s.instruments[0]!.samples[0]!.data[3] = 0.1234;
+    const { song: copy, result } = cleanedCopy(s, { ...none, eightBit: true });
+    expect(result.converted).toBe(1);
+    expect(copy.instruments[0]!.samples[0]!.data[3]).toBe(16 / 128);
+    // The song keeps its own data.
+    expect(s.instruments[0]!.samples[0]!.data[3]).toBeCloseTo(0.1234);
+  });
+
+  it('tells what the order list plays', () => {
+    const s = song();
+    s.instruments[3]!.keymap.fill(1);
+    s.instruments[3]!.samples.push(sample(10));
+    writeCell(s, s.patterns[2]!, 1, 1, { note: 50, effect: 0x9, param: 1 });
+    const used = songUsage(s);
+    expect([...used.patterns].sort()).toEqual([0, 2, 3]);
+    expect([...used.instruments].sort()).toEqual([2, 4]);
+    expect([...used.samples.get(4)!]).toEqual([1]);
+    expect([...used.offsets.get(4)!]).toEqual([1]);
   });
 });

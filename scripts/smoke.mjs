@@ -313,6 +313,27 @@ await check('sending everything to another browser', async () => {
   }
 });
 
+await check('song stats and optimize', async () => {
+  const { context, page, errors } = await open(base, viewports[0]);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.locator('#stats-open').click();
+    await page.waitForFunction(() => /^\d+:\d\d$/.test(document.querySelector('#stats-time')?.textContent ?? ''));
+    const time = await page.locator('#stats-time').textContent();
+    // A new song is one empty 64-row pattern at speed 6 and 125 BPM.
+    assert(time === '0:08', `play time ${time}, expected 0:08`);
+    assert((await page.locator('#stats-samples tr').count()) > 1, 'no samples listed');
+    await page.waitForFunction(() => /Packed from/.test(document.querySelector('#stats-info')?.textContent ?? ''));
+    await page.locator('#cu-go').click();
+    const info = await page.locator('#stats-info').textContent();
+    assert(/^Optimized: .*instruments removed/.test(info ?? ''), `optimize said: ${info}`);
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    if (shots) await page.screenshot({ path: join(shots, 'stats.png') });
+  } finally {
+    await context.close();
+  }
+});
+
 await check('replayer page plays its demo', async () => {
   const { context, page, errors } = await open(`${base}replayer/`, viewports[0]);
   try {

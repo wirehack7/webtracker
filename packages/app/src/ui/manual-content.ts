@@ -334,7 +334,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
         ],
       },
       {
-        tip: 'Run Advanced Edit > Clean up before releasing a song: smaller modules load faster and pack better.',
+        tip: 'Open Stats before releasing a song: it shows what takes the most room, and Optimize makes the module smaller, so it loads faster and packs better.',
       },
     ],
   },

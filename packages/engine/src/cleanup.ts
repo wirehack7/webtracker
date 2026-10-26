@@ -4,7 +4,7 @@
  * and breaks keep their targets.
  */
 import { emptyInstrument } from './sample-edit.ts';
-import { CELL_SIZE, LoopType, type Pattern, type Song } from './song.ts';
+import { CELL_SIZE, LoopType, type Pattern, type Sample, type Song } from './song.ts';
 
 export interface CleanupOptions {
   /** Drop patterns the order list does not reference. */
@@ -19,14 +19,37 @@ export interface CleanupOptions {
   unusedSamples: boolean;
   /** Cut looped samples after their loop end, which is never heard. */
   sampleTails: boolean;
+  /** Halve the sample rate of long samples, retuned to keep their pitch (XM only). */
+  halveRate?: boolean;
+  /** Round every sample to 8 bits, which halves what 16-bit samples take. */
+  eightBit?: boolean;
 }
 
 export interface CleanupResult {
   patterns: number;
   instruments: number;
   samples: number;
-  /** Sample frames removed by cutting tails and dropping samples. */
+  /** Sample frames removed by cutting tails, dropping and halving samples. */
   frames: number;
+  /** Samples played at half their rate. */
+  halved: number;
+  /** Samples that were not 8-bit before. */
+  converted: number;
+}
+
+/** Shorter samples keep their rate: halving a short chip loop changes its sound too much. */
+export const HALVE_FROM = 512;
+
+/** What the song plays: instrument and pattern numbers as stored (instruments from 1). */
+export interface SongUsage {
+  /** Patterns the order list reaches. */
+  patterns: Set<number>;
+  /** Instruments named in those patterns. */
+  instruments: Set<number>;
+  /** Per instrument, the samples its notes reach through the keymap. */
+  samples: Map<number, Set<number>>;
+  /** Per instrument, the samples a note with a sample offset (9xx) starts. */
+  offsets: Map<number, Set<number>>;
 }
 
 function samePattern(a: Pattern, b: Pattern): boolean {
@@ -46,7 +69,7 @@ function playedPatterns(song: Song, ordersOnly: boolean): Pattern[] {
  * Calls `visit` for every note with the instrument it plays, following each
  * channel's last instrument through the song when a note has none.
  */
-function forEachNote(song: Song, patterns: Pattern[], visit: (instrument: number, note: number) => void): void {
+function forEachNote(song: Song, patterns: Pattern[], visit: (instrument: number, note: number, effect: number) => void): void {
   const last = new Array<number>(song.channels).fill(0);
   for (const pattern of patterns) {
     for (let row = 0; row < pattern.rows; row++) {
@@ -55,14 +78,42 @@ function forEachNote(song: Song, patterns: Pattern[], visit: (instrument: number
         const note = pattern.data[d] ?? 0;
         const instrument = pattern.data[d + 1] ?? 0;
         if (instrument) last[c] = instrument;
-        if (note >= 1 && note <= 96 && last[c]) visit(last[c]!, note);
+        if (note >= 1 && note <= 96 && last[c]) visit(last[c]!, note, pattern.data[d + 3] ?? 0);
       }
     }
   }
 }
 
-/** Counts what {@link cleanupSong} would remove, without changing the song. */
-export function cleanupPreview(song: Song, options: CleanupOptions): CleanupResult {
+function usage(song: Song, patterns: Pattern[]): SongUsage {
+  const result: SongUsage = { patterns: new Set(song.orders.filter((p) => song.patterns[p])), instruments: new Set(), samples: new Map(), offsets: new Map() };
+  for (const pattern of patterns) {
+    for (let i = 1; i < pattern.data.length; i += CELL_SIZE) if (pattern.data[i]) result.instruments.add(pattern.data[i]!);
+  }
+  const add = (map: Map<number, Set<number>>, instrument: number, sample: number) => {
+    let set = map.get(instrument);
+    if (!set) map.set(instrument, (set = new Set()));
+    set.add(sample);
+  };
+  forEachNote(song, patterns, (instrument, note, effect) => {
+    const ins = song.instruments[instrument - 1];
+    if (!ins) return;
+    const sample = ins.keymap[note - 1] ?? 0;
+    add(result.samples, instrument, sample);
+    if (effect === 0x9) add(result.offsets, instrument, sample);
+  });
+  return result;
+}
+
+/** What the song plays when it runs through its order list. */
+export function songUsage(song: Song): SongUsage {
+  return usage(song, playedPatterns(song, true));
+}
+
+/**
+ * A copy of the song cleaned up with the options, and what that removed.
+ * The song itself stays as it is.
+ */
+export function cleanedCopy(song: Song, options: CleanupOptions): { song: Song; result: CleanupResult } {
   // Only the parts the cleanup changes are copied; sample data is replaced, never written.
   const copy: Song = {
     ...song,
@@ -70,11 +121,16 @@ export function cleanupPreview(song: Song, options: CleanupOptions): CleanupResu
     patterns: song.patterns.map((p) => ({ rows: p.rows, data: p.data.slice() })),
     instruments: song.instruments.map((ins) => ({ ...ins, keymap: ins.keymap.slice(), samples: ins.samples.map((s) => ({ ...s })) })),
   };
-  return cleanupSong(copy, options);
+  return { song: copy, result: cleanupSong(copy, options) };
+}
+
+/** Counts what {@link cleanupSong} would remove, without changing the song. */
+export function cleanupPreview(song: Song, options: CleanupOptions): CleanupResult {
+  return cleanedCopy(song, options).result;
 }
 
 export function cleanupSong(song: Song, options: CleanupOptions): CleanupResult {
-  const result: CleanupResult = { patterns: 0, instruments: 0, samples: 0, frames: 0 };
+  const result: CleanupResult = { patterns: 0, instruments: 0, samples: 0, frames: 0, halved: 0, converted: 0 };
 
   if (options.duplicatePatterns) {
     song.orders = song.orders.map((p) => {
@@ -95,18 +151,16 @@ export function cleanupSong(song: Song, options: CleanupOptions): CleanupResult 
     song.orders = song.orders.map((p) => map.get(p) ?? p);
   }
 
-  const patterns = playedPatterns(song, options.unusedPatterns);
-  const usedInstruments = new Set<number>();
-  const usedSamples = new Map<number, Set<number>>();
-  for (const pattern of patterns) {
-    for (let i = 1; i < pattern.data.length; i += CELL_SIZE) if (pattern.data[i]) usedInstruments.add(pattern.data[i]!);
-  }
-  forEachNote(song, patterns, (instrument, note) => {
-    const ins = song.instruments[instrument - 1];
-    if (!ins) return;
-    let set = usedSamples.get(instrument);
-    if (!set) usedSamples.set(instrument, (set = new Set()));
-    set.add(ins.keymap[note - 1] ?? 0);
+  const played = usage(song, playedPatterns(song, options.unusedPatterns));
+  const usedInstruments = played.instruments;
+  const usedSamples = played.samples;
+  // Halving moves where a sample offset lands, so samples started with 9xx keep their rate.
+  const offsetSamples = new Set<Sample>();
+  played.offsets.forEach((set, instrument) => {
+    for (const s of set) {
+      const sample = song.instruments[instrument - 1]?.samples[s];
+      if (sample) offsetSamples.add(sample);
+    }
   });
 
   if (options.unusedSamples && song.format === 'xm') {
@@ -158,6 +212,34 @@ export function cleanupSong(song: Song, options: CleanupOptions): CleanupResult 
         if (s.data.length <= end) continue;
         result.frames += s.data.length - end;
         s.data = s.data.slice(0, end);
+      }
+    }
+  }
+
+  // MOD periods are clamped to the Amiga range, so an octave down would not play back right.
+  if (options.halveRate && song.format === 'xm') {
+    for (const ins of song.instruments) {
+      for (const s of ins.samples) {
+        if (s.data.length < HALVE_FROM || s.relativeNote - 12 < -96 || offsetSamples.has(s)) continue;
+        const half = new Float32Array(s.data.length >> 1);
+        for (let i = 0; i < half.length; i++) half[i] = (s.data[2 * i]! + s.data[2 * i + 1]!) / 2;
+        result.frames += s.data.length - half.length;
+        result.halved++;
+        s.data = half;
+        s.loopStart >>= 1;
+        s.loopLength >>= 1;
+        s.relativeNote -= 12;
+      }
+    }
+  }
+
+  if (options.eightBit) {
+    for (const ins of song.instruments) {
+      for (const s of ins.samples) {
+        // A new array, so a preview never writes into the song's own data.
+        const data = s.data.map((v) => Math.max(-128, Math.min(127, Math.round(v * 128))) / 128);
+        if (data.some((v, i) => v !== s.data[i])) result.converted++;
+        s.data = data;
       }
     }
   }
