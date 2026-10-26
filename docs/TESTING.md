@@ -13,7 +13,7 @@ Numbers are from 2026-10-26. The CI job summaries always show the current ones:
 
 | Check | What it proves | Result |
 | --- | --- | --- |
-| Unit tests (Vitest) | Loaders, writers, every replayer effect on all three playback paths, the replayer API, editing, sharing, Jam sync and links, the song library, the editors and dialogs, the audio and video export workers, encoders | 683 tests in 69 files, all passing |
+| Unit tests (Vitest) | Loaders, writers, every replayer effect on all three playback paths, the replayer API, editing, sharing, Jam sync and links, the song library, the editors and dialogs, the audio and video export workers, encoders | 696 tests in 71 files, all passing |
 | Code coverage (V8) | Which source lines those tests execute; CI fails below a floor per package | 78 % of lines overall; engine 99 %, replayer 98 %, formats 93 %, app 60 % (99.5 % without `main.ts`) |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
 | Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; video export produces an MP4 or WebM file (in Chromium also through the real-time MediaRecorder fallback); the replayer page plays; playback follows the order list; Stats shows the play time and optimizes; a German browser gets the German language pack | 18 of 18 checks passing in headless Chromium; in headless Firefox the order list check and the recorded video fallback are skipped (its audio clock does not run on the CI runners) |
