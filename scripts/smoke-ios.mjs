@@ -49,6 +49,8 @@ async function open(url, device) {
   // Chromium has no isMobile emulation of Safari, only its viewport and user agent.
   if (useChromium) delete options.isMobile;
   const context = await browser.newContext({ ...options, serviceWorkers: 'block', acceptDownloads: true });
+  // Without this, an action that never completes (such as a tap) waits forever.
+  context.setDefaultTimeout(15000);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
