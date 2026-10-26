@@ -9,7 +9,7 @@
  * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
  * over files. The replayer page must load and play its demo too, and a German browser must get
- * the German language pack (and a Finnish one the Finnish pack). Screenshots go to the given folder.
+ * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only). Screenshots go to the given folder.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -115,6 +115,43 @@ async function downloadBytes(page, click, timeout = 10000) {
   for await (const chunk of await file.createReadStream()) chunks.push(chunk);
   return { name: file.suggestedFilename(), bytes: Buffer.concat(chunks) };
 }
+
+// The demo song plays pattern 01 again at position 06: playback must follow the order list,
+// not the pattern numbers. Headless Firefox on the CI runners has no sound device and its
+// audio clock never starts, so the song cannot move on there; this runs in Chromium only.
+if (useFirefox) console.log('skip playback follows the order list: no running audio clock in headless Firefox');
+else await check('playback follows the order list', async () => {
+  const { context, page, errors } = await open(base, viewports[0]);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.evaluate(() => document.querySelector('#songs-open')?.click());
+    await page.locator('#library-list li').first().dblclick();
+    await page.waitForFunction(() => document.querySelectorAll('#orders li').length > 7);
+    await page.evaluate(() => document.querySelector('#songs-dialog')?.close());
+    const position = () =>
+      page.evaluate(() => `${document.querySelector('#orders [aria-selected="true"]')?.dataset.index}:${document.querySelector('#pattern-no')?.textContent}`);
+    // Start four rows before the end of position 05 (Ctrl+Shift+Enter plays the song from the
+    // cursor row), so the check does not hang on how fast the browser's audio clock runs.
+    await page.locator('#orders li[data-index="5"]').click();
+    await page.keyboard.press('End');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Control+Shift+Enter');
+    const seen = [];
+    for (let i = 0; i < 200 && seen.length < 2; i++) {
+      const now = await position();
+      if (now !== seen.at(-1)) seen.push(now);
+      await page.waitForTimeout(100);
+    }
+    // Each order list item shows its position, then its pattern number.
+    const order = await page.evaluate(() => [...document.querySelectorAll('#orders li')].map((li) => li.textContent.slice(-2)));
+    const want = [5, 6].map((i) => `${i}:${order[i]}`);
+    const playing = await page.locator('#bar-play').getAttribute('aria-pressed');
+    assert(seen.join(' ') === want.join(' '), `played ${seen.join(' ')}, expected ${want.join(' ')} (playing: ${playing})`);
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+  } finally {
+    await context.close();
+  }
+});
 
 await check('editing, saving and audio export', async () => {
   const { context, page, errors } = await open(base, viewports[0]);

@@ -60,6 +60,15 @@
         "node"
       ],
       "enabled": false
+    },
+    {
+      "description": "CI runs in Playwright's Docker image, whose tag must match the playwright package: update both in one PR, reviewed by hand",
+      "matchPackageNames": [
+        "playwright",
+        "mcr.microsoft.com/playwright"
+      ],
+      "groupName": "Playwright",
+      "automerge": false
     }
   ]
 }
