@@ -31,6 +31,7 @@ pnpm typecheck
 pnpm build
 pnpm smoke [shots/]    # browser smoke test against packages/app/dist, optional screenshots
 pnpm smoke:ios [shots/]  # the same for iPhone and iPad in WebKit
+pnpm screenshots:manual  # retake the screenshots of the manual page (packages/app/public/manual)
 ```
 
 The smoke tests need Playwright's Chromium and WebKit

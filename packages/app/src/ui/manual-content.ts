@@ -1,13 +1,26 @@
 // Text of the manual page (manual.html): longer chapters that walk through the
 // tracker, followed there by the full reference from help-content.ts.
 // Text in `backticks` is shown as a key or code, [text](href) as a link.
+// Screenshots live in public/manual/ and come from scripts/manual-screenshots.mjs.
 
 export type ManualBlock = string | { list: string[] } | { steps: string[] } | { tip: string };
+
+/** A screenshot: `wide` ones span the page above the text, the rest sit beside it. */
+export interface ManualFigure {
+  /** File name in public/manual/, taken at twice the size given here. */
+  file: string;
+  width: number;
+  height: number;
+  alt: string;
+  caption?: string;
+  wide?: boolean;
+}
 
 export interface ManualChapter {
   id: string;
   title: string;
   blocks: ManualBlock[];
+  figures?: ManualFigure[];
 }
 
 export const MANUAL_CHAPTERS: ManualChapter[] = [
@@ -30,6 +43,23 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'screen',
     title: 'The screen',
+    figures: [
+      {
+        file: 'desktop.png',
+        width: 1280,
+        height: 800,
+        alt: 'The tracker playing the demo song: order list, song settings, transport buttons and instruments at the top, four scopes, and the pattern below.',
+        caption: 'The demo song playing. Top row: Position, Song, Transport, Instruments and Samples; then the scopes and the pattern.',
+        wide: true,
+      },
+      {
+        file: 'help.png',
+        width: 960,
+        height: 768,
+        alt: 'The Help dialog with tabs for keys, effects, formats and workflow and a search field.',
+        caption: 'Help, searchable, with the keys, every effect and the formats.',
+      },
+    ],
     blocks: [
       'The top of the screen holds the song panels, the middle the editor, the bottom a status line.',
       {
@@ -68,6 +98,16 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'pattern',
     title: 'Writing a pattern',
+    figures: [
+      {
+        file: 'pattern.png',
+        width: 1024,
+        height: 300,
+        alt: 'A pattern in edit mode: the cursor row is red, a block over three channels is selected in blue.',
+        caption: 'Edit mode: the cursor row turns red. The blue block is a selection, ready to copy, transpose or interpolate.',
+        wide: true,
+      },
+    ],
     blocks: [
       {
         steps: [
@@ -90,6 +130,16 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'sounds',
     title: 'Making chip sounds',
+    figures: [
+      {
+        file: 'sample.png',
+        width: 1268,
+        height: 320,
+        alt: 'The sample editor showing a looped pulse wave, with rows of tool buttons and the Generate row above it.',
+        caption: 'The sample editor with a pulse wave. Generate is the bottom row of buttons.',
+        wide: true,
+      },
+    ],
     blocks: [
       'Classic chip sounds come from very short, looped waveforms. The Sample view can generate them: open `Sample` and use Generate to make a sine, square, saw, triangle or noise wave in the current slot.',
       {
@@ -106,6 +156,16 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'instruments',
     title: 'Instruments and envelopes',
+    figures: [
+      {
+        file: 'instrument.png',
+        width: 1268,
+        height: 318,
+        alt: 'The instrument editor with a volume envelope that swells and fades and a looping panning envelope.',
+        caption: 'A pad: the volume envelope swells in and holds at the sustain point; the panning envelope loops between left and right.',
+        wide: true,
+      },
+    ],
     blocks: [
       'An instrument holds one or more samples and says how they play. The `Instr` view shows its settings.',
       {
@@ -132,6 +192,22 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'saving',
     title: 'Saving, exporting and sharing',
+    figures: [
+      {
+        file: 'save.png',
+        width: 504,
+        height: 487,
+        alt: 'The Save dialog: Save XM, Save MOD, Pattern XP and Track XT, audio export settings, replayer buttons and the autosaved versions.',
+        caption: 'Save: modules, audio export, the replayer and the autosaves.',
+      },
+      {
+        file: 'share.png',
+        width: 576,
+        height: 196,
+        alt: 'The Share dialog with the quality setting and the link to copy.',
+        caption: 'Share: the whole song in a link.',
+      },
+    ],
     blocks: [
       {
         list: [
@@ -151,6 +227,15 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'jam',
     title: 'Jamming with others',
+    figures: [
+      {
+        file: 'jam.png',
+        width: 462,
+        height: 171,
+        alt: 'The Jam dialog with a name field and the Start a jam button.',
+        caption: 'Start a jam with your name.',
+      },
+    ],
     blocks: [
       'In a jam several people edit one song at the same time, each with their own cursor. Edits go straight from browser to browser; the song is never uploaded.',
       {
@@ -167,6 +252,29 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'phone',
     title: 'Phones and tablets',
+    figures: [
+      {
+        file: 'phone.png',
+        width: 390,
+        height: 844,
+        alt: 'The tracker on a phone: the pattern, the on-screen piano and the bar with Play, Rec, octave and Menu.',
+        caption: 'Pattern and piano.',
+      },
+      {
+        file: 'phone-entry.png',
+        width: 390,
+        height: 844,
+        alt: 'Edit mode on a phone: the pad with big fields for note, instrument, volume and effect under the piano.',
+        caption: 'Edit mode with the entry pad.',
+      },
+      {
+        file: 'phone-menu.png',
+        width: 390,
+        height: 844,
+        alt: 'The phone menu slid up with the song, instrument and scope tabs, the toolbar buttons and the song settings.',
+        caption: 'Menu with all panels.',
+      },
+    ],
     blocks: [
       'On a phone the editor and an on-screen piano fill the screen. The bar at the bottom has Play/Stop, `Rec`, the octave and `Menu`, which slides up all the panels and toolbar buttons.',
       'In edit mode a pad under the pattern shows the cursor cell in big fields. Tap `Ins`, `Vol`, `Fx` or `Val` and a hex keypad takes the place of the piano. `Step` is how far the cursor moves after each entry; `Off`, `Del` and `Undo` write a key off, clear the field and undo.',
@@ -177,6 +285,15 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'setup',
     title: 'Setup, sound and MIDI',
+    figures: [
+      {
+        file: 'setup.png',
+        width: 600,
+        height: 578,
+        alt: 'The Setup dialog with colours, interface size, resampling, stereo, amplification and further options.',
+        caption: 'Setup. Settings stay in this browser.',
+      },
+    ],
     blocks: [
       {
         list: [
@@ -193,6 +310,15 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
   {
     id: 'demo',
     title: 'Music for demos and intros',
+    figures: [
+      {
+        file: 'replayer.png',
+        width: 720,
+        height: 295,
+        alt: 'The replayer page playing the demo song, with a channel display and the play position.',
+        caption: 'The replayer page playing the song from the tracker.',
+      },
+    ],
     blocks: [
       'The replayer plays your songs in your own productions with the same engine as the tracker. It is a single JavaScript module with nothing else to host: a full version for every format the tracker loads, and a lite version for XM and MOD only.',
       'The [replayer page](./replayer/) has the files, a demo and the API: it loads a song, plays and stops it, and calls you back on every row with the current order, pattern, row, speed and tempo, so effects in your demo can sync to the music. Unused effect values such as `E8x` are often used as sync markers. The `Replayer` button in the toolbar (in the Menu on a phone) opens the page.',
