@@ -304,7 +304,7 @@
         <button type="button" class="btn" id="library-delete">Delete</button>
       </div>
       <div class="row">
-        <button type="button" class="btn" id="library-backup" title="All songs and the settings in one ZIP file">Back up all (ZIP)</button>
+        <button type="button" class="btn" id="library-backup">Back up all (ZIP)</button>
         <button type="button" class="btn" id="library-restore">Restore from ZIP</button>
         <input type="file" id="library-restore-file" accept=".zip,application/zip" hidden />
       </div>
@@ -377,6 +377,33 @@
         <button type="submit" class="btn">Close</button>
       </form>
     </dialog>
+    <dialog class="panel help file-dialog" id="transfer-dialog">
+      <h2 class="ptitle">Send to another browser</h2>
+      <div id="transfer-start">
+        <p class="info">Copies all songs and the settings straight to another browser, here or on another device. Nothing is uploaded.</p>
+        <div class="row"><button type="button" class="btn" id="transfer-send">Make a transfer link</button></div>
+      </div>
+      <div id="transfer-sending" hidden>
+        <input type="text" class="value text share-url" id="transfer-url" readonly aria-label="Transfer link" />
+        <div class="row"><button type="button" class="btn" id="transfer-copy">Copy link</button></div>
+        <p class="info">Open the link in the other browser. It shows an answer code: paste it here.</p>
+        <input type="text" class="value text share-url" id="transfer-answer" spellcheck="false" placeholder="Answer code" aria-label="Answer code" />
+        <div class="row"><button type="button" class="btn" id="transfer-connect">Connect</button></div>
+      </div>
+      <div id="transfer-receiving" hidden>
+        <p class="info">Another browser wants to send you its songs and settings. Songs you have are kept.</p>
+        <div class="row"><button type="button" class="btn" id="transfer-accept">Receive</button></div>
+        <div id="transfer-answer-box" hidden>
+          <input type="text" class="value text share-url" id="transfer-answer-out" readonly aria-label="Answer code" />
+          <div class="row"><button type="button" class="btn" id="transfer-answer-copy">Copy answer</button></div>
+          <p class="info">Send this answer code back to the other browser and paste it there. The songs arrive as soon as it connects.</p>
+        </div>
+      </div>
+      <p class="info" id="transfer-info"></p>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
     <dialog class="panel help file-dialog" id="setup">
       <h2 class="ptitle">Setup</h2>
       <div class="setup-fields">
@@ -433,6 +460,13 @@
           <input type="file" id="colours-file" accept=".json,application/json" hidden />
         </div>
       </details>
+      <h3 class="ptitle">Backup and transfer</h3>
+      <div class="row">
+        <button type="button" class="btn" id="backup-all" title="All songs and the settings in one ZIP file">Back up everything</button>
+        <button type="button" class="btn" id="backup-restore" title="Adds the songs of a backup and offers its settings">Restore backup</button>
+        <button type="button" class="btn" id="transfer-open" title="Copy all songs and the settings straight to another browser or device">Send to another browser</button>
+        <input type="file" id="backup-file" accept=".zip,application/zip" hidden />
+      </div>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>

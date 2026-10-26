@@ -93,7 +93,7 @@ const KEYS: HelpSection = {
       title: 'Files and panels',
       entries: [
         { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV, FLAC or MP3' },
-        { code: 'Setup', text: 'Language, colours and the colour editor, interface size, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
+        { code: 'Setup', text: 'Language, colours and the colour editor, interface size, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input, backing up everything and sending it to another browser' },
         { code: 'Sample view', text: 'Drag to select, drag the yellow markers to move the loop, double-click selects all' },
         { code: 'Instr view', text: 'Click to add envelope points, drag to move, right-click to delete' },
         {
