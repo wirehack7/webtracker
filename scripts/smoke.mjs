@@ -33,7 +33,15 @@ const viewports = [
 ];
 
 const browser = useFirefox
-  ? await firefox.launch({ firefoxUserPrefs: { 'media.autoplay.default': 0, 'media.autoplay.blocking_policy': 0 } })
+  ? await firefox.launch({
+      firefoxUserPrefs: {
+        'media.autoplay.default': 0,
+        'media.autoplay.blocking_policy': 0,
+        // CI runners have no sound card, and Firefox's audio clock stands still there. Without an
+        // audio backend it runs the audio graph on the system clock instead.
+        'media.cubeb.force_null_context': true,
+      },
+    })
   : await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 console.log(`browser: ${useFirefox ? 'Firefox' : 'Chromium'} ${browser.version()}`);
 const failures = [];
@@ -146,7 +154,7 @@ await check('playback follows the order list', async () => {
     const state = await page.evaluate(async () => {
       // Whether the browser's audio clock runs at all here.
       const probe = new AudioContext();
-      await probe.resume().catch(() => {});
+      await Promise.race([probe.resume().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 1000))]);
       const start = probe.currentTime;
       await new Promise((resolve) => setTimeout(resolve, 1000));
       const clock = `audio clock ${probe.state} ${start.toFixed(2)}→${probe.currentTime.toFixed(2)} s`;
