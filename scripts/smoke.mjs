@@ -387,7 +387,8 @@ await check('German language pack', async () => {
   for (const viewport of [viewports[0], viewports[3]]) {
     const { context, page, errors } = await open(base, viewport, 'de-DE');
     try {
-      await page.waitForSelector('#pattern-no');
+      // #pattern-no is in the static page; the scopes appear once main.ts has run, after the language pack.
+      await page.waitForSelector('#scopes .scope', { state: 'attached' });
       const shown = await page.evaluate(() => ({
         lang: document.documentElement.lang,
         save: document.querySelector('#save').textContent,
@@ -417,7 +418,8 @@ await check('Finnish language pack', async () => {
   for (const viewport of [viewports[0], viewports[3]]) {
     const { context, page, errors } = await open(base, viewport, 'fi-FI');
     try {
-      await page.waitForSelector('#pattern-no');
+      // #pattern-no is in the static page; the scopes appear once main.ts has run, after the language pack.
+      await page.waitForSelector('#scopes .scope', { state: 'attached' });
       const shown = await page.evaluate(() => ({
         lang: document.documentElement.lang,
         save: document.querySelector('#save').textContent,
