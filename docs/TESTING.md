@@ -18,6 +18,7 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
 | Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays; a German browser gets the German language pack | 9 of 9 checks passing in headless Chromium and in headless Firefox |
 | iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
+| Dialogs on phones (Playwright) | Every dialog at 320 to 639 px wide, on a phone on its side and on a touch tablet, in English, German and Finnish: nothing outside the screen or the dialog, no sideways scrolling, nothing cut off, buttons, fields and checkbox rows at least 24 px high | 0 problems in headless Chromium |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
 
 ## Running it
@@ -32,6 +33,7 @@ pnpm build
 pnpm smoke [shots/]    # browser smoke test against packages/app/dist, optional screenshots
 pnpm smoke [shots/] --firefox  # the same in Firefox
 pnpm smoke:ios [shots/]  # the same for iPhone and iPad in WebKit
+pnpm smoke:dialogs [shots/]  # every dialog on phone screens in en/de/fi, in Chromium
 pnpm screenshots:manual  # retake the screenshots of the manual page (packages/app/public/manual)
 ```
 

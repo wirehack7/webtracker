@@ -51,6 +51,10 @@ jobs:
           done
           exit 1
       - run: pnpm smoke smoke-screenshots
+      - name: Dialogs on phones
+        if: always()
+        timeout-minutes: 5
+        run: pnpm smoke:dialogs smoke-screenshots/dialogs
       - name: Firefox smoke test
         if: always()
         timeout-minutes: 5
