@@ -29,7 +29,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
     title: 'Getting started',
     blocks: [
       'chiptrackr is a music tracker that runs in the browser. You write music in patterns: a grid of rows that play from top to bottom, with one column per channel. It loads and plays MOD, XM, S3M, IT, MTM, 669 and OKT modules and saves XM, the format of FastTracker 2, as its own.',
-      'Nothing has to be installed and nothing is uploaded. Songs, settings and autosaves stay in your browser. The browser can install the site as an app (the install button in the address bar, or "Add to home screen" on a phone); after the first visit it also works offline.',
+      'Nothing has to be installed and nothing is uploaded. Songs, settings and autosaves stay in your browser. After the first visit it works offline too. Setup > App and offline installs it as an app with its own window, which opens XM and MOD files; on iPhone and iPad use Share > Add to Home Screen. When a new version is ready, a bar offers to reload.',
       'Browsers only allow sound after you interact with the page, so audio starts with the first key you press or the first tap on the piano.',
       {
         steps: [

@@ -47,7 +47,8 @@ import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, join
 import { JamSession, type JamDocument, type Link } from './collab/session.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
 import { ask, askText, tell } from './ui/ask.ts';
-import { relaxFileFilters } from './ui/platform.ts';
+import { isAppleTouch, relaxFileFilters } from './ui/platform.ts';
+import { applyUpdate, installState, isStandalone, onLaunchFiles, registerServiceWorker, type InstallPrompt } from './ui/pwa.ts';
 import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
@@ -3076,6 +3077,8 @@ async function connectMidi(on: boolean): Promise<void> {
 applySettings();
 showSong();
 void startUp().then(() => {
+  // Files opened with the installed app, after the last session is back so they open beside it.
+  onLaunchFiles(openModule);
   if (!shouldShow(readSeen(), returning)) {
     if (!returning) markSeen();
     return;
@@ -3084,9 +3087,66 @@ void startUp().then(() => {
   if (!document.querySelector('dialog[open]')) whatsNew.open();
 });
 
+// ---- Installing and updating ---------------------------------------------
+
+const updateBar = $('#update-bar');
+const installButton = $<HTMLButtonElement>('#install-app');
+let installPrompt: InstallPrompt | null = null;
+
+function showUpdateBar(text: string): void {
+  $('#update-text').textContent = text;
+  updateBar.hidden = false;
+}
+
+$('#update-later').addEventListener('click', () => (updateBar.hidden = true));
+$('#update-reload').addEventListener('click', async () => {
+  if (tabs.length > 1 && !(await ask(t('The new version starts after a reload. Your song is kept, but other open song tabs and the undo history are not. Reload now?'), { title: t('Update'), ok: t('Reload'), cancel: t('Later') }))) return;
+  updateBar.hidden = true;
+  await autosaveNow();
+  reloading = true;
+  track('update-reload');
+  applyUpdate();
+});
+
+function showInstallState(): void {
+  const state = installState(isStandalone(), !!installPrompt, isAppleTouch());
+  installButton.hidden = state !== 'prompt';
+  $('#install-info').textContent = {
+    installed: t('chiptrackr runs as an installed app. It works offline, and new versions announce themselves.'),
+    prompt: t('Install chiptrackr as an app: it gets its own window and icon, opens XM and MOD files and works offline.'),
+    ios: t('On iPhone and iPad: tap Share, then Add to Home Screen. chiptrackr then starts like an app and works offline.'),
+    none: t('chiptrackr works offline in this browser after the first visit. Browsers that can install it as an app offer that in their menu.'),
+  }[state];
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  // Setup offers it instead of the browser's own banner.
+  event.preventDefault();
+  installPrompt = event as InstallPrompt;
+  showInstallState();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  showInstallState();
+  track('app-installed');
+});
+installButton.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  const prompt = installPrompt;
+  installPrompt = null;
+  await prompt.prompt();
+  await prompt.userChoice;
+  showInstallState();
+});
+showInstallState();
+
 // Offline use: the service worker exists only in the build.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {
+if (import.meta.env.PROD) {
+  registerServiceWorker('./sw.js', {
+    offlineReady: () => (status.textContent = t('chiptrackr is ready to work offline.')),
+    updateReady: () => showUpdateBar(t('A new version of chiptrackr is ready.')),
+    updatedElsewhere: () => showUpdateBar(t('chiptrackr was updated in another tab. Reload to use the new version here.')),
+  }).catch(() => {
     // Without it the tracker still works online.
   });
 }

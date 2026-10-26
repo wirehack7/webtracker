@@ -30,6 +30,8 @@ jobs:
       - run: node scripts/inject-tracking.mjs packages/app/dist
         env:
           TRACKING_CODE: ${{ vars.TRACKING_CODE }}
+      # The pages changed, so the offline cache gets a new name.
+      - run: node scripts/service-worker.mjs packages/app/dist
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

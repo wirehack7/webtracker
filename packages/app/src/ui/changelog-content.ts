@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-26b',
+    items: [
+      msg('Install chiptrackr as an app from Setup > App and offline. It runs fully offline, opens XM and MOD files from your computer and tells you when a new version is ready.'),
+    ],
+  },
+  {
     id: '2026-10-26',
     items: [
       msg('The tracker speaks German and Finnish too. Pick a language in Setup > Language, or let it follow your browser.'),

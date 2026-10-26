@@ -21,6 +21,10 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="chiptrackr" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <!-- tracking-code -->
   </head>
   <body>
@@ -477,6 +481,11 @@
         <button type="button" class="btn" id="transfer-open" title="Copy all songs and the settings straight to another browser or device">Send to another browser</button>
         <input type="file" id="backup-file" accept=".zip,application/zip" hidden />
       </div>
+      <h3 class="ptitle">App and offline</h3>
+      <div class="row">
+        <button type="button" class="btn" id="install-app" title="Its own window and icon, and it works offline" hidden>Install app</button>
+        <span class="info" id="install-info"></span>
+      </div>
       <p class="info" id="setup-info">Auto plays MOD through the Amiga 500 filter (E00/E01 switch the LED filter) and XM with linear interpolation. Stereo below 100% narrows the mix, above widens it. Settings stay in this browser.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
@@ -525,6 +534,11 @@
         <button type="submit" class="btn">Close</button>
       </form>
     </dialog>
+    <div class="panel update-bar" id="update-bar" role="status" hidden>
+      <span id="update-text">A new version of chiptrackr is ready.</span>
+      <button type="button" class="btn" id="update-reload" title="Your song is saved first">Reload</button>
+      <button type="button" class="btn" id="update-later" title="The new version starts the next time you open chiptrackr">Later</button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

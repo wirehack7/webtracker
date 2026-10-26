@@ -1,18 +1,36 @@
 {
+  "id": "./",
   "name": "chiptrackr",
   "short_name": "chiptrackr",
-  "description": "Chiptune tracker for the browser: XM and MOD, pattern, sample and instrument editors, WAV export.",
+  "description": "Chiptune tracker for the browser, made for the demoscene: XM, MOD, S3M and IT, pattern, sample and instrument editors, audio export. Works offline.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#3d5578",
   "theme_color": "#3d5578",
+  "categories": ["music", "entertainment"],
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
+  "launch_handler": { "client_mode": "focus-existing" },
   "file_handlers": [
-    { "action": "./", "accept": { "audio/xm": [".xm"], "audio/mod": [".mod"] } }
+    {
+      "action": "./",
+      "accept": {
+        "audio/x-xm": [".xm"],
+        "audio/x-mod": [".mod"],
+        "audio/x-s3m": [".s3m"],
+        "audio/x-it": [".it"],
+        "audio/x-mtm": [".mtm"],
+        "audio/x-669": [".669"],
+        "audio/x-okt": [".okt"]
+      }
+    }
   ]
 }

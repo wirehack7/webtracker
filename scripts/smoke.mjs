@@ -9,9 +9,11 @@
  * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
  * over files. The replayer page must load and play its demo too, and a German browser must get
- * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only). Screenshots go to the given folder.
+ * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only).
+ * After one visit the tracker, the manual and the replayer must work offline, and a new
+ * service worker must offer a reload that switches to it. Screenshots go to the given folder.
  */
-import { mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, firefox } from 'playwright';
 import { serveDist } from './serve-dist.mjs';
@@ -38,14 +40,14 @@ const browser = useFirefox
 console.log(`browser: ${useFirefox ? 'Firefox' : 'Chromium'} ${browser.version()}`);
 const failures = [];
 
-async function open(url, viewport, locale = 'en-US') {
+async function open(url, viewport, locale = 'en-US', serviceWorkers = 'block') {
   const context = await browser.newContext({
     locale,
     viewport: { width: viewport.width, height: viewport.height },
     hasTouch: !!viewport.touch,
     // Firefox has no mobile emulation; touch and the small viewport still apply.
     ...(useFirefox ? {} : { isMobile: !!viewport.touch }),
-    serviceWorkers: 'block',
+    serviceWorkers,
   });
   // Without this, an action that never completes (such as a tap) waits forever.
   context.setDefaultTimeout(15000);
@@ -297,6 +299,61 @@ await check('replayer page plays its demo', async () => {
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
     if (shots) await page.screenshot({ path: join(shots, 'replayer.png') });
   } finally {
+    await context.close();
+  }
+});
+
+// The service worker caches the whole site on the first visit: offline, the tracker, its lazy
+// chunks, the manual and the replayer still load. A changed sw.js then offers a reload.
+await check('offline after the first visit, and updates', async () => {
+  const sw = join(root, 'sw.js');
+  const source = readFileSync(sw, 'utf8');
+  const files = JSON.parse(/const FILES = (.*);/.exec(source)[1]);
+  const { context, page, errors } = await open(base, viewports[0], 'en-US', 'allow');
+  try {
+    await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 30000 });
+    await context.setOffline(true);
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForSelector('#pattern-no');
+    const missing = await page.evaluate(async (urls) => {
+      const failed = [];
+      for (const url of urls) {
+        const response = await fetch(url).catch(() => null);
+        if (!response?.ok) failed.push(url);
+      }
+      return failed;
+    }, files);
+    assert(missing.length === 0, `not cached: ${missing.join(', ')}`);
+    await page.evaluate(() => document.querySelector('#bar-play').click());
+    await page.waitForTimeout(1000);
+    assert(/Audio running/.test(await page.locator('#status').innerText()), 'the AudioWorklet did not start offline');
+    await page.evaluate(() => document.querySelector('#bar-play').click());
+    for (const [path, selector] of [['manual.html', 'h1'], ['replayer/', 'h1']]) {
+      await page.goto(`${base}${path}`, { waitUntil: 'load' });
+      await page.waitForSelector(selector);
+    }
+    await page.goto(base, { waitUntil: 'load' });
+    await page.waitForSelector('#pattern-no');
+    assert(await page.locator('#update-bar').isHidden(), 'the update bar showed without an update');
+
+    // A new deploy: the new worker waits until Reload in the bar hands over to it.
+    await context.setOffline(false);
+    appendFileSync(sw, '// smoke test update\n');
+    const before = await page.evaluate(() => caches.keys());
+    await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
+    await page.locator('#update-bar').waitFor({ state: 'visible', timeout: 30000 });
+    if (shots) await page.screenshot({ path: join(shots, 'update-bar.png') });
+    const reloaded = page.waitForEvent('load', { timeout: 30000 });
+    await page.locator('#update-reload').click();
+    await reloaded;
+    await page.waitForSelector('#pattern-no');
+    assert(await page.locator('#update-bar').isHidden(), 'the update bar is still there after the reload');
+    const waiting = await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => !!r.waiting));
+    assert(!waiting, 'the new service worker is still waiting');
+    assert(before.length === 1, `expected one cache before the update, found ${before.length}`);
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+  } finally {
+    writeFileSync(sw, source);
     await context.close();
   }
 });

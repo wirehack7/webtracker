@@ -16,7 +16,7 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 | Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 248 tests in 40 files, all passing |
 | Code coverage (V8) | Which source lines those tests execute | 55 % of lines overall; formats 93 %, engine 79 %, app 20 % |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
-| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays; playback follows the order list; a German browser gets the German language pack | 14 of 14 checks passing in headless Chromium, 13 of 13 in headless Firefox (its audio clock does not run on the CI runners, so the order list check is Chromium only) |
+| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays; playback follows the order list; a German browser gets the German language pack; after one visit the site works offline and a new version offers a reload | 15 of 15 checks passing in headless Chromium, 14 of 14 in headless Firefox (its audio clock does not run on the CI runners, so the order list check is Chromium only) |
 | iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
 | Dialogs on phones (Playwright) | Every dialog at 320 to 639 px wide, on a phone on its side and on a touch tablet, in English, German and Finnish: nothing outside the screen or the dialog, no sideways scrolling, nothing cut off, buttons, fields and checkbox rows at least 24 px high | 0 problems in headless Chromium |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
@@ -216,7 +216,7 @@ sheet or Save to Files.
 | Jam (live editing together) | ✅ | ✗ | Sync logic tested with simulated peers, including conflicting edits and message reordering; the WebRTC connection is not |
 | Replayer for demos and intros | ◐ | ✅ | Core tested; the page plays its demo in the smoke test |
 | MIDI input | ◐ | ✗ | Note and velocity mapping tested; no real MIDI device |
-| Offline use (service worker) | – | ✋ | Not tested automatically; the smoke test blocks the service worker |
+| Offline use and updates (service worker) | ◐ | ✅ | `pwa.test.ts` covers what Setup offers for installing; the smoke test reloads offline, fetches every cached file, opens the manual and the replayer offline, and switches to a new service worker through the update bar. Installing itself and opening files with the installed app are not tested |
 | Help and manual | ✅ | ◐ | Every effect has a help entry, links and anchors resolve |
 
 ## Not verified
