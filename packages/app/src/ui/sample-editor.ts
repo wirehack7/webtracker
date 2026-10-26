@@ -296,8 +296,9 @@ export class SampleEditor {
   private rangeTool(label: string, op: (s: Sample, r: Range) => void): void {
     const r = this.range();
     if (!r) return;
-    this.edit(label, (s) => op(s, r));
+    // Before the edit, which redraws.
     if (label === 'crop') this.selection = null;
+    this.edit(label, (s) => op(s, r));
   }
 
   private copy(): void {
@@ -314,6 +315,7 @@ export class SampleEditor {
     this.copy();
     this.edit('cut', (s) => deleteRange(s, sel));
     this.selection = { start: sel.start, end: sel.start };
+    this.draw();
   }
 
   private paste(): void {
@@ -325,6 +327,7 @@ export class SampleEditor {
       insertFrames(s, sel.start, clip);
     });
     this.selection = { start: sel.start, end: sel.start + clip.length };
+    this.draw();
   }
 
   private loopFromSelection(): void {
@@ -344,6 +347,8 @@ export class SampleEditor {
 
   private generate(shape: WaveShape): void {
     const length = WAVE_LENGTHS[this.waveLengthIndex] ?? 32;
+    this.selection = null;
+    this.zoom = null;
     this.edit('generate', (s) => {
       s.data = generateWave(shape, length, Date.now() & 0xffff);
       s.loopType = LoopType.Forward;
@@ -353,8 +358,6 @@ export class SampleEditor {
       Object.assign(s, tuningForRate((8363 * length) / 32));
       if (!s.name) s.name = shape;
     });
-    this.selection = null;
-    this.zoom = null;
   }
 
   private zoomToSelection(): void {
