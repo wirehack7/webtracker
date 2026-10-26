@@ -23,11 +23,9 @@ import {
   scaleVolumeBlock,
   transposeBlock,
   writeCell,
-  cleanupPreview,
   cleanupSong,
   type Block,
   type Cell,
-  type CleanupOptions,
   type CleanupResult,
   type Clip,
   type Pattern,
@@ -53,6 +51,7 @@ import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
 import { mountHelp } from './ui/help.ts';
 import { hasVisitedBefore, markSeen, mountWhatsNew, readSeen, shouldShow } from './ui/changelog.ts';
+import { mountSongStats } from './ui/song-stats.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
@@ -2435,46 +2434,25 @@ $('#sc-go').addEventListener('click', () => {
   runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), msg('Scale volume: {count} volumes changed.'), msg('Scale volume: nothing to change.'));
 });
 
-const cleanupOptions = (): CleanupOptions => ({
-  unusedPatterns: $<HTMLInputElement>('#cu-patterns').checked,
-  duplicatePatterns: $<HTMLInputElement>('#cu-duplicates').checked,
-  unusedInstruments: $<HTMLInputElement>('#cu-instruments').checked,
-  compactInstruments: $<HTMLInputElement>('#cu-compact').checked,
-  unusedSamples: $<HTMLInputElement>('#cu-samples').checked,
-  sampleTails: $<HTMLInputElement>('#cu-tails').checked,
+const songStatsDialog = mountSongStats($<HTMLDialogElement>('#stats-dialog'), {
+  song,
+  optimize(options) {
+    let result!: CleanupResult;
+    editor.editSong('clean up', (s) => {
+      result = cleanupSong(s, options);
+    });
+    status.textContent = t('Song optimized; Ctrl+Z undoes it.');
+    track('optimize');
+    return result;
+  },
 });
-
-/** What a clean-up removes, as a list for a sentence; empty when nothing. */
-function describeCleanup(result: CleanupResult): string {
-  const count = (n: number, one: string, many: string) => (n ? [t(n === 1 ? one : many, { count: n })] : []);
-  const parts = [
-    ...count(result.patterns, msg('{count} pattern'), msg('{count} patterns')),
-    ...count(result.instruments, msg('{count} instrument'), msg('{count} instruments')),
-    ...count(result.samples, msg('{count} sample'), msg('{count} samples')),
-  ];
-  if (result.frames) parts.push(t('{count} sample frames', { count: result.frames.toLocaleString(language()) }));
-  return parts.join(', ');
-}
-
-function previewCleanup(): void {
-  const what = describeCleanup(cleanupPreview(song(), cleanupOptions()));
-  editInfo.textContent = what ? t('Clean up would remove {what}.', { what }) : t('Clean up: nothing to remove.');
-}
-for (const id of ['#cu-patterns', '#cu-duplicates', '#cu-instruments', '#cu-compact', '#cu-samples', '#cu-tails']) {
-  $(id).addEventListener('change', previewCleanup);
-}
-$('#cu-go').addEventListener('click', () => {
-  const options = cleanupOptions();
-  if (!describeCleanup(cleanupPreview(song(), options))) {
-    editInfo.textContent = t('Clean up: nothing to remove.');
-    return;
-  }
-  let result!: CleanupResult;
-  editor.editSong('clean up', (s) => {
-    result = cleanupSong(s, options);
-  });
-  editInfo.textContent = t('Clean up removed {what}; Ctrl+Z undoes it.', { what: describeCleanup(result) });
-  status.textContent = editInfo.textContent;
+$('#stats-open').addEventListener('click', () => {
+  setSheet(false);
+  songStatsDialog.open();
+});
+$('#edit-stats').addEventListener('click', () => {
+  editTools.close();
+  songStatsDialog.open();
 });
 
 // Help opened with the cursor on a volume or effect jumps to its explanation.

@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-26b',
+    items: [
+      msg('Stats shows how long a song plays, what each part takes in the file and what the song never plays. Optimize makes it smaller for demos and intros: unused parts out, half sample rates, 8-bit samples, with Ctrl+Z to undo.'),
+    ],
+  },
+  {
     id: '2026-10-26',
     items: [
       msg('The tracker speaks German and Finnish too. Pick a language in Setup > Language, or let it follow your browser.'),

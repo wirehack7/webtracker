@@ -143,7 +143,7 @@ function writeInstrumentFields(w: Writer, ins: Instrument) {
 }
 
 /** Sample headers followed by all sample data, as both XM and XI store them. */
-function writeSamples(w: Writer, samples: Sample[]) {
+function writeSamples(w: Writer, samples: Sample[]): { bytes: number; is16: boolean }[] {
   const encoded = samples.map(encodeSample);
   samples.forEach((s, i) => {
     const { bytes, is16 } = encoded[i]!;
@@ -161,9 +161,10 @@ function writeSamples(w: Writer, samples: Sample[]) {
     w.text(s.name, 22);
   });
   for (const { bytes } of encoded) w.raw(bytes);
+  return encoded.map(({ bytes, is16 }) => ({ bytes: bytes.length, is16 }));
 }
 
-function writeInstrument(w: Writer, ins: Instrument) {
+function writeInstrument(w: Writer, ins: Instrument): { bytes: number; is16: boolean }[] {
   const samples = ins.samples.slice(0, 16);
   w.u32(INSTRUMENT_HEADER_SIZE);
   w.text(ins.name, 22);
@@ -171,7 +172,7 @@ function writeInstrument(w: Writer, ins: Instrument) {
   w.u16(samples.length);
   w.u32(SAMPLE_HEADER_SIZE);
   writeInstrumentFields(w, ins);
-  writeSamples(w, samples);
+  return writeSamples(w, samples);
 }
 
 /** Writes one instrument as an FT2 XI file. */
@@ -189,8 +190,30 @@ export function saveXi(ins: Instrument): Uint8Array {
   return w.result();
 }
 
+/** Bytes each part of the song takes in an XM file, as {@link saveXm} writes it. */
+export interface XmLayout {
+  total: number;
+  /** The header and order list. */
+  header: number;
+  /** Per pattern, packed data and its header. */
+  patterns: number[];
+  /** Per instrument: its header and sample headers, then the data of each sample. */
+  instruments: { header: number; samples: { bytes: number; is16: boolean }[] }[];
+}
+
 /** Writes the song as an FT2-compatible XM 1.04 file. */
 export function saveXm(song: Song): Uint8Array {
+  return writeXm(song).result();
+}
+
+/** How {@link saveXm} would lay the song out, without keeping the bytes. */
+export function xmLayout(song: Song): XmLayout {
+  const layout: XmLayout = { total: 0, header: 0, patterns: [], instruments: [] };
+  layout.total = writeXm(song, layout).length;
+  return layout;
+}
+
+function writeXm(song: Song, layout?: XmLayout): Writer {
   const w = new Writer();
   const orders = song.orders.slice(0, 256);
   const patterns = song.patterns.slice(0, 256);
@@ -211,6 +234,7 @@ export function saveXm(song: Song): Uint8Array {
   w.u16(song.initialSpeed);
   w.u16(song.initialTempo);
   for (let i = 0; i < 256; i++) w.u8(orders[i] ?? 0);
+  if (layout) layout.header = w.length;
 
   for (const pattern of patterns) {
     const packed = packPattern(pattern.data);
@@ -219,8 +243,14 @@ export function saveXm(song: Song): Uint8Array {
     w.u16(pattern.rows);
     w.u16(packed.length);
     w.raw(packed);
+    layout?.patterns.push(9 + packed.length);
   }
 
-  for (const ins of instruments) writeInstrument(w, ins);
-  return w.result();
+  for (const ins of instruments) {
+    const at = w.length;
+    const samples = writeInstrument(w, ins);
+    const data = samples.reduce((sum, s) => sum + s.bytes, 0);
+    layout?.instruments.push({ header: w.length - at - data, samples });
+  }
+  return w;
 }

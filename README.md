@@ -104,7 +104,8 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 | Ctrl+S | Save as XM; the Save button also saves MOD and exports WAV, FLAC or MP3 (whole song or one file per channel) |
 | Click / right-click a scope | Mute / solo a channel |
 | Ctrl+I | Interpolate the volume column or effect across the selection |
-| Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song), clean up the song (unused or duplicate patterns, unused instruments and samples, sample data after the loop) |
+| Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song) |
+| Stats button | Play time, XM and MOD file size, deflated size, size of every pattern, instrument and sample, what the song never plays; Optimize removes unused or duplicate patterns, unused instruments and samples, sample data after the loop, and can halve sample rates or round samples to 8 bits, with a before/after size preview and undo |
 | Ctrl+Enter | Play the pattern from the cursor row (with Shift the song) |
 | Alt+Enter | Play only the cursor row and step down, to go through a pattern row by row |
 | F9–F12 | Jump to row 0, ¼, ½ and ¾ of the pattern |
