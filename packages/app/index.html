@@ -178,6 +178,7 @@
       <div class="help-head">
         <h2 class="ptitle">Help</h2>
         <a class="btn help-manual" id="help-manual" href="./manual.html" target="_blank" rel="noopener" title="The full manual on its own page">Manual</a>
+        <button type="button" class="btn" id="whats-new-open" title="What changed in recent updates">What's new</button>
         <input type="search" class="value text help-search" placeholder="Search keys and effects" aria-label="Search help" spellcheck="false" />
         <form method="dialog">
           <button type="submit" class="btn" autofocus>Close</button>
@@ -188,6 +189,13 @@
       <div class="help-body">
         <p class="help-empty" hidden>Nothing found.</p>
       </div>
+    </dialog>
+    <dialog class="panel help file-dialog whats-new" id="whats-new" aria-label="What's new">
+      <h2 class="ptitle">What's new</h2>
+      <div class="whats-new-body"></div>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn" autofocus>Close</button>
+      </form>
     </dialog>
     <dialog class="panel help file-dialog about" id="about" aria-label="About">
       <h2 class="ptitle">About</h2>

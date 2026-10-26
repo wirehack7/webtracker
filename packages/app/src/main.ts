@@ -52,6 +52,7 @@ import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
 import { mountHelp } from './ui/help.ts';
+import { hasVisitedBefore, markSeen, mountWhatsNew, readSeen, shouldShow } from './ui/changelog.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
@@ -71,6 +72,14 @@ const $ = <T extends HTMLElement>(selector: string): T => document.querySelector
 
 /** Browser preferences from the Setup dialog. */
 const prefs: Settings = loadSettings();
+// Read before anything is stored, so a first visit is told from a return.
+const returning = (() => {
+  try {
+    return hasVisitedBefore(localStorage);
+  } catch {
+    return false;
+  }
+})();
 // The language pack loads before anything below writes text.
 await initLanguage(prefs.language);
 translatePage();
@@ -2476,6 +2485,10 @@ $('#help-open').addEventListener('click', () => {
   help.open(app.dataset.view === 'pattern' && field ? cellHelpTarget(field, cursorCell()) : null);
 });
 
+// What's new opens from Help, and by itself once after an update for returning visitors.
+const whatsNew = mountWhatsNew($<HTMLDialogElement>('#whats-new'));
+$('#whats-new-open').addEventListener('click', () => whatsNew.open());
+
 const link = (href: string, text: string): HTMLAnchorElement => Object.assign(document.createElement('a'), { href, target: '_blank', rel: 'noopener', textContent: text });
 $('#about-info').append(
   ...tNodes('A tracker for chiptunes, modules and the demoscene, right in your browser. Free and open source: the code is on {github} under the {license} ({notices}). Click the demo to pause it.', {
@@ -3062,7 +3075,14 @@ async function connectMidi(on: boolean): Promise<void> {
 
 applySettings();
 showSong();
-void startUp();
+void startUp().then(() => {
+  if (!shouldShow(readSeen(), returning)) {
+    if (!returning) markSeen();
+    return;
+  }
+  // A link that opened a dialog of its own (a jam or a transfer) goes first; this waits for the next visit.
+  if (!document.querySelector('dialog[open]')) whatsNew.open();
+});
 
 // Offline use: the service worker exists only in the build.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
