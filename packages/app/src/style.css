@@ -1035,6 +1035,11 @@ a.btn {
   margin: 0;
 }
 
+.help-links {
+  display: flex;
+  gap: calc(var(--px) * 4);
+}
+
 .help-search.value.text {
   flex: 1;
   min-width: 0;
@@ -1992,16 +1997,67 @@ canvas.drawing {
   }
 }
 
-/* The Help head puts its search on a line of its own when the buttons need the room. */
+/*
+ * Phones lay the Help head out in rows: the title with Close beside it, Manual and What's new
+ * as plain links under it, then the search across the width. The topic tabs sit in a grid of
+ * equal cells (two by two on small phones), so none runs off the edge.
+ */
 @media (max-width: 639px) {
   .help-head {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title close'
+      'links links'
+      'search search';
     row-gap: calc(var(--px) * 2);
   }
 
+  .help-head .ptitle {
+    grid-area: title;
+  }
+
+  .help-close {
+    grid-area: close;
+  }
+
+  .help-links {
+    grid-area: links;
+    flex-wrap: wrap;
+    gap: 0 calc(var(--px) * 8);
+  }
+
+  .help-links .btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    color: var(--pat-instr);
+    text-decoration: underline;
+    text-underline-offset: calc(var(--px) * 2);
+  }
+
   .help-head .help-search.value.text {
-    order: 1;
-    flex-basis: 100%;
+    grid-area: search;
+  }
+
+  .help-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .help-tabs .btn {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 479px) {
+  .help-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

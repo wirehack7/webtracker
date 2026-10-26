@@ -6,7 +6,8 @@
  * Opens every dialog on phone screens (320 to 639 px wide, and a phone on its side) and on a
  * touch tablet, in English, German and Finnish, and fails when a dialog or anything in it runs
  * past the screen or its edge, scrolls sideways, or when a button, field or checkbox row is
- * smaller than a thumb. A select whose chosen text does not fit only gets a note, since it ends
+ * smaller than a thumb, or when the Help head loses Close from its title row or its topic tabs
+ * scroll sideways. A select whose chosen text does not fit only gets a note, since it ends
  * in an ellipsis and the full text shows when it opens. Screenshots of the 320 and 390 px phones
  * go to the given folder.
  */
@@ -63,8 +64,8 @@ for (const locale of ['en-US', 'de-DE', 'fi-FI']) {
           const parts = dialog.querySelectorAll('select, input, button, .btn, .label, p, h2, h3, summary, .list, .range-field > span, .colour-grid label');
           for (const part of parts) {
             if (part.getClientRects().length === 0) continue;
-            // Items inside scrolling lists and tab strips may run on; the strip itself may not.
-            if (part.parentElement.closest('.list, .help-tabs, .help-body')) continue;
+            // Items inside scrolling lists may run on; the list itself may not.
+            if (part.parentElement.closest('.list, .help-body')) continue;
             const r = part.getBoundingClientRect();
             const name = `${part.tagName.toLowerCase()} ${part.id || part.textContent.trim().slice(0, 24)}`;
             if (r.left < left || r.right > right) problems.push(`${name} at ${r.left | 0}..${r.right | 0}, outside ${left | 0}..${right | 0}`);
@@ -82,6 +83,14 @@ for (const locale of ['en-US', 'de-DE', 'fi-FI']) {
               const need = measure.measureText(part.selectedOptions[0].text).width + parseFloat(s.paddingLeft) + parseFloat(s.paddingRight) + 12;
               if (need > r.width + 1) hints.push(`${name} shows "${part.selectedOptions[0].text}" shortened`);
             }
+          }
+          // The Help head keeps Close on the title's row, and its topic tabs never scroll sideways.
+          if (id === 'help') {
+            const title = dialog.querySelector('.help-head .ptitle').getBoundingClientRect();
+            const close = dialog.querySelector('.help-close .btn').getBoundingClientRect();
+            if (close.top >= title.bottom || close.bottom <= title.top) problems.push('Close is not on the title row');
+            const tabs = dialog.querySelector('.help-tabs');
+            if (tabs.scrollWidth > tabs.clientWidth + 1) problems.push(`help tabs scroll sideways (${tabs.scrollWidth} > ${tabs.clientWidth})`);
           }
           return { problems, hints };
         },

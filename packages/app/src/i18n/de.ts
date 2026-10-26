@@ -1038,6 +1038,7 @@ export default {
   'Firefox is checked with every update, together with Chrome and Safari.': 'Firefox wird bei jedem Update mitgetestet, zusammen mit Chrome und Safari.',
   'The manual has screenshots and uses the full width of large screens.': 'Das Handbuch hat Screenshots und nutzt die volle Breite großer Bildschirme.',
   'This What\'s new window shows what changed since your last visit. Help opens it any time.': 'Dieses Fenster zeigt, was sich seit deinem letzten Besuch geändert hat. In der Hilfe kannst du es jederzeit öffnen.',
+  'Help on phones: Close sits beside the title and every topic tab is in view.': 'Hilfe am Handy: Schließen steht neben dem Titel und alle Themen-Tabs sind zu sehen.',
   'Export your song as WAV, FLAC or MP3 from the Save dialog.': 'Exportiere deinen Song als WAV, FLAC oder MP3 im Speichern-Dialog.',
   'Jam: make music together live with a friend through an invite link.': 'Jam: Mach live zusammen mit Freunden Musik, über einen Einladungslink.',
   'The replayer plays your song in demos and intros. Save > Open in replayer tries it right away.': 'Der Replayer spielt deinen Song in Demos und Intros. Speichern > Im Replayer öffnen probiert es gleich aus.',

@@ -21,6 +21,7 @@ export const CHANGELOG: Release[] = [
       msg('Send to another browser moves your songs and settings from one device to another, phone to laptop for example, with a link and an answer code.'),
       msg('The Songs dialog backs up your song library as a ZIP file and adds songs from one.'),
       msg('Dialogs fit phone screens: full width, bigger buttons, and Close always in reach.'),
+      msg('Help on phones: Close sits beside the title and every topic tab is in view.'),
       msg('iPhone and iPad: tracker files can be picked when loading again, and the sound plays with the silent switch on.'),
       msg('Firefox is checked with every update, together with Chrome and Safari.'),
       msg('The manual has screenshots and uses the full width of large screens.'),
