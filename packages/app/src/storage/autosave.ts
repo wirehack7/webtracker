@@ -56,6 +56,11 @@ export async function writeAutosave(
   await done(tx);
 }
 
+/** What saving as XM would lose of a MOD, kept beside the XM bytes. */
+export function originOf(song: AutosaveOrigin): AutosaveOrigin {
+  return { format: song.format, formatName: song.formatName, channelPanning: [...song.channelPanning] };
+}
+
 /** Undoes what saving as XM changed for a song that was loaded from a MOD. */
 export function applyOrigin<T extends AutosaveOrigin>(song: T, origin: AutosaveOrigin | undefined): T {
   if (origin?.format === 'mod' && origin.channelPanning.length === song.channelPanning.length) {

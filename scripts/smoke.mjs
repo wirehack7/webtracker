@@ -148,6 +148,49 @@ await check('editing, saving and audio export', async () => {
   }
 });
 
+// Backing up the song library and restoring it in a browser that has none, on a phone.
+await check('song library backup and restore', async () => {
+  const phone = viewports.find((v) => v.name === 'phone');
+  let backup;
+  {
+    const { context, page, errors } = await open(base, phone);
+    try {
+      await page.waitForSelector('#pattern-no');
+      await page.evaluate(() => document.querySelector('#songs-open')?.click());
+      await page.locator('#library-list li[aria-selected]').first().waitFor();
+      await page.evaluate(() => document.querySelector('#library-save')?.click());
+      await page.waitForFunction(() => document.querySelectorAll('#library-list li').length >= 2);
+      await page.evaluate(() => localStorage.setItem('webtracker.jamName', 'smoke'));
+      backup = await downloadBytes(page, () => document.querySelector('#library-backup')?.click());
+      assert(/^chiptrackr-backup-.*\.zip$/.test(backup.name), `backup is called ${backup.name}`);
+      assert(backup.bytes.subarray(0, 4).toString('latin1') === 'PK\x03\x04', 'backup is not a ZIP');
+      assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    } finally {
+      await context.close();
+    }
+  }
+  const { context, page, errors } = await open(base, phone);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.evaluate(() => document.querySelector('#songs-open')?.click());
+    await page.locator('#library-list li').first().waitFor();
+    const before = await page.locator('#library-list li').count();
+    await page.locator('#library-restore-file').setInputFiles({ name: backup.name, mimeType: 'application/zip', buffer: backup.bytes });
+    await page.waitForFunction((n) => document.querySelectorAll('#library-list li').length > n, before);
+    // The backup's settings come back only when asked for; keep this browser's.
+    await page.getByRole('button', { name: 'Keep mine' }).click();
+    const info = await page.locator('#library-info').innerText();
+    assert(/Added 1 song/.test(info) && /Already here: 1 song/.test(info), `restore said: ${info}`);
+    assert((await page.evaluate(() => localStorage.getItem('webtracker.jamName'))) === null, 'Keep mine took the settings anyway');
+    await page.locator('#library-restore-file').setInputFiles({ name: backup.name, mimeType: 'application/zip', buffer: backup.bytes });
+    await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Replace and reload' }).click()]);
+    assert((await page.evaluate(() => localStorage.getItem('webtracker.jamName'))) === 'smoke', 'the settings were not restored');
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+  } finally {
+    await context.close();
+  }
+});
+
 await check('replayer page plays its demo', async () => {
   const { context, page, errors } = await open(`${base}replayer/`, viewports[0]);
   try {

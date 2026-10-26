@@ -50,8 +50,15 @@ export function isPp20(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** Picks the module from a ZIP archive: the first file with a module name, else the largest file. */
-export function unzipModule(bytes: Uint8Array, fileName = ''): { bytes: Uint8Array; fileName: string } {
+interface ZipDirEntry {
+  name: string;
+  method: number;
+  packed: number;
+  size: number;
+  offset: number;
+}
+
+function zipDirectory(bytes: Uint8Array, fileName: string): ZipDirEntry[] {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;
   for (let o = bytes.length - 22; o >= Math.max(0, bytes.length - 22 - 0xffff); o--) {
@@ -63,8 +70,7 @@ export function unzipModule(bytes: Uint8Array, fileName = ''): { bytes: Uint8Arr
   if (end < 0) throw new Error(`${fileName || 'ZIP file'}: no ZIP directory found`);
   const count = v.getUint16(end + 10, true);
   let o = v.getUint32(end + 16, true);
-  type Entry = { name: string; method: number; packed: number; size: number; offset: number };
-  const entries: Entry[] = [];
+  const entries: ZipDirEntry[] = [];
   for (let i = 0; i < count && o + 46 <= bytes.length; i++) {
     if (v.getUint32(o, true) !== 0x02014b50) break;
     const nameLength = v.getUint16(o + 28, true);
@@ -74,18 +80,33 @@ export function unzipModule(bytes: Uint8Array, fileName = ''): { bytes: Uint8Arr
     }
     o += 46 + nameLength + v.getUint16(o + 30, true) + v.getUint16(o + 32, true);
   }
-  const baseName = (e: Entry) => e.name.slice(e.name.lastIndexOf('/') + 1);
-  const entry = entries.find((e) => MODULE_NAME.test(baseName(e)) || PACKED_EXTENSIONS[baseName(e).split('.').pop()!.toLowerCase()]) ?? entries.reduce<Entry | undefined>((a, e) => (!a || e.size > a.size ? e : a), undefined);
-  if (!entry) throw new Error(`${fileName || 'ZIP file'}: the archive is empty`);
+  return entries;
+}
+
+function zipData(bytes: Uint8Array, entry: ZipDirEntry): Uint8Array {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const local = entry.offset;
   if (local + 30 > bytes.length || v.getUint32(local, true) !== 0x04034b50) throw new Error(`${entry.name}: damaged ZIP entry`);
   const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
   const packed = bytes.subarray(start, Math.min(bytes.length, start + entry.packed));
-  let data: Uint8Array;
-  if (entry.method === 0) data = packed.slice();
-  else if (entry.method === 8) data = inflateRaw(packed, entry.size);
-  else throw new Error(`${entry.name}: unsupported ZIP compression method ${entry.method}`);
-  return { bytes: data, fileName: baseName(entry) };
+  if (entry.method === 0) return packed.slice();
+  if (entry.method === 8) return inflateRaw(packed, entry.size);
+  throw new Error(`${entry.name}: unsupported ZIP compression method ${entry.method}`);
+}
+
+const baseName = (e: ZipDirEntry) => e.name.slice(e.name.lastIndexOf('/') + 1);
+
+/** Picks the module from a ZIP archive: the first file with a module name, else the largest file. */
+export function unzipModule(bytes: Uint8Array, fileName = ''): { bytes: Uint8Array; fileName: string } {
+  const entries = zipDirectory(bytes, fileName);
+  const entry = entries.find((e) => MODULE_NAME.test(baseName(e)) || PACKED_EXTENSIONS[baseName(e).split('.').pop()!.toLowerCase()]) ?? entries.reduce<ZipDirEntry | undefined>((a, e) => (!a || e.size > a.size ? e : a), undefined);
+  if (!entry) throw new Error(`${fileName || 'ZIP file'}: the archive is empty`);
+  return { bytes: zipData(bytes, entry), fileName: baseName(entry) };
+}
+
+/** Every file in a ZIP archive, with its full path inside the archive. */
+export function unzipAll(bytes: Uint8Array, fileName = ''): { name: string; data: Uint8Array }[] {
+  return zipDirectory(bytes, fileName).map((entry) => ({ name: entry.name, data: zipData(bytes, entry) }));
 }
 
 export function gunzip(bytes: Uint8Array, fileName = ''): { bytes: Uint8Array; fileName: string } {

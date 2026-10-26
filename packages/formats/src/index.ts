@@ -51,6 +51,6 @@ export { encodeWav, type WavFormat } from './wav-write.ts';
 export { encodeFlac, type FlacDepth } from './flac-write.ts';
 export { save8svx } from './iff-write.ts';
 export { createZip, crc32, type ZipEntry } from './zip.ts';
-export { unpackModule, type Unpacked } from './unpack.ts';
+export { unpackModule, unzipAll, type Unpacked } from './unpack.ts';
 export { inflateRaw } from './inflate.ts';
 export { applyTrack, loadXp, loadXt, saveXp, saveXt, type LoadedXp } from './xp.ts';

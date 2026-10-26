@@ -212,7 +212,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
       {
         list: [
           'The song is saved in the browser while you work. `Save` lists the latest autosaved versions, so a crash or a closed tab loses nothing.',
-          '`Songs` keeps named songs in this browser, also offline.',
+          '`Songs` keeps named songs in this browser, also offline. `Back up all (ZIP)` saves all of them and the settings in one ZIP file, and `Restore from ZIP` adds them back, here or in another browser or device.',
           '`Save XM` (`Ctrl+S`) downloads the song as an XM module, which every modern tracker and replayer reads. `Save MOD` converts it for ProTracker and Amiga players, keeping what MOD can hold.',
           '`Pattern XP` and `Track XT` save one pattern or one channel, to move parts between songs.',
           'Export audio renders the song as WAV (16, 24 or 32 bit), FLAC (lossless and smaller) or MP3 (128 to 320 kbit/s) at 44.1 to 96 kHz, and on request one extra file per channel (as a ZIP). Muted channels stay out of the mix. Rendering runs in the background, faster than real time.',
@@ -220,7 +220,7 @@ export const MANUAL_CHAPTERS: ManualChapter[] = [
         ],
       },
       {
-        tip: 'Songs, autosaves and settings belong to this browser on this device. Save the song as XM to keep it safe or to move it to another device.',
+        tip: 'Songs, autosaves and settings belong to this browser on this device. Save the song as XM, or back up all songs as a ZIP in Songs, to keep them safe or to move them to another device.',
       },
     ],
   },

@@ -97,3 +97,12 @@ export async function deleteSong(id: number): Promise<void> {
   tx.objectStore(STORE).delete(id);
   await done(tx);
 }
+
+/** Adds several songs in one transaction, so a restore is all or nothing. */
+export async function addSongs(songs: Omit<LibrarySong, 'id'>[]): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(STORE, 'readwrite');
+  const store = tx.objectStore(STORE);
+  for (const song of songs) store.put(song);
+  await done(tx);
+}

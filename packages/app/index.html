@@ -303,7 +303,12 @@
         <button type="button" class="btn" id="library-rename">Rename</button>
         <button type="button" class="btn" id="library-delete">Delete</button>
       </div>
-      <p class="info" id="library-info">Saving under a new name keeps a copy. Songs stay in this browser only; save XM files for backups.</p>
+      <div class="row">
+        <button type="button" class="btn" id="library-backup" title="All songs and the settings in one ZIP file">Back up all (ZIP)</button>
+        <button type="button" class="btn" id="library-restore">Restore from ZIP</button>
+        <input type="file" id="library-restore-file" accept=".zip,application/zip" hidden />
+      </div>
+      <p class="info" id="library-info">Saving under a new name keeps a copy. Songs stay in this browser only; back them all up as a ZIP now and then.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>
