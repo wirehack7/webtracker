@@ -14,6 +14,10 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-27',
+    items: [msg('Alt+Enter plays only the cursor row again and moves down one row, as Help says.')],
+  },
+  {
     id: '2026-10-26c',
     items: [
       msg('Export your song as a video, with the pattern scrolling and a scope per channel in your colours: Save > Export video. Wide, square or upright, ready for Mastodon and YouTube.'),

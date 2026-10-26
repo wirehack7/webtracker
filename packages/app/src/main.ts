@@ -2827,6 +2827,9 @@ window.addEventListener('keydown', (event) => {
     if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
       event.preventDefault();
       transpose((event.code === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 12 : 1));
+    } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+      event.preventDefault();
+      void playRow();
     }
     return;
   }
@@ -2875,8 +2878,7 @@ window.addEventListener('keydown', (event) => {
     case 'Enter':
     case 'NumpadEnter':
       event.preventDefault();
-      if (event.altKey) void playRow();
-      else void play(event.shiftKey);
+      void play(event.shiftKey);
       return;
   }
 

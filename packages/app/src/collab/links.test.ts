@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pipe, toBase64Url } from '../storage/share.ts';
 import { answerInvite, createInvite, jamFromHash, joinInTab, listenInTabs, newRoom, transferFromHash } from './links.ts';
 import type { Link } from './session.ts';
+import { FakePeer, installFakeRtc, setGathering } from '../test-rtc.ts';
 
 /**
  * Jam links. The WebRTC side runs against an in-process RTCPeerConnection
@@ -10,95 +11,7 @@ import type { Link } from './session.ts';
  * network does with them (NAT, STUN) is not tested.
  */
 
-class FakeChannel extends EventTarget {
-  readyState: RTCDataChannelState = 'connecting';
-  binaryType = 'blob';
-  bufferedAmount = 0;
-  bufferedAmountLowThreshold = 0;
-  peer: FakeChannel | null = null;
-  sent: Uint8Array[] = [];
-
-  send(data: Uint8Array): void {
-    this.sent.push(data);
-    const copy = data.slice().buffer;
-    this.peer?.dispatchEvent(new MessageEvent('message', { data: copy }));
-  }
-
-  open(): void {
-    this.readyState = 'open';
-    this.dispatchEvent(new Event('open'));
-  }
-
-  close(): void {
-    this.readyState = 'closed';
-    this.dispatchEvent(new Event('close'));
-  }
-}
-
-const peers = new Map<string, FakePeer>();
-let gathering: 'complete' | 'gathering' = 'complete';
-
-class FakePeer extends EventTarget {
-  static all: FakePeer[] = [];
-  readonly id = Math.random().toString(36).slice(2);
-  localDescription: RTCSessionDescriptionInit | null = null;
-  iceGatheringState = gathering;
-  connectionState: RTCPeerConnectionState = 'new';
-  channel: FakeChannel | null = null;
-  remote: FakePeer | null = null;
-
-  constructor(readonly config: RTCConfiguration) {
-    super();
-    peers.set(this.id, this);
-    FakePeer.all.push(this);
-  }
-
-  createDataChannel(): FakeChannel {
-    this.channel = new FakeChannel();
-    return this.channel;
-  }
-  async createOffer() {
-    return { type: 'offer' as const, sdp: `v=0 offer ${this.id}` };
-  }
-  async createAnswer() {
-    return { type: 'answer' as const, sdp: `v=0 answer ${this.id}` };
-  }
-  async setLocalDescription(d: RTCSessionDescriptionInit) {
-    this.localDescription = d;
-  }
-  async setRemoteDescription(d: RTCSessionDescriptionInit) {
-    const other = peers.get(d.sdp!.split(' ').pop()!)!;
-    this.remote = other;
-    if (d.type !== 'answer') return;
-    // The host took the answer: connect the host's channel to a new one on the guest.
-    const guestChannel = new FakeChannel();
-    guestChannel.peer = this.channel;
-    this.channel!.peer = guestChannel;
-    queueMicrotask(() => {
-      const event = Object.assign(new Event('datachannel'), { channel: guestChannel });
-      other.dispatchEvent(event);
-      this.channel!.open();
-      guestChannel.open();
-    });
-  }
-  setState(state: RTCPeerConnectionState): void {
-    this.connectionState = state;
-    this.dispatchEvent(new Event('connectionstatechange'));
-  }
-  finishGathering(): void {
-    this.iceGatheringState = 'complete';
-    this.dispatchEvent(new Event('icegatheringstatechange'));
-  }
-  close(): void {
-    this.connectionState = 'closed';
-  }
-}
-
-beforeEach(() => {
-  gathering = 'complete';
-  FakePeer.all = [];
-  vi.stubGlobal('RTCPeerConnection', FakePeer);
-});
+beforeEach(installFakeRtc);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -143,7 +56,7 @@ describe('WebRTC links', () => {
     host.onMessage = (b) => got.push([...b].map((v) => -v));
     host.send(new Uint8Array([1, 2, 3]));
     guest.send(new Uint8Array([4]));
-    expect(got).toEqual([[1, 2, 3], [-4]]);
+    await vi.waitFor(() => expect(got).toEqual([[1, 2, 3], [-4]]));
   });
 
   it('splits big messages into pieces and puts them back together', async () => {
@@ -157,10 +70,10 @@ describe('WebRTC links', () => {
       [16 * 1024 + 1, 0],
       [40_000 - 32 * 1024 + 1, 1],
     ]);
-    expect(got).toEqual(big);
+    await vi.waitFor(() => expect(got).toEqual(big));
     // An empty message is one piece too.
     host.send(new Uint8Array());
-    expect(got).toEqual(new Uint8Array());
+    await vi.waitFor(() => expect(got).toEqual(new Uint8Array()));
   });
 
   it('waits while the send buffer is full', async () => {
@@ -183,7 +96,8 @@ describe('WebRTC links', () => {
     expect(closed).toEqual(['guest']);
     host.close();
     expect(hostPeer.connectionState).toBe('closed');
-    expect(closed).toEqual(['guest', 'host']);
+    // Closing one end closes the other, which reports it again.
+    await vi.waitFor(() => expect(closed).toEqual(['guest', 'host', 'guest']));
   });
 
   it('turns broken and mismatched codes into readable errors', async () => {
@@ -221,7 +135,7 @@ describe('WebRTC links', () => {
   });
 
   it('waits for the addresses to be gathered, or five seconds at most', async () => {
-    gathering = 'gathering';
+    setGathering('gathering');
     const quick = createInvite();
     await vi.waitFor(() => expect(FakePeer.all).toHaveLength(1));
     await Promise.resolve();
