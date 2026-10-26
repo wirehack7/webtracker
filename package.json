@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "smoke": "node scripts/smoke.mjs",
     "smoke:ios": "node scripts/smoke-ios.mjs",
+    "smoke:dialogs": "node scripts/dialog-sweep.mjs",
     "screenshots:manual": "tsx scripts/manual-screenshots.mjs"
   },
   "devDependencies": {

@@ -1784,7 +1784,7 @@ select.value {
 
 .colour-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--px) * 90), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--px) * 90)), 1fr));
   gap: calc(var(--px) * 2) calc(var(--px) * 4);
   margin: calc(var(--px) * 3) 0;
 }
@@ -1793,6 +1793,8 @@ select.value {
   display: flex;
   align-items: center;
   gap: calc(var(--px) * 3);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .colour-grid input[type='color'] {
@@ -1991,4 +1993,141 @@ button.brand {
 
 button.brand:hover {
   color: var(--text);
+}
+
+/* ---- Dialogs on phones ----------------------------------------------- */
+
+/* Thumb-sized buttons and fields in dialogs on any touch screen. */
+@media (pointer: coarse) {
+  .file-dialog .btn,
+  .help-dialog .btn,
+  .help-dialog .help-search,
+  .file-dialog select.value,
+  .file-dialog .value.text {
+    min-height: max(28px, calc(var(--px) * 20));
+  }
+
+  .file-dialog input[type='checkbox'] {
+    width: max(24px, calc(var(--px) * 16));
+    height: max(24px, calc(var(--px) * 16));
+  }
+
+  .colour-grid input[type='color'] {
+    width: max(36px, calc(var(--px) * 20));
+    height: max(24px, calc(var(--px) * 16));
+  }
+}
+
+/* Dialogs take the whole screen but a thin edge, scroll up and down only,
+   and give every control a thumb-sized target. */
+@media (max-width: 639px), (max-height: 500px) and (orientation: landscape) {
+  .file-dialog {
+    width: calc(100vw - 16px);
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+    padding: calc(var(--px) * 5);
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .file-dialog .info {
+    max-width: none;
+    margin-inline: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .file-dialog .ptitle {
+    overflow-wrap: anywhere;
+  }
+
+  .file-dialog .row > .btn {
+    flex: 1 1 auto;
+  }
+
+  .file-dialog select.value,
+  .file-dialog .value.text {
+    width: 100%;
+    max-width: none;
+    min-height: calc(var(--px) * 20);
+    text-overflow: ellipsis;
+  }
+
+  .file-dialog .row > .value.text {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .file-dialog .list,
+  .file-dialog .share-url.value.text,
+  .file-dialog .picker-actions,
+  .file-dialog .pat-picker .info {
+    width: 100%;
+    max-width: none;
+  }
+
+  .file-dialog .list li {
+    line-height: calc(var(--px) * 14);
+  }
+
+  .setup-fields .range-field {
+    min-height: calc(var(--px) * 20);
+  }
+
+  /* The value next to a slider never gets squeezed (it can read "400%"). */
+  .setup-fields .range-field > span {
+    flex: none;
+    min-width: 5ch;
+    text-align: right;
+  }
+
+  .file-dialog .range-field input {
+    height: calc(var(--px) * 20);
+  }
+
+  /* Close stays at the bottom edge while the rest scrolls under it. */
+  .file-dialog > form[method='dialog']:last-child {
+    position: sticky;
+    bottom: calc(var(--px) * -5);
+    margin: calc(var(--px) * 4) calc(var(--px) * -5) calc(var(--px) * -5);
+    padding: calc(var(--px) * 4) calc(var(--px) * 5);
+    background: var(--desk);
+    box-shadow: inset 0 var(--px) 0 var(--desk-hi);
+  }
+}
+
+/* Upright phones put each label above its control, so long names in any
+   language get the full width; a checkbox stays on the line of its label. */
+@media (max-width: 639px) {
+  .setup-fields,
+  .export-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(var(--px) * 7);
+  }
+
+  .setup-fields label,
+  .export-fields label {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: calc(var(--px) * 2);
+    min-width: 0;
+  }
+
+  .setup-fields label:has(> input[type='checkbox']) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(var(--px) * 4);
+    min-height: calc(var(--px) * 16);
+    cursor: pointer;
+  }
+
+  .setup-fields label > .label,
+  .export-fields label > .label {
+    overflow-wrap: anywhere;
+  }
+
+  .setup-fields label > input[type='checkbox'] {
+    flex: none;
+  }
 }
