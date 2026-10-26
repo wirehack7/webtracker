@@ -3102,6 +3102,9 @@ $('#update-later').addEventListener('click', () => (updateBar.hidden = true));
 $('#update-reload').addEventListener('click', async () => {
   if (tabs.length > 1 && !(await ask(t('The new version starts after a reload. Your song is kept, but other open song tabs and the undo history are not. Reload now?'), { title: t('Update'), ok: t('Reload'), cancel: t('Later') }))) return;
   updateBar.hidden = true;
+  // This click may also be the one that starts audio. Chromium does not let the new
+  // service worker take over while the old one serves the worklet, so that goes first.
+  await starting;
   await autosaveNow();
   reloading = true;
   track('update-reload');
