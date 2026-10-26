@@ -445,6 +445,8 @@ button.onclick = () => music.play();   // browsers need a click first
       }
 
       async function makeReplayer(wanted) {
+        // iOS mutes pages with the silent switch unless they play media like a music app (Safari 17+).
+        if (navigator.audioSession?.type === 'auto') navigator.audioSession.type = 'playback';
         context ??= new AudioContext();
         const starting = context.state === 'running' ? null : context.resume();
         const ready = createReplayer(wanted, { context, loop: $('loop').checked });

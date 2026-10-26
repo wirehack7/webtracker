@@ -46,6 +46,12 @@ export async function toSong(source: Source, parse: Parser, fileName = ''): Prom
  * A module playing in an AudioWorklet. Row callbacks come when the row is
  * heard, not when it is rendered, so visuals can sync to them directly.
  */
+/** iOS mutes pages with the ring/silent switch unless they play media like a music app (Safari 17+); an intro wants to be heard. */
+function playThroughSilentMode(): void {
+  const session = (globalThis.navigator as (Navigator & { audioSession?: { type: string } }) | undefined)?.audioSession;
+  if (session?.type === 'auto') session.type = 'playback';
+}
+
 export class Replayer {
   /** Called when a row starts sounding. */
   onRow: ((position: PlayerState) => void) | null = null;
@@ -70,6 +76,7 @@ export class Replayer {
 
   static async create(source: Source, parse: Parser, options: ReplayerOptions = {}): Promise<Replayer> {
     const song = await toSong(source, parse, options.fileName);
+    if (!options.context) playThroughSilentMode();
     const context = options.context ?? new AudioContext();
     await register(context);
     const node = new AudioWorkletNode(context, 'webtracker-replayer', { numberOfInputs: 0, outputChannelCount: [2] });

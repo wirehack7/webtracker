@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:ios": "node scripts/smoke-ios.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
