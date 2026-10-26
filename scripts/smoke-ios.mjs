@@ -44,9 +44,10 @@ function within(ms, promise, what) {
 let step = '';
 
 /**
- * Runs one check. Headless WebKit on CI now and then wedges its page process for good
- * (calls and even closing it never return); with `retry` such a check gets one more try
- * in a freshly launched browser, and a second failure is real.
+ * Runs one check. Headless WebKit can wedge its page process for good (calls and even
+ * closing it never return); loading an audio worklet while the context is still resuming
+ * did that, and the pages now wait for the resume first. With `retry` a check still gets
+ * one more try in a freshly launched browser, and a second failure is real.
  */
 async function check(name, run, { retry = false } = {}) {
   for (let attempt = 1; ; attempt++) {

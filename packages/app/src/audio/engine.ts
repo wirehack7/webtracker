@@ -47,14 +47,16 @@ export class EngineNode {
     // Asked for at once, while the gesture still counts; later awaits would lose it on iOS.
     const resumed = context.resume().catch(() => {});
     keepRunning(context);
+    // Loading the worklet while the resume is under way can freeze the page for good in WebKit,
+    // so wait for it first. iOS starts audio only when a tap ends, which keepRunning catches,
+    // so a pending resume does not hold up the editor.
+    await Promise.race([resumed, new Promise((resolve) => setTimeout(resolve, 500))]);
     await context.audioWorklet.addModule(workletUrl);
     const node = new AudioWorkletNode(context, 'webtracker-engine', {
       numberOfInputs: 0,
       outputChannelCount: [2],
     });
     node.connect(context.destination);
-    // iOS starts audio only when a tap ends, which keepRunning catches, so a pending resume does not hold up the editor.
-    await Promise.race([resumed, new Promise((resolve) => setTimeout(resolve, 500))]);
     return new EngineNode(context, node);
   }
 
