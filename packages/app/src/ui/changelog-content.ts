@@ -16,6 +16,7 @@ export const CHANGELOG: Release[] = [
   {
     id: '2026-10-26b',
     items: [
+      msg('The sample library has chip waves, PWM loops, drums and effects, all made by the tracker and free to use. Open it with Library in the sample or instrument editor, or from the instrument picker on phones.'),
       msg('Stats shows how long a song plays, what each part takes in the file and what the song never plays. Optimize makes it smaller for demos and intros: unused parts out, half sample rates, 8-bit samples, with Ctrl+Z to undo.'),
     ],
   },

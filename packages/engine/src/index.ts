@@ -8,3 +8,4 @@ export { renderSong, type RenderOptions, type Rendered } from './render.ts';
 export { cleanupSong, cleanupPreview, cleanedCopy, songUsage, HALVE_FROM, type CleanupOptions, type CleanupResult, type SongUsage } from './cleanup.ts';
 export { songDuration, type SongDuration } from './render.ts';
 export { createDemoSong, DEMO_SONG_TITLE } from './demo-song.ts';
+export * from './sample-library.ts';

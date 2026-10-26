@@ -45,6 +45,8 @@ export interface SampleEditorHost {
   status(text: string): void;
   /** Opens the file picker that imports into the current sample slot. */
   importFile(): void;
+  /** Opens the built-in sample library. */
+  openLibrary(): void;
   /** Downloads the current sample as a WAV or IFF 8SVX file. */
   saveSample(format: 'wav' | 'iff'): void;
 }
@@ -114,6 +116,7 @@ export class SampleEditor {
     const tools = el('div', 'tool-row');
     tools.append(
       button(t('Load'), () => host.importFile(), t('Load WAV, AIFF, FLAC, MP3, OGG, 8SVX or XI into this slot')),
+      button(t('Library'), () => host.openLibrary(), t('Built-in chip waves, drums and effects for this slot')),
       button(t('Cut'), () => this.cut(), t('Cut the selection')),
       button(t('Copy'), () => this.copy(), t('Copy the selection')),
       button(t('Paste'), () => this.paste(), t('Paste at the cursor, or over the selection')),
