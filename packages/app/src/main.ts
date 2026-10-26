@@ -41,6 +41,8 @@ import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadX
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import { parseAudioFormat } from './audio/audio-format.ts';
+import { canExportVideo, exportVideo } from './video/video-export.ts';
+import type { VideoContainer } from './video/video-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
 import { freePattern, patternInfos } from './editor/patterns.ts';
@@ -1511,6 +1513,83 @@ function exportDone(message: string): void {
 
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
+// ---- Video export ----------------------------------------------------------
+
+const videoGo = $<HTMLButtonElement>('#video-go');
+const videoProgress = $<HTMLProgressElement>('#video-progress');
+const videoInfo = $('#video-info');
+let videoExport: AbortController | null = null;
+
+async function startVideoExport(): Promise<void> {
+  if (videoExport) {
+    videoExport.abort();
+    return;
+  }
+  const s = song();
+  const [width = 1280, height = 720] = $<HTMLSelectElement>('#video-size').value.split('x').map(Number);
+  const controller = new AbortController();
+  videoExport = controller;
+  videoGo.textContent = t('Cancel');
+  videoProgress.hidden = false;
+  videoProgress.value = 0;
+  videoInfo.textContent = t('Rendering…');
+  const started = performance.now();
+  try {
+    const result = await exportVideo(
+      {
+        song: s,
+        title: s.title.trim(),
+        name: safeName(s.title, 'untitled'),
+        width,
+        height,
+        fps: Number($<HTMLSelectElement>('#video-fps').value),
+        container: $<HTMLSelectElement>('#video-format').value as VideoContainer,
+        beat: prefs.beat,
+        bar: prefs.bar,
+        muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
+        resampler: prefs.resampler,
+        stereoSeparation: prefs.stereoSeparation,
+        volumeRamps: prefs.volumeRamps,
+        amplify: prefs.amplify,
+        karplusStrong: prefs.karplusStrong,
+      },
+      {
+        signal: controller.signal,
+        preview: $('#video-preview'),
+        onProgress: (fraction) => (videoProgress.value = fraction),
+        onRecording: () => (videoInfo.textContent = t('This browser records the video in real time: keep this tab in front until it is done.')),
+      },
+    );
+    const bytes = result.data instanceof Blob ? new Uint8Array(await result.data.arrayBuffer()) : result.data;
+    download(bytes, result.fileName, result.fileName.endsWith('.webm') ? 'video/webm' : 'video/mp4');
+    track('export-video', { size: `${width}x${height}`, recorded: result.recorded });
+    const took = ((performance.now() - started) / 1000).toFixed(1);
+    const details = { file: result.fileName, length: formatTime(result.seconds), size: (bytes.length / 1e6).toFixed(1), took };
+    videoDone(
+      result.recorded
+        ? t('{file}: {length} of video, {size} MB, recorded in {took} s.', details)
+        : t('{file} ({codecs}): {length} of video, {size} MB, rendered in {took} s.', { ...details, codecs: result.codecs }),
+    );
+  } catch (error) {
+    const { name, message } = error as Error;
+    videoDone(name === 'AbortError' ? t('Export cancelled.') : t('Export failed: {error}', { error: message }));
+  }
+}
+
+function videoDone(message: string): void {
+  videoExport = null;
+  videoGo.textContent = t('Render video');
+  videoProgress.hidden = true;
+  $('#video-preview').replaceChildren();
+  videoInfo.textContent = message;
+  status.textContent = message;
+}
+
+if (!canExportVideo()) {
+  videoGo.disabled = true;
+  videoInfo.textContent = t("This browser can't make videos. Chrome, Edge and Firefox can.");
+}
+
 // ---- Autosave ------------------------------------------------------------
 
 let autosaveTimer = 0;
@@ -2378,6 +2457,7 @@ $('#save-xm').addEventListener('click', saveSong);
 $('#save-mod').addEventListener('click', saveSongAsMod);
 $('#open-replayer').addEventListener('click', () => void openInReplayer());
 exportGo.addEventListener('click', exportAudio);
+videoGo.addEventListener('click', () => void startVideoExport());
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
   fileInput.value = '';

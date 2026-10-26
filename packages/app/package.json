@@ -14,7 +14,8 @@
     "@breezystack/lamejs": "1.2.7",
     "@fontsource/press-start-2p": "^5.3.0",
     "@webtracker/engine": "workspace:*",
-    "@webtracker/formats": "workspace:*"
+    "@webtracker/formats": "workspace:*",
+    "mediabunny": "1.62.1"
   },
   "devDependencies": {
     "@types/audioworklet": "^0.0.100",
