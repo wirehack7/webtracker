@@ -5,6 +5,7 @@
  */
 
 import { LoopType, type Song } from '@webtracker/engine';
+import { t } from '../i18n/i18n.ts';
 import type { AutosaveOrigin } from './autosave.ts';
 
 /** `#song=…` in the address opens the song. */
@@ -80,9 +81,9 @@ export async function decodeShare(text: string): Promise<{ xm: Uint8Array; origi
   try {
     payload = await pipe(fromBase64Url(text), new DecompressionStream('deflate-raw'));
   } catch {
-    throw new Error('the link is damaged or cut off');
+    throw new Error(t('the link is damaged or cut off'));
   }
-  if (payload[0] !== VERSION) throw new Error('the link is from a newer version of the tracker');
+  if (payload[0] !== VERSION) throw new Error(t('the link is from a newer version of the tracker'));
   const metaLength = payload[1]! | (payload[2]! << 8);
   const meta = new TextDecoder().decode(payload.subarray(3, 3 + metaLength));
   const xm = payload.slice(3 + metaLength);

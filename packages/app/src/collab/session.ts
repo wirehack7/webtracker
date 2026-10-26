@@ -15,6 +15,7 @@
 
 import { CELL_SIZE, type Song } from '@webtracker/engine';
 import type { SongEdit } from '../editor/song-editor.ts';
+import { t } from '../i18n/i18n.ts';
 import { decode, encode } from './codec.ts';
 import { applyOp, instrumentCopy, layoutOf, type Op } from './ops.ts';
 
@@ -179,7 +180,7 @@ export class JamSession {
   static join(doc: JamDocument, name: string, link: Link): JamSession {
     const session = new JamSession(doc, 'guest', name);
     session.hostLink = link;
-    session.listen(link, (message) => session.fromHost(message), () => session.end('The host left the jam. The song stays here.'));
+    session.listen(link, (message) => session.fromHost(message), () => session.end(t('The host left the jam. The song stays here.')));
     session.post(link, { t: 'hello', name });
     return session;
   }
@@ -265,7 +266,7 @@ export class JamSession {
   leave(): void {
     if (this.ended) return;
     this.flushInstruments();
-    this.end(this.role === 'host' ? 'The jam is over. The song stays here.' : 'You left the jam. The song stays here.');
+    this.end(this.role === 'host' ? t('The jam is over. The song stays here.') : t('You left the jam. The song stays here.'));
   }
 
   private end(reason: string): void {

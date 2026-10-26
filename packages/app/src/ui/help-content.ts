@@ -1,6 +1,7 @@
 // Text of the Help dialog: keys, effect and volume column reference, other
 // formats and workflows. Plain data, so it can be searched and tested.
 
+import { t } from '../i18n/i18n.ts';
 import { formatEffect, formatVolume } from './pattern-view.ts';
 
 export interface HelpEntry {
@@ -12,6 +13,8 @@ export interface HelpEntry {
   id?: string;
   /** A page that goes with the entry, relative to the tracker. */
   link?: { href: string; label: string };
+  /** The English words of a translated entry, so a search finds it either way. */
+  source?: string;
 }
 
 export interface HelpGroup {
@@ -90,7 +93,7 @@ const KEYS: HelpSection = {
       title: 'Files and panels',
       entries: [
         { code: 'Ctrl+S / Ctrl+O', text: 'Save as XM / load a module; the Save button also saves MOD and exports WAV, FLAC or MP3' },
-        { code: 'Setup', text: 'Colours and the colour editor, interface size, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
+        { code: 'Setup', text: 'Language, colours and the colour editor, interface size, resampling, stereo width, amplification, volume ramps, MOD E8x, row highlights, Space key, MIDI keyboard input' },
         { code: 'Sample view', text: 'Drag to select, drag the yellow markers to move the loop, double-click selects all' },
         { code: 'Instr view', text: 'Click to add envelope points, drag to move, right-click to delete' },
         {
@@ -375,6 +378,29 @@ export function cellHelpTarget(field: 'volume' | 'effect', cell: { volume: numbe
 /** Whether an entry matches every word of a search. */
 export function entryMatches(entry: HelpEntry, query: string): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const haystack = `${entry.code} ${entry.name ?? ''} ${entry.text}`.toLowerCase();
+  const haystack = `${entry.code} ${entry.name ?? ''} ${entry.text} ${entry.source ?? ''}`.toLowerCase();
   return words.every((w) => haystack.includes(w));
+}
+
+let localized = false;
+
+/** Puts the help texts into the chosen language, once; codes and effect names change only where the pack has them. */
+export function localizeHelp(): void {
+  if (localized) return;
+  localized = true;
+  for (const section of HELP_SECTIONS) {
+    section.title = t(section.title);
+    for (const group of section.groups) {
+      if (group.title) group.title = t(group.title);
+      if (group.intro) group.intro = t(group.intro);
+      for (const entry of group.entries) {
+        const english = `${entry.code} ${entry.name ?? ''} ${entry.text}`;
+        entry.code = t(entry.code);
+        if (entry.name) entry.name = t(entry.name);
+        entry.text = t(entry.text);
+        if (entry.link) entry.link.label = t(entry.link.label);
+        if (english !== `${entry.code} ${entry.name ?? ''} ${entry.text}`) entry.source = english;
+      }
+    }
+  }
 }

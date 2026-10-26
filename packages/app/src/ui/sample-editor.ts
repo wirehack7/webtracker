@@ -32,6 +32,7 @@ import {
   type WaveShape,
 } from '@webtracker/engine';
 import type { SongEditor } from '../editor/song-editor.ts';
+import { msg, t } from '../i18n/i18n.ts';
 import { hex } from './pattern-view.ts';
 import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
 import { askText } from './ask.ts';
@@ -56,6 +57,15 @@ const WAVE_LABELS: Record<WaveShape, string> = {
   saw: 'Saw',
   sine: 'Sin',
   noise: 'Nse',
+};
+const WAVE_TITLES: Record<WaveShape, string> = {
+  square: msg('Replace the sample with a looped square wave'),
+  pulse25: msg('Replace the sample with a looped 25% pulse wave'),
+  pulse12: msg('Replace the sample with a looped 12.5% pulse wave'),
+  triangle: msg('Replace the sample with a looped triangle wave'),
+  saw: msg('Replace the sample with a looped saw wave'),
+  sine: msg('Replace the sample with a looped sine wave'),
+  noise: msg('Replace the sample with noise'),
 };
 const WAVE_LENGTHS = [16, 32, 64, 128, 256, 1024];
 
@@ -82,68 +92,68 @@ export class SampleEditor {
   private readonly drawButton: HTMLButtonElement;
 
   constructor(private readonly host: SampleEditorHost) {
-    this.name = textInput('Name', 22, (value) => this.edit('name', (s) => (s.name = value)));
+    this.name = textInput(t('Name'), 22, (value) => this.edit('name', (s) => (s.name = value)));
     const signed = (v: number) => (v < 0 ? '-' : '+') + hex(Math.abs(v));
     this.fields = {
-      volume: stepper('Vol', (d) => this.nudge('volume', d, 0, 64), (v) => hex(v)),
-      panning: stepper('Pan', (d) => this.nudge('panning', d, 0, 255), (v) => hex(v)),
-      finetune: stepper('Fine', (d) => this.nudge('finetune', d, -128, 127), signed),
-      relativeNote: stepper('Rel', (d) => this.nudge('relativeNote', d, -96, 95), (v) => (v < 0 ? '-' : '+') + String(Math.abs(v)).padStart(2, '0'), 12),
+      volume: stepper(t('Vol'), (d) => this.nudge('volume', d, 0, 64), (v) => hex(v)),
+      panning: stepper(t('Pan'), (d) => this.nudge('panning', d, 0, 255), (v) => hex(v)),
+      finetune: stepper(t('Fine'), (d) => this.nudge('finetune', d, -128, 127), signed),
+      relativeNote: stepper(t('Rel'), (d) => this.nudge('relativeNote', d, -96, 95), (v) => (v < 0 ? '-' : '+') + String(Math.abs(v)).padStart(2, '0'), 12),
     };
     this.loopButtons = [
-      toggle('Off', () => this.setLoop(LoopType.None), 'No loop'),
-      toggle('Fwd', () => this.setLoop(LoopType.Forward), 'Forward loop'),
-      toggle('Ping', () => this.setLoop(LoopType.PingPong), 'Ping-pong loop'),
+      toggle(t('Off'), () => this.setLoop(LoopType.None), t('No loop')),
+      toggle(t('Fwd'), () => this.setLoop(LoopType.Forward), t('Forward loop')),
+      toggle(t('Ping'), () => this.setLoop(LoopType.PingPong), t('Ping-pong loop')),
     ];
-    this.drawButton = toggle('Draw', () => this.toggleDraw(), 'Quick Draw: drag on the waveform to draw it by hand');
-    this.waveLength = stepper('Len', (d) => this.stepWaveLength(d), (i) => String(WAVE_LENGTHS[i] ?? 32), 1);
+    this.drawButton = toggle(t('Draw'), () => this.toggleDraw(), t('Quick Draw: drag on the waveform to draw it by hand'));
+    this.waveLength = stepper(t('Len'), (d) => this.stepWaveLength(d), (i) => String(WAVE_LENGTHS[i] ?? 32), 1);
 
     const props = el('div', 'tool-row');
-    props.append(this.name.root, ...Object.values(this.fields).map((f) => f.root), el('span', 'label', 'Loop'), ...this.loopButtons);
+    props.append(this.name.root, ...Object.values(this.fields).map((f) => f.root), el('span', 'label', t('Loop')), ...this.loopButtons);
 
     const tools = el('div', 'tool-row');
     tools.append(
-      button('Load', () => host.importFile(), 'Load WAV, AIFF, FLAC, MP3, OGG, 8SVX or XI into this slot'),
-      button('Cut', () => this.cut(), 'Cut the selection'),
-      button('Copy', () => this.copy(), 'Copy the selection'),
-      button('Paste', () => this.paste(), 'Paste at the cursor, or over the selection'),
-      button('Crop', () => this.rangeTool('crop', cropRange), 'Keep only the selection'),
-      button('Clear', () => this.rangeTool('silence', silenceRange), 'Silence the selection'),
-      button('Rev', () => this.rangeTool('reverse', reverseRange), 'Reverse'),
-      button('Norm', () => this.rangeTool('normalize', normalizeRange), 'Normalize to full scale'),
-      button('Vol-', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 0.5)), 'Halve the volume'),
-      button('Vol+', () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 2)), 'Double the volume (clips)'),
-      button('Amp', () => void this.gain(), 'Change the volume by any amount, or ramp it from one amount to another'),
-      button('FadeIn', () => this.rangeTool('fade in', fadeIn)),
-      button('FadeOut', () => this.rangeTool('fade out', fadeOut)),
-      button('x2', () => this.edit('resample', (s) => resample(s, 2)), 'Resample to twice the length, same pitch'),
-      button('/2', () => this.edit('resample', (s) => resample(s, 0.5)), 'Resample to half the length, same pitch'),
-      button('Sel>Loop', () => this.loopFromSelection(), 'Loop the selection'),
-      button('Zoom', () => this.zoomToSelection(), 'Zoom to the selection'),
-      button('All', () => this.showAll(), 'Show the whole sample'),
+      button(t('Load'), () => host.importFile(), t('Load WAV, AIFF, FLAC, MP3, OGG, 8SVX or XI into this slot')),
+      button(t('Cut'), () => this.cut(), t('Cut the selection')),
+      button(t('Copy'), () => this.copy(), t('Copy the selection')),
+      button(t('Paste'), () => this.paste(), t('Paste at the cursor, or over the selection')),
+      button(t('Crop'), () => this.rangeTool('crop', cropRange), t('Keep only the selection')),
+      button(t('Clear'), () => this.rangeTool('silence', silenceRange), t('Silence the selection')),
+      button(t('Rev'), () => this.rangeTool('reverse', reverseRange), t('Reverse')),
+      button(t('Norm'), () => this.rangeTool('normalize', normalizeRange), t('Normalize to full scale')),
+      button(t('Vol-'), () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 0.5)), t('Halve the volume')),
+      button(t('Vol+'), () => this.rangeTool('amplify', (s, r) => amplifyRange(s, r, 2)), t('Double the volume (clips)')),
+      button(t('Amp'), () => void this.gain(), t('Change the volume by any amount, or ramp it from one amount to another')),
+      button(t('FadeIn'), () => this.rangeTool('fade in', fadeIn)),
+      button(t('FadeOut'), () => this.rangeTool('fade out', fadeOut)),
+      button('x2', () => this.edit('resample', (s) => resample(s, 2)), t('Resample to twice the length, same pitch')),
+      button('/2', () => this.edit('resample', (s) => resample(s, 0.5)), t('Resample to half the length, same pitch')),
+      button(t('Sel>Loop'), () => this.loopFromSelection(), t('Loop the selection')),
+      button(t('Zoom'), () => this.zoomToSelection(), t('Zoom to the selection')),
+      button(t('All'), () => this.showAll(), t('Show the whole sample')),
     );
 
     const extra = el('div', 'tool-row');
     extra.append(
-      el('span', 'label', 'Tools'),
-      button('Inv', () => this.rangeTool('invert', invertRange), 'Turn the waveform upside down'),
-      button('Sign', () => this.rangeTool('sign', toggleSignRange), 'Toggle signed/unsigned, for samples imported the wrong way'),
-      button('Swap', () => this.rangeTool('byte swap', swapBytesRange), 'Swap the bytes of 16-bit frames, for samples with the wrong byte order'),
-      button('DC', () => this.rangeTool('DC offset', removeDcRange), 'Remove the DC offset'),
-      button('8-Bit', () => this.edit('8-bit', quantize8), 'Reduce to 8 bits; the sample is then saved as 8-bit'),
-      button('LP', () => void this.filter('lowpass'), 'Low-pass filter the selection'),
-      button('HP', () => void this.filter('highpass'), 'High-pass filter the selection'),
-      button('XFade', () => void this.crossfade(), 'Crossfade the loop end into the frames before the loop start'),
-      button('Rsmp', () => void this.resampleTo(), 'Resample to any length, same pitch'),
+      el('span', 'label', t('Tools')),
+      button(t('Inv'), () => this.rangeTool('invert', invertRange), t('Turn the waveform upside down')),
+      button(t('Sign'), () => this.rangeTool('sign', toggleSignRange), t('Toggle signed/unsigned, for samples imported the wrong way')),
+      button(t('Swap'), () => this.rangeTool('byte swap', swapBytesRange), t('Swap the bytes of 16-bit frames, for samples with the wrong byte order')),
+      button('DC', () => this.rangeTool('DC offset', removeDcRange), t('Remove the DC offset')),
+      button(t('8-Bit'), () => this.edit('8-bit', quantize8), t('Reduce to 8 bits; the sample is then saved as 8-bit')),
+      button('LP', () => void this.filter('lowpass'), t('Low-pass filter the selection')),
+      button('HP', () => void this.filter('highpass'), t('High-pass filter the selection')),
+      button(t('XFade'), () => void this.crossfade(), t('Crossfade the loop end into the frames before the loop start')),
+      button(t('Rsmp'), () => void this.resampleTo(), t('Resample to any length, same pitch')),
       this.drawButton,
-      button('Save', () => host.saveSample('wav'), 'Save the sample as WAV'),
-      button('IFF', () => host.saveSample('iff'), 'Save the sample as Amiga IFF 8SVX (8-bit, forward loop)'),
+      button(t('Save'), () => host.saveSample('wav'), t('Save the sample as WAV')),
+      button('IFF', () => host.saveSample('iff'), t('Save the sample as Amiga IFF 8SVX (8-bit, forward loop)')),
     );
 
     const generate = el('div', 'tool-row');
     generate.append(
-      el('span', 'label', 'Generate'),
-      ...WAVE_SHAPES.map((shape) => button(WAVE_LABELS[shape], () => this.generate(shape), `Replace the sample with a looped ${shape} wave`)),
+      el('span', 'label', t('Generate')),
+      ...WAVE_SHAPES.map((shape) => button(WAVE_LABELS[shape], () => this.generate(shape), t(WAVE_TITLES[shape]))),
       this.waveLength.root,
       this.info,
     );
@@ -218,9 +228,9 @@ export class SampleEditor {
 
   private async filter(kind: 'lowpass' | 'highpass'): Promise<void> {
     const rate = Math.round(this.sampleRate());
-    const answer = await askText(`Cutoff in Hz (the sample plays at ${rate} Hz on C-4):`, kind === 'lowpass' ? '2000' : '100', {
-      title: kind === 'lowpass' ? 'Low-pass filter' : 'High-pass filter',
-      ok: 'Filter',
+    const answer = await askText(t('Cutoff in Hz (the sample plays at {rate} Hz on C-4):', { rate }), kind === 'lowpass' ? '2000' : '100', {
+      title: kind === 'lowpass' ? t('Low-pass filter') : t('High-pass filter'),
+      ok: t('Filter'),
       inputMode: 'numeric',
     });
     const cutoff = Number(answer);
@@ -232,18 +242,18 @@ export class SampleEditor {
     this.drawing = !this.drawing;
     setPressed(this.drawButton, this.drawing);
     this.canvas.classList.toggle('drawing', this.drawing);
-    this.host.status(this.drawing ? 'Quick Draw on: drag on the waveform to draw.' : 'Quick Draw off.');
+    this.host.status(this.drawing ? t('Quick Draw on: drag on the waveform to draw.') : t('Quick Draw off.'));
   }
 
   /** Asks for a gain in percent, or a start and end percentage for a ramp. */
   private async gain(): Promise<void> {
-    const answer = await askText('Volume in percent, or start and end percent for a ramp (e.g. 100 0):', '150', { title: 'Volume', ok: 'Apply' });
+    const answer = await askText(t('Volume in percent, or start and end percent for a ramp (e.g. 100 0):'), '150', { title: t('Volume'), ok: t('Apply') });
     if (!answer) return;
     const parts = answer.split(/[\s,;]+/).filter(Boolean).map(Number);
     const from = parts[0];
     const to = parts[1] ?? from;
     if (from === undefined || parts.length > 2 || !parts.every((p) => p >= 0 && p <= 1000)) {
-      this.host.status('Give one or two percentages between 0 and 1000.');
+      this.host.status(t('Give one or two percentages between 0 and 1000.'));
       return;
     }
     this.rangeTool('amplify', (s, r) => gainRange(s, r, from / 100, (to ?? from) / 100));
@@ -252,27 +262,27 @@ export class SampleEditor {
   private async crossfade(): Promise<void> {
     const s = this.sample();
     if (!s || s.loopType === LoopType.None) {
-      this.host.status('Crossfade needs a loop.');
+      this.host.status(t('Crossfade needs a loop.'));
       return;
     }
-    const answer = await askText('Length in frames:', String(Math.min(256, Math.floor(s.loopLength / 4)) || 1), {
-      title: 'Crossfade loop',
-      ok: 'Crossfade',
+    const answer = await askText(t('Length in frames:'), String(Math.min(256, Math.floor(s.loopLength / 4)) || 1), {
+      title: t('Crossfade loop'),
+      ok: t('Crossfade'),
       inputMode: 'numeric',
     });
     const frames = Math.floor(Number(answer));
     if (!answer || !(frames > 0)) return;
     let done = 0;
     this.edit('crossfade loop', (sample) => (done = crossfadeLoop(sample, frames)));
-    this.host.status(done ? `Crossfaded ${done} frames into the loop start.` : 'No room before the loop start to crossfade.');
+    this.host.status(done ? t('Crossfaded {frames} frames into the loop start.', { frames: done }) : t('No room before the loop start to crossfade.'));
   }
 
   private async resampleTo(): Promise<void> {
     const s = this.sample();
     if (!s || s.data.length === 0) return;
-    const answer = await askText(`New length in frames (now ${s.data.length}); the pitch stays:`, String(s.data.length), {
-      title: 'Resample',
-      ok: 'Resample',
+    const answer = await askText(t('New length in frames (now {frames}); the pitch stays:', { frames: s.data.length }), String(s.data.length), {
+      title: t('Resample'),
+      ok: t('Resample'),
       inputMode: 'numeric',
     });
     const frames = Math.floor(Number(answer));
@@ -292,7 +302,7 @@ export class SampleEditor {
     const r = this.range();
     if (!s || !r) return;
     this.clipboard = copyRange(s, r);
-    this.host.status(`Copied ${this.clipboard.length} frames.`);
+    this.host.status(t('Copied {frames} frames.', { frames: this.clipboard.length }));
   }
 
   private cut(): void {
@@ -488,7 +498,7 @@ export class SampleEditor {
 
     const len = s?.data.length ?? 0;
     const sel = this.selection;
-    this.info.textContent = !s || len === 0 ? 'Empty slot' : sel && sel.end > sel.start ? `Sel ${sel.start}-${sel.end} (${sel.end - sel.start})  Len ${len}` : `Len ${len}`;
+    this.info.textContent = !s || len === 0 ? t('Empty slot') : sel && sel.end > sel.start ? `Sel ${sel.start}-${sel.end} (${sel.end - sel.start})  Len ${len}` : `Len ${len}`;
     if (!s || len === 0) return;
 
     const v = this.visible(s);

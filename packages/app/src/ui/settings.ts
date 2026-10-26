@@ -1,22 +1,23 @@
 /** Preferences that belong to the browser, not the song, kept in localStorage. */
 import type { RawFormat } from '@webtracker/formats';
 import type { Resampler } from '@webtracker/engine';
+import { msg } from '../i18n/i18n.ts';
 
 export const THEMES = {
-  classic: 'Classic blue',
-  midnight: 'Midnight',
-  amber: 'Amber LCD',
-  mint: 'Mint',
+  classic: msg('Classic blue'),
+  midnight: msg('Midnight'),
+  amber: msg('Amber LCD'),
+  mint: msg('Mint'),
 } as const;
 export type Theme = keyof typeof THEMES;
 
 /** Interface sizes for screens bigger than a phone; phones keep their own. */
 export const UI_SIZES = {
-  auto: 'Auto',
-  small: 'Small',
-  compact: 'Compact',
-  medium: 'Medium',
-  large: 'Large',
+  auto: msg('Auto'),
+  small: msg('Small'),
+  compact: msg('Compact'),
+  medium: msg('Medium'),
+  large: msg('Large'),
 } as const;
 export type UiSize = keyof typeof UI_SIZES;
 
@@ -37,39 +38,41 @@ export function uiPixel(size: UiSize, coarse: boolean, dpr: number, width = Infi
 
 /** The colours the scheme editor offers, by CSS custom property, with their labels. */
 export const COLOR_VARS: [string, string][] = [
-  ['--desk', 'Panels'],
-  ['--desk-hi', 'Panel light'],
-  ['--desk-lo', 'Panel shadow'],
-  ['--btn', 'Buttons'],
-  ['--btn-hi', 'Button light'],
-  ['--btn-lo', 'Button shadow'],
-  ['--btn-on', 'Button on'],
-  ['--text', 'Text'],
-  ['--label', 'Labels'],
-  ['--dim', 'Dim text'],
-  ['--field-bg', 'Field'],
-  ['--field-fg', 'Field text'],
-  ['--list-sel', 'List selection'],
-  ['--pat-bg', 'Pattern'],
-  ['--pat-rowhl', 'Highlight'],
-  ['--pat-rowhl2', 'Highlight 2'],
-  ['--pat-cursor', 'Cursor row'],
-  ['--pat-cell', 'Cursor'],
-  ['--pat-sel', 'Selection'],
-  ['--pat-rec', 'Edit mode row'],
-  ['--pat-rn', 'Row numbers'],
-  ['--pat-sep', 'Separators'],
-  ['--pat-note', 'Notes'],
-  ['--pat-instr', 'Instruments'],
-  ['--pat-vol', 'Volume, waveform'],
-  ['--pat-fx', 'Effects'],
-  ['--pat-param', 'Parameters'],
-  ['--pat-empty', 'Empty cells'],
-  ['--scope-line', 'Scopes'],
-  ['--play-marker', 'Play marker'],
+  ['--desk', msg('Panels')],
+  ['--desk-hi', msg('Panel light')],
+  ['--desk-lo', msg('Panel shadow')],
+  ['--btn', msg('Buttons')],
+  ['--btn-hi', msg('Button light')],
+  ['--btn-lo', msg('Button shadow')],
+  ['--btn-on', msg('Button on')],
+  ['--text', msg('Text')],
+  ['--label', msg('Labels')],
+  ['--dim', msg('Dim text')],
+  ['--field-bg', msg('Field')],
+  ['--field-fg', msg('Field text')],
+  ['--list-sel', msg('List selection')],
+  ['--pat-bg', msg('Pattern')],
+  ['--pat-rowhl', msg('Highlight')],
+  ['--pat-rowhl2', msg('Highlight 2')],
+  ['--pat-cursor', msg('Cursor row')],
+  ['--pat-cell', msg('Cursor')],
+  ['--pat-sel', msg('Selection')],
+  ['--pat-rec', msg('Edit mode row')],
+  ['--pat-rn', msg('Row numbers')],
+  ['--pat-sep', msg('Separators')],
+  ['--pat-note', msg('Notes')],
+  ['--pat-instr', msg('Instruments')],
+  ['--pat-vol', msg('Volume, waveform')],
+  ['--pat-fx', msg('Effects')],
+  ['--pat-param', msg('Parameters')],
+  ['--pat-empty', msg('Empty cells')],
+  ['--scope-line', msg('Scopes')],
+  ['--play-marker', msg('Play marker')],
 ];
 
 export interface Settings {
+  /** A language code from LANGUAGES, or 'auto' for the browser's language. */
+  language: string;
   theme: Theme;
   /** 'auto' is compact with a mouse and medium on tablets. */
   uiSize: UiSize;
@@ -104,6 +107,7 @@ export interface Settings {
 }
 
 export const DEFAULTS: Settings = {
+  language: 'auto',
   theme: 'classic',
   uiSize: 'auto',
   resampler: 'auto',

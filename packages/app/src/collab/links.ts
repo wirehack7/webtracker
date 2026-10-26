@@ -9,6 +9,7 @@
  * internet; it sees no song data, which goes straight from browser to browser.
  */
 
+import { t } from '../i18n/i18n.ts';
 import { fromBase64Url, pipe, toBase64Url } from '../storage/share.ts';
 import type { Link } from './session.ts';
 
@@ -44,10 +45,10 @@ async function unpackDescription(text: string, type: RTCSdpType): Promise<RTCSes
     const json = await pipe(fromBase64Url(text.trim()), new DecompressionStream('deflate-raw'));
     parsed = JSON.parse(new TextDecoder().decode(json)) as typeof parsed;
   } catch {
-    throw new Error('This code is incomplete or broken');
+    throw new Error(t('This code is incomplete or broken'));
   }
   if (parsed.type !== type || typeof parsed.sdp !== 'string') {
-    throw new Error(type === 'answer' ? 'This is not an answer code' : 'This is not a jam invite');
+    throw new Error(type === 'answer' ? t('This is not an answer code') : t('This is not a jam invite'));
   }
   return { type, sdp: parsed.sdp };
 }
@@ -132,7 +133,7 @@ function opened(pc: RTCPeerConnection, channel: RTCDataChannel): Promise<Link> {
     if (channel.readyState === 'open') return resolve(link);
     channel.addEventListener('open', () => resolve(link), { once: true });
     pc.addEventListener('connectionstatechange', () => {
-      if (pc.connectionState === 'failed') reject(new Error('The connection failed; the networks may block direct connections'));
+      if (pc.connectionState === 'failed') reject(new Error(t('The connection failed; the networks may block direct connections')));
     });
   });
 }
@@ -169,7 +170,7 @@ export async function answerInvite(offer: string): Promise<{ answer: string; lin
   const link = new Promise<Link>((resolve, reject) => {
     pc.addEventListener('datachannel', (event) => opened(pc, event.channel).then(resolve, reject), { once: true });
     pc.addEventListener('connectionstatechange', () => {
-      if (pc.connectionState === 'failed') reject(new Error('The connection failed; the networks may block direct connections'));
+      if (pc.connectionState === 'failed') reject(new Error(t('The connection failed; the networks may block direct connections')));
     });
   });
   await pc.setRemoteDescription(description);

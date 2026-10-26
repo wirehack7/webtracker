@@ -7,7 +7,8 @@
  * tracker loads without errors and without sideways scrolling, that the
  * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
- * over files. The replayer page must load and play its demo too. Screenshots go to the given folder.
+ * over files. The replayer page must load and play its demo too, and a German browser must get
+ * the German language pack. Screenshots go to the given folder.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,8 +37,9 @@ const browser = useFirefox
 console.log(`browser: ${useFirefox ? 'Firefox' : 'Chromium'} ${browser.version()}`);
 const failures = [];
 
-async function open(url, viewport) {
+async function open(url, viewport, locale = 'en-US') {
   const context = await browser.newContext({
+    locale,
     viewport: { width: viewport.width, height: viewport.height },
     hasTouch: !!viewport.touch,
     // Firefox has no mobile emulation; touch and the small viewport still apply.
@@ -156,6 +158,36 @@ await check('replayer page plays its demo', async () => {
     if (shots) await page.screenshot({ path: join(shots, 'replayer.png') });
   } finally {
     await context.close();
+  }
+});
+
+// A browser set to German gets the German pack: the page, its dialogs and the manual.
+await check('German language pack', async () => {
+  for (const viewport of [viewports[0], viewports[3]]) {
+    const { context, page, errors } = await open(base, viewport, 'de-DE');
+    try {
+      await page.waitForSelector('#pattern-no');
+      const shown = await page.evaluate(() => ({
+        lang: document.documentElement.lang,
+        save: document.querySelector('#save').textContent,
+        status: document.querySelector('#status').textContent,
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+      }));
+      assert(shown.lang === 'de', `page language is ${shown.lang}`);
+      assert(shown.save === 'Speichern' && /Taste/.test(shown.status), `not translated: ${shown.save} / ${shown.status}`);
+      assert(shown.overflow <= 1, `page scrolls sideways by ${shown.overflow}px at ${viewport.name}`);
+      if (viewport === viewports[0]) {
+        await page.click('#help-open');
+        assert((await page.textContent('.help-tabs')).includes('Tasten'), 'Help is not translated');
+        if (shots) await page.screenshot({ path: join(shots, 'german-help.png') });
+        await page.goto(`${base}manual.html`);
+        await page.waitForSelector('#start');
+        assert((await page.textContent('#start h2')) === 'Erste Schritte', 'manual is not translated');
+      } else if (shots) await page.screenshot({ path: join(shots, 'german-phone.png') });
+      assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    } finally {
+      await context.close();
+    }
   }
 });
 

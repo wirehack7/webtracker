@@ -1,6 +1,7 @@
 // In-page replacements for confirm() and prompt(), in the look of the other dialogs.
 // Enter answers yes (or takes the typed value), Escape or a tap beside the dialog cancels.
 
+import { t } from '../i18n/i18n.ts';
 import { el } from './widgets.ts';
 
 export interface AskOptions {
@@ -17,7 +18,7 @@ export interface AskOptions {
 /** Shows a modal dialog and resolves with the button that closed it: 'ok', or '' when cancelled. */
 function show(message: string, options: AskOptions, field?: HTMLInputElement): Promise<string> {
   const dialog = el('dialog', 'panel help file-dialog ask-dialog');
-  dialog.setAttribute('aria-label', options.title ?? 'Question');
+  dialog.setAttribute('aria-label', options.title ?? t('Question'));
   const form = el('form');
   form.method = 'dialog';
   if (options.title) form.append(el('h2', 'ptitle', options.title));
@@ -30,9 +31,9 @@ function show(message: string, options: AskOptions, field?: HTMLInputElement): P
     field.setAttribute('aria-label', message);
     form.append(field);
   }
-  const ok = el('button', 'btn', options.ok ?? 'OK');
+  const ok = el('button', 'btn', options.ok ?? t('OK'));
   ok.value = 'ok';
-  const cancel = el('button', 'btn', options.cancel ?? 'Cancel');
+  const cancel = el('button', 'btn', options.cancel ?? t('Cancel'));
   cancel.value = '';
   // Escape and the backdrop go through cancel, so the OK button can stay the default for Enter.
   cancel.type = 'button';
