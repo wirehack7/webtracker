@@ -40,6 +40,7 @@ jobs:
       - run: pnpm smoke smoke-screenshots
       - name: iPhone and iPad smoke test (WebKit)
         if: always()
+        timeout-minutes: 5
         run: pnpm smoke:ios smoke-screenshots/ios
       - uses: actions/upload-artifact@v7
         if: always()
