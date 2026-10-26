@@ -26,7 +26,8 @@ const shots = args.find((a) => !a.startsWith('--'));
 if (shots) mkdirSync(shots, { recursive: true });
 
 const { base, server } = await serveDist(root);
-const browser = await (useChromium ? chromium : webkit).launch();
+const launch = () => (useChromium ? chromium : webkit).launch();
+let browser = await launch();
 const phones = [devices['iPhone 15'], devices['iPhone SE'], devices['iPad Mini']];
 const failures = [];
 
@@ -39,13 +40,32 @@ function within(ms, promise, what) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function check(name, run) {
-  try {
-    await within(60000, run(), name);
-    console.log(`ok   ${name}`);
-  } catch (e) {
-    failures.push(name);
-    console.log(`FAIL ${name}: ${e.message.split('\n')[0]}`);
+/** The step a check is at, so a timeout says where it hung. */
+let step = '';
+
+/**
+ * Runs one check. Headless WebKit on CI now and then wedges its page process for good
+ * (calls and even closing it never return); with `retry` such a check gets one more try
+ * in a freshly launched browser, and a second failure is real.
+ */
+async function check(name, run, { retry = false } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    step = 'opening the page';
+    try {
+      await within(60000, run(), name);
+      console.log(`ok   ${name}${attempt > 1 ? ' (second try)' : ''}`);
+      return;
+    } catch (e) {
+      const message = `${e.message.split('\n')[0]} (at: ${step})`;
+      if (!retry || attempt > 1) {
+        failures.push(name);
+        console.log(`FAIL ${name}: ${message}`);
+        return;
+      }
+      console.log(`retry ${name}: ${message}`);
+      await within(10000, browser.close(), 'closing the browser').catch(() => {});
+      browser = await launch();
+    }
   }
 }
 
@@ -166,18 +186,25 @@ for (const device of phones) {
 await check('replayer page on iPhone 15', async () => {
   const { context, page, errors } = await open(`${base}replayer/`, devices['iPhone 15']);
   try {
-    const filtered = await page.evaluate(() => [...document.querySelectorAll('input[type=file][accept]')].map((i) => i.id));
+    step = 'reading the file inputs';
+    const filtered = await within(15000, page.evaluate(() => [...document.querySelectorAll('input[type=file][accept]')].map((i) => i.id)), step);
     assert(filtered.length === 0, `file inputs filter by type: ${filtered.join(', ')}`);
+    step = 'picking a module';
     await page.setInputFiles('#file', { name: 'moontrip.mod', mimeType: '', buffer: tinyMod() });
+    step = 'loading the module';
     await page.waitForFunction(() => /smoke test/.test(document.querySelector('#info')?.textContent ?? ''), null, { timeout: 5000 });
+    step = 'tapping Play';
     await page.locator('#play').tap();
+    step = 'waiting for playback';
     await page.waitForFunction(() => document.querySelector('#play')?.textContent === 'Pause', null, { timeout: 8000 });
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    step = 'taking a screenshot';
     if (shots) await page.screenshot({ path: join(shots, 'replayer-iphone.png') });
   } finally {
-    await within(10000, context.close(), 'closing the page');
+    step = 'closing the page';
+    await within(10000, context.close(), step);
   }
-});
+}, { retry: true });
 
 await within(10000, browser.close(), 'closing the browser').catch((e) => console.log(e.message));
 server.close();

@@ -36,8 +36,19 @@ jobs:
           name: coverage
           path: coverage/
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium webkit
+      # The browser downloads are the slowest step; keep them between runs.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install browsers
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium webkit firefox
       - run: pnpm smoke smoke-screenshots
+      - name: Firefox smoke test
+        if: always()
+        timeout-minutes: 5
+        run: pnpm smoke smoke-screenshots/firefox --firefox
       - name: iPhone and iPad smoke test (WebKit)
         if: always()
         timeout-minutes: 5
