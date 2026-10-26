@@ -2,7 +2,7 @@ import { createSong, writeCell, type Song } from '@webtracker/engine';
 import { createZip, loadModule, saveMod, saveXm, unzipAll } from '@webtracker/formats';
 import { describe, expect, it } from 'vitest';
 import { originOf } from './autosave.ts';
-import { createBackup, MANIFEST, planRestore, readBackup } from './backup.ts';
+import { createBackup, MANIFEST, planRestore, readBackup, SETTINGS_FILE } from './backup.ts';
 import type { LibrarySong } from './library.ts';
 
 function song(title: string, channels = 8): Song {
@@ -36,6 +36,16 @@ describe('library backup', () => {
     ]);
     expect(songs[0]!.bytes).toEqual(library[0]!.bytes);
     expect(loadModule(songs[2]!.bytes.slice().buffer, 'x.xm').channelPanning).toHaveLength(4);
+  });
+
+  it('keeps the tracker settings and nothing else from storage', () => {
+    const settings = { 'webtracker.settings': '{"theme":"amber"}', 'webtracker.jamName': 'Markus' };
+    const zip = createBackup(library, settings);
+    expect(unzipAll(zip).map((f) => f.name)).toContain(SETTINGS_FILE);
+    expect(readBackup(zip).settings).toEqual(settings);
+    expect(readBackup(createBackup(library)).settings).toBeUndefined();
+    const forged = createZip([{ name: SETTINGS_FILE, data: new TextEncoder().encode(JSON.stringify({ settings: { other: 'x', 'webtracker.demoSong': '0', 'webtracker.settings': 5 } })) }]);
+    expect(readBackup(forged).settings).toBeUndefined();
   });
 
   it('reads a plain ZIP of modules without a manifest', () => {

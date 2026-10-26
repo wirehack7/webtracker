@@ -4,6 +4,7 @@
  * it came from a MOD and saves as one without losses, an XM otherwise. A small
  * JSON manifest keeps the library names, save times and MOD origins, so a
  * restore gives back the same library; without it any ZIP of modules works.
+ * The tracker's settings (Setup, colours, Jam name) go in a second JSON file.
  */
 
 import { createZip, loadModule, saveMod, saveXm, unzipAll, type ZipEntry } from '@webtracker/formats';
@@ -11,6 +12,12 @@ import { applyOrigin, originOf, type AutosaveOrigin } from './autosave.ts';
 import type { LibrarySong } from './library.ts';
 
 export const MANIFEST = 'chiptrackr-songs.json';
+export const SETTINGS_FILE = 'chiptrackr-settings.json';
+/** localStorage keys that belong in a backup: the tracker's own, without the demo song bookkeeping. */
+const SETTINGS_PREFIX = 'webtracker.';
+const NOT_SETTINGS = new Set(['webtracker.demoSong']);
+
+export const isSettingsKey = (key: string) => key.startsWith(SETTINGS_PREFIX) && !NOT_SETTINGS.has(key);
 
 interface ManifestEntry {
   file: string;
@@ -36,9 +43,9 @@ function uniqueFileName(name: string, ext: string, taken: Set<string>): string {
   }
 }
 
-/** The library as a ZIP archive. */
-export function createBackup(songs: LibrarySong[]): Uint8Array {
-  const taken = new Set([MANIFEST]);
+/** The library, and the settings when given, as a ZIP archive. */
+export function createBackup(songs: LibrarySong[], settings?: Record<string, string>): Uint8Array {
+  const taken = new Set([MANIFEST, SETTINGS_FILE]);
   const files: ZipEntry[] = [];
   const manifest: ManifestEntry[] = [];
   for (const song of songs) {
@@ -57,7 +64,9 @@ export function createBackup(songs: LibrarySong[]): Uint8Array {
     manifest.push({ file, name: song.name, savedAt: song.savedAt, ...(song.origin ? { origin: song.origin } : {}) });
   }
   const json = new TextEncoder().encode(JSON.stringify({ app: 'chiptrackr', version: 1, songs: manifest }, null, 1));
-  return createZip([...files, { name: MANIFEST, data: json }]);
+  files.push({ name: MANIFEST, data: json });
+  if (settings) files.push({ name: SETTINGS_FILE, data: new TextEncoder().encode(JSON.stringify({ app: 'chiptrackr', version: 1, settings }, null, 1)) });
+  return createZip(files);
 }
 
 function readManifest(data: Uint8Array | undefined): Map<string, ManifestEntry> {
@@ -77,11 +86,26 @@ function readManifest(data: Uint8Array | undefined): Map<string, ManifestEntry> 
   return byFile;
 }
 
+/** The settings in a backup, only the tracker's own keys with string values. */
+function readSettings(data: Uint8Array | undefined): Record<string, string> | undefined {
+  if (!data) return undefined;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(data)) as { settings?: unknown };
+    if (!parsed.settings || typeof parsed.settings !== 'object') return undefined;
+    const settings: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed.settings)) if (isSettingsKey(key) && typeof value === 'string') settings[key] = value;
+    return Object.keys(settings).length ? settings : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The songs in a backup ZIP, stored the way the library keeps them (XM bytes
- * plus origin). `failed` names the module files that could not be read.
+ * plus origin), and its settings if it has any. `failed` names the module
+ * files that could not be read.
  */
-export function readBackup(zip: Uint8Array, now = Date.now()): { songs: RestoredSong[]; failed: string[] } {
+export function readBackup(zip: Uint8Array, now = Date.now()): { songs: RestoredSong[]; failed: string[]; settings?: Record<string, string> } {
   const files = unzipAll(zip, 'backup.zip');
   const manifest = readManifest(files.find((f) => f.name === MANIFEST)?.data);
   const songs: RestoredSong[] = [];
@@ -89,7 +113,7 @@ export function readBackup(zip: Uint8Array, now = Date.now()): { songs: Restored
   for (const { name: path, data } of files) {
     const fileName = path.slice(path.lastIndexOf('/') + 1);
     // Skip folders' clutter such as macOS resource forks.
-    if (path === MANIFEST || path.startsWith('__MACOSX/') || fileName.startsWith('._') || !MODULE_FILE.test(fileName)) continue;
+    if (path === MANIFEST || path === SETTINGS_FILE || path.startsWith('__MACOSX/') || fileName.startsWith('._') || !MODULE_FILE.test(fileName)) continue;
     const meta = manifest.get(path);
     try {
       const song = applyOrigin(loadModule(data.slice().buffer, fileName), meta?.origin);
@@ -100,7 +124,8 @@ export function readBackup(zip: Uint8Array, now = Date.now()): { songs: Restored
       failed.push(fileName);
     }
   }
-  return { songs, failed };
+  const settings = readSettings(files.find((f) => f.name === SETTINGS_FILE)?.data);
+  return settings ? { songs, failed, settings } : { songs, failed };
 }
 
 /**

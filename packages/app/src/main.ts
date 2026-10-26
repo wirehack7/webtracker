@@ -59,7 +59,7 @@ import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
 import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, originOf, writeAutosave, type Autosave } from './storage/autosave.ts';
-import { createBackup, planRestore, readBackup } from './storage/backup.ts';
+import { createBackup, isSettingsKey, planRestore, readBackup } from './storage/backup.ts';
 import { addSongs, deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { track } from './track.ts';
@@ -1625,19 +1625,30 @@ async function deleteLibrarySong(): Promise<void> {
 
 const songCount = (count: number) => (count === 1 ? t('{count} song', { count }) : t('{count} songs', { count }));
 
+/** The tracker's settings as kept in localStorage, for a backup. */
+function storedSettings(): Record<string, string> {
+  const settings: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const value = key && isSettingsKey(key) ? localStorage.getItem(key) : null;
+      if (key && value !== null) settings[key] = value;
+    }
+  } catch {
+    // Storage is off; back up the songs alone.
+  }
+  return settings;
+}
+
 async function backUpLibrary(): Promise<void> {
   try {
     const songs = await listSongs();
-    if (!songs.length) {
-      libraryInfo.textContent = t('No songs saved here yet.');
-      return;
-    }
     const day = new Date();
     const stamp = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-    const file = `chiptrackr-songs-${stamp}.zip`;
-    download(createBackup(songs), file, 'application/zip');
+    const file = `chiptrackr-backup-${stamp}.zip`;
+    download(createBackup(songs, storedSettings()), file, 'application/zip');
     track('library-backup', { songs: songs.length });
-    libraryInfo.textContent = t('Saved {songs} to {file}.', { songs: songCount(songs.length), file });
+    libraryInfo.textContent = t('Saved {songs} and the settings to {file}.', { songs: songCount(songs.length), file });
   } catch (error) {
     libraryInfo.textContent = t('Could not back up: {error}', { error: (error as Error).message });
   }
@@ -1645,20 +1656,26 @@ async function backUpLibrary(): Promise<void> {
 
 async function restoreLibrary(file: File): Promise<void> {
   try {
-    const { songs, failed } = readBackup(new Uint8Array(await file.arrayBuffer()));
-    if (!songs.length) {
+    const { songs, failed, settings } = readBackup(new Uint8Array(await file.arrayBuffer()));
+    if (!songs.length && !settings) {
       libraryInfo.textContent = t('No songs found in {file}.', { file: file.name });
       return;
     }
     const { add, skipped } = planRestore(await listSongs(), songs);
     await addSongs(add);
-    track('library-restore', { songs: add.length });
+    track('library-restore', { songs: add.length, settings: !!settings });
     await showLibrary();
     libraryInfo.textContent = [
       t('Added {songs} from {file}.', { songs: songCount(add.length), file: file.name }),
       skipped ? t('Already here: {songs}.', { songs: songCount(skipped) }) : '',
       failed.length ? t('Could not read: {files}', { files: failed.join(', ') }) : '',
     ].filter(Boolean).join(' ');
+    if (settings && (await ask(t('The backup also holds settings (Setup, colours, Jam name). Replace the settings here with them? The tracker reloads; your song is kept, but other open song tabs and the undo history are not.'), { title: t('Restore settings'), ok: t('Replace and reload'), cancel: t('Keep mine') }))) {
+      for (const [key, value] of Object.entries(settings)) localStorage.setItem(key, value);
+      await autosaveNow();
+      reloading = true;
+      location.reload();
+    }
   } catch (error) {
     libraryInfo.textContent = t('Could not restore {file}: {error}', { file: file.name, error: error instanceof Error && error.message === BLOCKED ? t(BLOCKED) : (error as Error).message });
   }
