@@ -2301,3 +2301,46 @@ button.brand:hover {
     flex: none;
   }
 }
+
+/* Song stats: a summary, then scrolling tables of samples and patterns. */
+.stats-summary th {
+  padding-right: calc(var(--px) * 8);
+}
+
+.stats-scroll {
+  max-height: calc(var(--px) * 110);
+  overflow: auto;
+  border: var(--px) solid var(--desk-lo);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.stats-table {
+  width: 100%;
+}
+
+.stats-table th {
+  position: sticky;
+  top: 0;
+  background: var(--desk);
+}
+
+.stats-table th,
+.stats-table td {
+  white-space: nowrap;
+}
+
+.stats-table .num {
+  text-align: right;
+}
+
+.stats-table td.sub {
+  padding-left: calc(var(--px) * 8);
+}
+
+.stats-table tr.ins td {
+  color: var(--pat-instr);
+}
+
+.stats-table tr.unused td {
+  color: var(--dim);
+}

@@ -54,3 +54,5 @@ export { createZip, crc32, type ZipEntry } from './zip.ts';
 export { unpackModule, unzipAll, type Unpacked } from './unpack.ts';
 export { inflateRaw } from './inflate.ts';
 export { applyTrack, loadXp, loadXt, saveXp, saveXt, type LoadedXp } from './xp.ts';
+export { xmLayout, type XmLayout } from './xm-write.ts';
+export { songStats, type InstrumentStats, type PatternStats, type SampleStats, type SongStats } from './stats.ts';

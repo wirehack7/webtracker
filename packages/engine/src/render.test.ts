@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSong, setChannelCount, writeCell } from './edit.ts';
-import { renderSong } from './render.ts';
+import { renderSong, songDuration } from './render.ts';
 import { readCell } from './song.ts';
 
 const RATE = 22050;
@@ -103,5 +103,19 @@ describe('mixer options', () => {
     const wide = renderSong(song(), { sampleRate: RATE, maxSeconds: 0.5, stereoSeparation: 150 });
     const side = (r: { left: Float32Array; right: Float32Array }) => r.left.reduce((t, v, i) => t + Math.abs(v - r.right[i]!), 0);
     expect(side(wide)).toBeGreaterThan(side(normal) * 1.3);
+  });
+});
+
+describe('songDuration', () => {
+  it('times the song up to its jump back', () => {
+    const s = song();
+    expect(songDuration(s).seconds).toBeCloseTo(7.68, 1);
+    s.orders = [0, 0, 0];
+    writeCell(s, s.patterns[0]!, 0, 1, { effect: 0xf, param: 3 });
+    expect(songDuration(s).seconds).toBeCloseTo(7.68 * 3 / 2, 1);
+  });
+
+  it('stops at the limit and says so', () => {
+    expect(songDuration(song(), 2)).toEqual({ seconds: 2, endless: true });
   });
 });

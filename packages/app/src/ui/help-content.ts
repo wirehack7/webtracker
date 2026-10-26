@@ -299,7 +299,7 @@ const WORKFLOWS: HelpSection = {
       entries: [
         { code: 'Replayer', text: 'The replayer page has the files to download, a demo player and the API, with a callback on every row to sync effects to the music.', link: { href: './replayer/', label: 'Open the replayer page' } },
         { code: 'Open in replayer', text: 'Save > Open in replayer opens the song you are working on in the replayer page, to hear it as your production will play it.' },
-        { code: 'Clean up', text: 'Advanced Edit > Clean up removes unused patterns, instruments and samples, so the module loads faster and packs better.' },
+        { code: 'Stats', text: 'Stats shows the play time, what each part takes in the file and what the song never plays. Optimize removes unused parts and can halve sample rates or make samples 8-bit, so the module packs smaller.' },
       ],
     },
     {
