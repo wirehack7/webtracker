@@ -1,6 +1,6 @@
 # chiptrackr
 
-[![CI](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml/badge.svg)](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml) [![Replayer vs libopenmpt](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml/badge.svg)](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml) [Testing and coverage](docs/TESTING.md)
+[![CI](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wirehack7/webtracker/actions/workflows/ci.yml) [![Replayer vs libopenmpt](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml/badge.svg?branch=main)](https://github.com/wirehack7/webtracker/actions/workflows/reference.yml) [Testing and coverage](docs/TESTING.md)
 
 A chiptune tracker for the browser, made for the demoscene. Classic tracker interface, responsive on desktop, tablet and phone, with XM as its native format.
 
