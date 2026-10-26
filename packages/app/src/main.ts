@@ -46,7 +46,8 @@ import { SongEditor, type SongDocument } from './editor/song-editor.ts';
 import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, type Invite } from './collab/links.ts';
 import { JamSession, type JamDocument, type Link } from './collab/session.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
-import { ask, askText } from './ui/ask.ts';
+import { ask, askText, tell } from './ui/ask.ts';
+import { relaxFileFilters } from './ui/platform.ts';
 import { padKeys, renderPadKeys } from './ui/entry-pad.ts';
 import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
@@ -118,6 +119,8 @@ $('#editors').append(sampleEditor.root, instrumentEditor.root);
 
 /** Starts audio on the first key or tap, browsers only allow it from a gesture. */
 function ensureEngine(): Promise<EngineNode | null> {
+  // Audio may start on a tap that also loads a file; that file's message stays.
+  const before = status.textContent;
   starting ??= EngineNode.start().then(
     (node) => {
       engine = node;
@@ -125,7 +128,7 @@ function ensureEngine(): Promise<EngineNode | null> {
       node.send({ type: 'load', song: editor.song });
       node.send({ type: 'mute', muted });
       node.send(mixerMessage());
-      status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
+      if (status.textContent === before) status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
       return node;
     },
     (error: unknown) => {
@@ -135,6 +138,11 @@ function ensureEngine(): Promise<EngineNode | null> {
     },
   );
   return starting;
+}
+// iOS starts audio only when a tap ends, so the press of a piano key cannot start it in time.
+// Starting it on the first finished tap or key anywhere lets that first key sound.
+for (const type of ['touchend', 'click', 'keydown'] as const) {
+  window.addEventListener(type, () => void ensureEngine(), { once: true, capture: true, passive: true });
 }
 
 async function previewOn(note: number): Promise<void> {
@@ -996,6 +1004,19 @@ entryKeys.addEventListener('click', (event) => {
 // ---- Files ---------------------------------------------------------------
 
 const fileInput = $<HTMLInputElement>('#file');
+relaxFileFilters();
+
+/** Names that tell what a file is; the picker may offer any file on phones, see relaxFileFilters. */
+const MODULE_NAME = /\.(mod|xm|s3m|it|mtm|669|okt|stk|zip|gz|mdz|xmz|s3z|itz|mdgz|xmgz|s3gz|itgz|umx)$/i;
+const PATTERN_NAME = /\.x[pt]$/i;
+const SAMPLE_NAME = /\.(wav|aif|aiff|aifc|8svx|iff|xi|pat|flac|mp3|ogg|opus|m4a|aac)$/i;
+
+/** Shows why a file did not open; a dialog, since phones hide the status bar. */
+function loadFailed(file: File, error: unknown): void {
+  const message = (error as Error).message;
+  status.textContent = `Could not load ${file.name}: ${message}`;
+  void tell(`${file.name} could not be opened: ${message}`, 'Load');
+}
 
 async function confirmDiscard(): Promise<boolean> {
   // With tabs the next song gets its own, so nothing is discarded.
@@ -1156,7 +1177,7 @@ async function openModule(file: File): Promise<void> {
     status.textContent = `${file.name}: ${loaded.title || 'untitled'}, ${loaded.formatName}, ${loaded.channels} channels.`;
     track('open-module', { format: loaded.formatName });
   } catch (error) {
-    status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
+    loadFailed(file, error);
   }
 }
 
@@ -1205,7 +1226,7 @@ async function importIntoSlot(file: File): Promise<void> {
     sampleEditor.resetView();
     if (app.dataset.view === 'pattern') setView('sample');
   } catch (error) {
-    status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
+    loadFailed(file, error);
   }
 }
 
@@ -1994,8 +2015,12 @@ $('#open-replayer').addEventListener('click', () => void openInReplayer());
 exportGo.addEventListener('click', exportAudio);
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
-  if (file) void (/\.x[pt]$/i.test(file.name) ? importPatternFile(file) : openModule(file));
   fileInput.value = '';
+  if (!file) return;
+  if (PATTERN_NAME.test(file.name)) void importPatternFile(file);
+  // A sample picked here goes where a dropped one would; anything else is tried as a module by its content.
+  else if (SAMPLE_NAME.test(file.name) && !MODULE_NAME.test(file.name)) void importIntoSlot(file);
+  else void openModule(file);
 });
 
 // ---- Pattern and track files (.xp, .xt) -------------------------------------
@@ -2027,7 +2052,7 @@ async function importPatternFile(file: File): Promise<void> {
     }
     showPosition();
   } catch (error) {
-    status.textContent = `Could not load ${file.name}: ${(error as Error).message}`;
+    loadFailed(file, error);
   }
 }
 $('#save-xp').addEventListener('click', () => savePatternFile(false));
@@ -2043,8 +2068,8 @@ window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
   if (!file) return;
-  if (/\.(mod|xm|s3m|it|mtm|669|okt|stk|zip|gz|mdz|xmz|s3z|itz|mdgz|xmgz|s3gz|itgz|umx)$/i.test(file.name)) void openModule(file);
-  else if (/\.x[pt]$/i.test(file.name)) void importPatternFile(file);
+  if (MODULE_NAME.test(file.name)) void openModule(file);
+  else if (PATTERN_NAME.test(file.name)) void importPatternFile(file);
   else void importIntoSlot(file);
 });
 window.addEventListener('beforeunload', (event) => {
@@ -2587,6 +2612,7 @@ colourFile.addEventListener('change', async (event) => {
     status.textContent = `Loaded colours from ${file.name}.`;
   } catch {
     status.textContent = `${file.name} is not a colour file.`;
+    void tell(`${file.name} is not a colour file.`, 'Colours');
   }
 });
 

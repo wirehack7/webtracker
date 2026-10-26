@@ -29,8 +29,11 @@ jobs:
           name: coverage
           path: coverage/
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm smoke smoke-screenshots
+      - name: iPhone and iPad smoke test (WebKit)
+        if: always()
+        run: pnpm smoke:ios smoke-screenshots/ios
       - uses: actions/upload-artifact@v7
         if: always()
         with:

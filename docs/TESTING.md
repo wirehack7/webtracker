@@ -13,10 +13,11 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 
 | Check | What it proves | Result |
 | --- | --- | --- |
-| Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 246 tests in 39 files, all passing |
+| Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 248 tests in 40 files, all passing |
 | Code coverage (V8) | Which source lines those tests execute | 55 % of lines overall; formats 93 %, engine 79 %, app 20 % |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
 | Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; the replayer page plays | 7 of 7 checks passing in headless Chromium |
+| iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
 
 ## Running it
@@ -29,9 +30,12 @@ pnpm typecheck
 
 pnpm build
 pnpm smoke [shots/]    # browser smoke test against packages/app/dist, optional screenshots
+pnpm smoke:ios [shots/]  # the same for iPhone and iPad in WebKit
 ```
 
-The smoke test needs a Chromium for Playwright (`pnpm exec playwright install chromium`).
+The smoke tests need Playwright's Chromium and WebKit
+(`pnpm exec playwright install chromium webkit`); `pnpm smoke:ios --chromium`
+runs the iOS checks in Chromium with an iPhone user agent where WebKit is missing.
 
 The replayer comparison needs an `ffmpeg` built with libopenmpt (the Ubuntu and
 Debian packages are) and the OpenMPT test modules, which are not checked in:
@@ -149,6 +153,28 @@ that:
 It also opens the replayer page and plays its demo. Screenshots of every size
 are kept as a CI artifact. It is a smoke test: it shows the app starts and its
 main loop works at each size, not that every control does the right thing.
+
+### iPhone and iPad
+
+`scripts/smoke-ios.mjs` opens the build in Playwright's WebKit, the engine of
+every iOS browser, emulating an iPhone 15, an iPhone SE and an iPad Mini (touch,
+screen size, user agent). It checks that:
+
+- no file input carries an `accept` filter, since iOS turns that into file types
+  it has none of for tracker formats and greys the files out in the picker,
+- Load opens the file picker and a picked `.mod` opens, and any other file
+  explains itself in a dialog,
+- the sample importer takes a picked file,
+- a tap on Play starts the AudioWorklet and the song,
+- Save XM starts a download,
+- the song library is in IndexedDB,
+- the replayer page loads a picked module and plays it.
+
+Playwright's WebKit is a Linux build, not iOS. It cannot show the real iOS file
+picker, the ring/silent switch or the iOS audio session, so those stay checked by
+hand on a real device: the files must be selectable in the picker, sound must play
+with the silent switch on (Safari 17 and later), and Save must offer the share
+sheet or Save to Files.
 
 ## Feature coverage
 

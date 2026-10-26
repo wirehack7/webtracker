@@ -6,6 +6,7 @@ import { el } from './widgets.ts';
 export interface AskOptions {
   /** Label of the button that goes ahead, e.g. "Delete". */
   ok?: string;
+  /** Label of the button that backs out; '' leaves it out, for a plain message. */
   cancel?: string;
   /** A short heading above the message. */
   title?: string;
@@ -37,7 +38,8 @@ function show(message: string, options: AskOptions, field?: HTMLInputElement): P
   cancel.type = 'button';
   cancel.addEventListener('click', () => dialog.close(''));
   const row = el('div', 'row ask-buttons');
-  row.append(cancel, ok);
+  if (options.cancel !== '') row.append(cancel);
+  row.append(ok);
   form.append(row);
   dialog.append(form);
 
@@ -67,6 +69,11 @@ function show(message: string, options: AskOptions, field?: HTMLInputElement): P
 /** Asks a yes or no question; resolves true when the user goes ahead. */
 export async function ask(message: string, options: AskOptions = {}): Promise<boolean> {
   return (await show(message, options)) === 'ok';
+}
+
+/** Shows a message with only an OK button, e.g. why a file could not be opened. */
+export async function tell(message: string, title?: string): Promise<void> {
+  await show(message, title === undefined ? { cancel: '' } : { title, cancel: '' });
 }
 
 /** Asks for a line of text; resolves with it, or null when cancelled. */
