@@ -16,7 +16,7 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 | Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 248 tests in 40 files, all passing |
 | Code coverage (V8) | Which source lines those tests execute | 55 % of lines overall; formats 93 %, engine 79 %, app 20 % |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
-| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays; playback follows the order list; a German browser gets the German language pack | 14 of 14 checks passing in headless Chromium, 13 of 13 in headless Firefox (its audio clock does not run on the CI runners, so the order list check is Chromium only) |
+| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; video export produces an MP4 or WebM file (in Chromium also through the real-time MediaRecorder fallback); the replayer page plays; playback follows the order list; a German browser gets the German language pack | 17 of 17 checks passing in headless Chromium; in headless Firefox the order list check and the recorded video fallback are skipped (its audio clock does not run on the CI runners) |
 | iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
 | Dialogs on phones (Playwright) | Every dialog at 320 to 639 px wide, on a phone on its side and on a touch tablet, in English, German and Finnish: nothing outside the screen or the dialog, no sideways scrolling, nothing cut off, buttons, fields and checkbox rows at least 24 px high | 0 problems in headless Chromium |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
@@ -203,6 +203,7 @@ sheet or Save to Files.
 | Export WAV | ✅ | – | 16-bit, 24-bit and float read back |
 | Export FLAC | ✅ | – | Own encoder, bit-exact round trip of 16 and 24 bit |
 | Export MP3 | ◐ | – | Frame headers, ID3 and rate cap checked; audio quality judged by ear only |
+| Export video | ◐ | – | `video/frames.test.ts` (frame audio equals the audio export, order list, scopes), `video/draw.test.ts` (layout fits 1 to 32 channels at every size); smoke test checks the file container; picture judged by eye |
 | Pattern editing, blocks, transpose, interpolate | ✅ | – | `edit.test.ts`, `entry.test.ts` |
 | Undo / redo, song settings | ✅ | – | `song-editor.test.ts` |
 | Sample editor operations | ✅ | ✗ | The operations are tested (`sample-edit.test.ts`); the editor's mouse and touch handling is not |
