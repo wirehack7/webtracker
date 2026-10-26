@@ -11,6 +11,7 @@ export interface InstrumentEditorHost {
   sampleIndex(): number;
   status(text: string): void;
   importFile(): void;
+  openLibrary(): void;
   saveInstrument(): void;
 }
 
@@ -288,6 +289,7 @@ export class InstrumentEditor {
     top.append(
       this.name.root,
       button(t('Load'), () => host.importFile(), t('Load an XI instrument, or a sample into the current slot')),
+      button(t('Library'), () => host.openLibrary(), t('Built-in chip waves, drums and effects for this instrument')),
       button(t('Save XI'), () => host.saveInstrument(), t('Save this instrument as XI')),
       this.fadeout.root,
       el('span', 'label', t('Vibrato')),
