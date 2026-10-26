@@ -41,6 +41,10 @@ The smoke tests need Playwright's Chromium, Firefox and WebKit
 (`pnpm exec playwright install chromium firefox webkit`); `pnpm smoke:ios --chromium`
 runs the iOS checks in Chromium with an iPhone user agent where WebKit is missing.
 
+CI runs in Playwright's Docker image (`mcr.microsoft.com/playwright`), which has all
+three browsers and their system libraries; its tag follows the `playwright` version in
+`package.json`.
+
 The replayer comparison needs an `ffmpeg` built with libopenmpt (the Ubuntu and
 Debian packages are) and the OpenMPT test modules, which are not checked in:
 
