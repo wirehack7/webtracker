@@ -40,6 +40,7 @@ jobs:
       - run: pnpm smoke smoke-screenshots
       - name: Firefox smoke test
         if: always()
+        timeout-minutes: 5
         run: pnpm smoke smoke-screenshots/firefox --firefox
       - name: iPhone and iPad smoke test (WebKit)
         if: always()
