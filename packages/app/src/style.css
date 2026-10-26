@@ -1174,10 +1174,11 @@ html:has(.manual-page),
 
 .manual {
   display: grid;
-  grid-template-columns: max-content minmax(0, calc(var(--px) * 400));
-  justify-content: center;
+  grid-template-columns: minmax(calc(var(--px) * 150), calc(var(--px) * 180)) minmax(0, 1fr);
   align-items: start;
   gap: calc(var(--px) * 6);
+  max-width: 1800px;
+  margin: 0 auto;
   padding: calc(var(--px) * 6) max(16px, calc(var(--px) * 6));
 }
 
@@ -1206,8 +1207,74 @@ html:has(.manual-page),
 }
 
 .manual-body {
-  padding: calc(var(--px) * 6) calc(var(--px) * 8);
+  padding: calc(var(--px) * 6) calc(var(--px) * 10);
   min-width: 0;
+}
+
+/* Screenshots: wide ones span the chapter, the rest stand beside the text
+   on wide screens and above it on narrow ones. A click opens the full size. */
+.manual-figure {
+  margin: calc(var(--px) * 4) 0 calc(var(--px) * 8);
+}
+
+.manual-figure a {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.manual-figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: calc(var(--px) * 1) solid var(--desk-lo);
+}
+
+.manual-figure figcaption {
+  margin-top: calc(var(--px) * 3);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--label);
+  -webkit-font-smoothing: auto;
+  max-width: 70ch;
+}
+
+.manual-row {
+  display: flex;
+  gap: calc(var(--px) * 6);
+}
+
+.manual-row .manual-figure {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 390px;
+}
+
+@media (min-width: 1280px) {
+  .manual-cols.has-side {
+    display: grid;
+    grid-template-columns: minmax(0, 46rem) minmax(0, 1fr);
+    gap: calc(var(--px) * 16);
+    align-items: start;
+  }
+
+  .manual-cols.has-side > .manual-text {
+    grid-area: 1 / 1;
+  }
+
+  .manual-cols.has-side > .manual-side {
+    grid-area: 1 / 2;
+    padding-top: calc(var(--px) * 2);
+  }
+}
+
+/* On wide screens the reference lists run in two columns of entries. */
+@media (min-width: 1400px) {
+  .manual-ref .help-list {
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+    column-gap: calc(var(--px) * 8);
+  }
 }
 
 /* Long text reads better in a plain font; headings, keys and codes keep the pixel one. */
