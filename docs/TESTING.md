@@ -16,7 +16,7 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 | Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 248 tests in 40 files, all passing |
 | Code coverage (V8) | Which source lines those tests execute | 55 % of lines overall; formats 93 %, engine 79 %, app 20 % |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
-| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; the replayer page plays | 7 of 7 checks passing in headless Chromium |
+| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays | 8 of 8 checks passing in headless Chromium and in headless Firefox |
 | iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
 
@@ -30,11 +30,12 @@ pnpm typecheck
 
 pnpm build
 pnpm smoke [shots/]    # browser smoke test against packages/app/dist, optional screenshots
+pnpm smoke [shots/] --firefox  # the same in Firefox
 pnpm smoke:ios [shots/]  # the same for iPhone and iPad in WebKit
 ```
 
-The smoke tests need Playwright's Chromium and WebKit
-(`pnpm exec playwright install chromium webkit`); `pnpm smoke:ios --chromium`
+The smoke tests need Playwright's Chromium, Firefox and WebKit
+(`pnpm exec playwright install chromium firefox webkit`); `pnpm smoke:ios --chromium`
 runs the iOS checks in Chromium with an iPhone user agent where WebKit is missing.
 
 The replayer comparison needs an `ffmpeg` built with libopenmpt (the Ubuntu and
