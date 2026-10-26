@@ -8,6 +8,7 @@ import {
   deleteRow,
   emptyPattern,
   emptySample,
+  LoopType,
   insertRow,
   interpolateBlock,
   MAX_CHANNELS,
@@ -33,6 +34,7 @@ import {
   type Pattern,
   type PlayerState,
   type Resampler,
+  type Sample,
   type Song,
 } from '@webtracker/engine';
 import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, save8svx, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat } from '@webtracker/formats';
@@ -58,6 +60,7 @@ import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
+import { mountSampleLibrary } from './ui/sample-library.ts';
 import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, originOf, writeAutosave, type Autosave } from './storage/autosave.ts';
 import { createBackup, isSettingsKey, planRestore, readBackup } from './storage/backup.ts';
@@ -126,6 +129,7 @@ const host = {
   sampleIndex: () => sampleSlot,
   status: (text: string) => (status.textContent = text),
   importFile: () => $<HTMLInputElement>('#sample-file').click(),
+  openLibrary: () => sampleLibrary.open(),
   saveInstrument: () => saveInstrument(),
   saveSample: (format: 'wav' | 'iff') => saveSample(format),
 };
@@ -590,6 +594,66 @@ insPicker.addEventListener('click', (event) => {
   const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
   if (event.target === insPicker && !inside) insPicker.close();
 });
+// The built-in sample library, from the sample and instrument editors and the phone picker.
+/** The sound the library is playing, stopped when the next one starts. */
+let audition: AudioBufferSourceNode | null = null;
+async function auditionSample(sample: Sample): Promise<void> {
+  const node = engine ?? (await ensureEngine());
+  if (!node || sample.data.length === 0) return;
+  audition?.stop();
+  const ctx = node.context;
+  // C-4 plays a sample at this rate; the browser resamples it to the output.
+  const rate = Math.max(3000, Math.min(384000, rateForTuning(sample.relativeNote, sample.finetune)));
+  const buffer = ctx.createBuffer(1, sample.data.length, rate);
+  buffer.getChannelData(0).set(sample.data);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  const level = (0.5 * sample.volume) / 64;
+  gain.gain.value = level;
+  if (sample.loopType !== LoopType.None && sample.loopLength > 0) {
+    // A looped wave would ring forever: let it sound for a moment and fade.
+    source.loop = true;
+    source.loopStart = sample.loopStart / rate;
+    source.loopEnd = (sample.loopStart + sample.loopLength) / rate;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(level, now + 0.5);
+    gain.gain.linearRampToValueAtTime(0, now + 0.6);
+  }
+  source.connect(gain).connect(ctx.destination);
+  source.start();
+  if (source.loop) source.stop(ctx.currentTime + 0.6);
+  audition = source;
+}
+
+const sampleLibraryDialog = $<HTMLDialogElement>('#sample-library');
+const sampleLibrary = mountSampleLibrary(sampleLibraryDialog, {
+  audition: (sample) => void auditionSample(sample),
+  loadSample(sample) {
+    const slot = sampleSlot;
+    editor.editInstrument(instrument - 1, 'load sample', (ins) => {
+      while (ins.samples.length < slot) ins.samples.push(emptySample());
+      ins.samples[slot] = sample;
+      if (!ins.name) ins.name = sample.name;
+    });
+    sampleEditor.resetView();
+    status.textContent = t('{name} from the sample library in {slot}.', { name: sample.name, slot: `${hex(instrument)}/${hex(slot, 1)}` });
+  },
+  loadInstrument(ins) {
+    editor.replaceInstrument(instrument - 1, 'load instrument', ins);
+    selectSample(0);
+    status.textContent = t('{name} from the sample library is instrument {instrument}.', { name: ins.name, instrument: hex(instrument) });
+  },
+});
+sampleLibraryDialog.addEventListener('close', () => {
+  audition?.stop();
+  audition = null;
+});
+$('#picker-library').addEventListener('click', () => {
+  insPicker.close();
+  sampleLibrary.open();
+});
+
 /** The arrows stop one slot after the last instrument with samples, ready for a new one. */
 function stepInstrument(delta: number): void {
   const instruments = song().instruments;

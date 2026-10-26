@@ -24,7 +24,7 @@ const { base, server } = await serveDist(root);
 const browser = await chromium.launch();
 console.log(`browser: Chromium ${browser.version()}`);
 
-const dialogs = ['setup', 'edit-tools', 'file-dialog', 'songs-dialog', 'share-dialog', 'jam-dialog', 'transfer-dialog', 'ins-picker', 'pat-picker', 'whats-new', 'about', 'help'];
+const dialogs = ['setup', 'edit-tools', 'file-dialog', 'songs-dialog', 'share-dialog', 'jam-dialog', 'transfer-dialog', 'ins-picker', 'sample-library', 'pat-picker', 'whats-new', 'about', 'help'];
 const screens = [320, 360, 375, 390, 414, 480, 560, 639].map((width) => ({ width, height: 740 }));
 screens.push({ width: 844, height: 390 }, { width: 1024, height: 768 });
 // Below this a tap target is too small for a thumb (CSS pixels).

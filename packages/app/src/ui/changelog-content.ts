@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-26b',
+    items: [
+      msg('The sample library has chip waves, PWM loops, drums and effects, all made by the tracker and free to use. Open it with Library in the sample or instrument editor, or from the instrument picker on phones.'),
+    ],
+  },
+  {
     id: '2026-10-26',
     items: [
       msg('The tracker speaks German and Finnish too. Pick a language in Setup > Language, or let it follow your browser.'),

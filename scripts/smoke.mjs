@@ -8,7 +8,7 @@
  * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. What's new
  * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
- * over files. The replayer page must load and play its demo too, and a German browser must get
+ * over files. The sample library must load a drum and a chip wave on a phone. The replayer page must load and play its demo too, and a German browser must get
  * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only). Screenshots go to the given folder.
  */
 import { mkdirSync } from 'node:fs';
@@ -323,6 +323,34 @@ await check("What's new after an update", async () => {
     await page.evaluate(() => document.querySelector('#help-open').click());
     await page.locator('#whats-new-open').click();
     await page.locator('#whats-new[open]').waitFor();
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+  } finally {
+    await context.close();
+  }
+});
+
+// The sample library on a phone: from the instrument picker, a drum becomes the instrument
+// and a chip wave goes into its sample slot.
+await check('sample library', async () => {
+  const { context, page, errors } = await open(base, phone);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.locator('#ins-pick').click();
+    await page.locator('#picker-library').click();
+    await page.locator('#sample-library[open]').waitFor();
+    await page.locator('#sample-library .sample-lib-tabs [data-category="drums"]').click();
+    await page.locator('#sample-library li[data-id="kick"]').click();
+    if (shots) await page.screenshot({ path: join(shots, 'sample-library-phone.png') });
+    await page.locator('#sample-lib-instrument').click();
+    assert(!(await page.evaluate(() => document.querySelector('#sample-library').open)), 'the library stayed open');
+    assert((await page.locator('#ins-pick-name').textContent()) === 'Kick', 'the kick did not become the instrument');
+    await page.locator('#ins-pick').click();
+    await page.locator('#picker-library').click();
+    await page.locator('#sample-library .sample-lib-tabs [data-category="chip"]').click();
+    await page.locator('#sample-library li[data-id="pwmslow"]').click();
+    await page.locator('#sample-lib-load').click();
+    const sample = await page.evaluate(() => document.querySelector('#sample-list li[aria-selected="true"]')?.textContent ?? '');
+    assert(sample.includes('PWM slow'), `the sample slot holds "${sample}"`);
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
   } finally {
     await context.close();
