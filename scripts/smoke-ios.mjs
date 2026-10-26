@@ -30,9 +30,18 @@ const browser = await (useChromium ? chromium : webkit).launch();
 const phones = [devices['iPhone 15'], devices['iPhone SE'], devices['iPad Mini']];
 const failures = [];
 
+/** Rejects when `promise` takes longer than `ms`: a hung WebKit call must fail, not stall CI. */
+function within(ms, promise, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took longer than ${ms / 1000} s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function check(name, run) {
   try {
-    await run();
+    await within(60000, run(), name);
     console.log(`ok   ${name}`);
   } catch (e) {
     failures.push(name);
@@ -49,6 +58,8 @@ async function open(url, device) {
   // Chromium has no isMobile emulation of Safari, only its viewport and user agent.
   if (useChromium) delete options.isMobile;
   const context = await browser.newContext({ ...options, serviceWorkers: 'block', acceptDownloads: true });
+  // Without this, an action that never completes (such as a tap) waits forever.
+  context.setDefaultTimeout(15000);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -147,7 +158,7 @@ for (const device of phones) {
 
       assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
     } finally {
-      await context.close();
+      await within(10000, context.close(), 'closing the page');
     }
   });
 }
@@ -164,14 +175,15 @@ await check('replayer page on iPhone 15', async () => {
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
     if (shots) await page.screenshot({ path: join(shots, 'replayer-iphone.png') });
   } finally {
-    await context.close();
+    await within(10000, context.close(), 'closing the page');
   }
 });
 
-await browser.close();
+await within(10000, browser.close(), 'closing the browser').catch((e) => console.log(e.message));
 server.close();
 if (failures.length) {
   console.log(`\n${failures.length} check(s) failed`);
   process.exit(1);
 }
 console.log('\nall checks passed');
+process.exit(0);

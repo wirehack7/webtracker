@@ -44,6 +44,8 @@ async function open(url, viewport) {
     ...(useFirefox ? {} : { isMobile: !!viewport.touch }),
     serviceWorkers: 'block',
   });
+  // Without this, an action that never completes (such as a tap) waits forever.
+  context.setDefaultTimeout(15000);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

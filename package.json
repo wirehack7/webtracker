@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:ios": "node scripts/smoke-ios.mjs"
+    "smoke:ios": "node scripts/smoke-ios.mjs",
+    "screenshots:manual": "tsx scripts/manual-screenshots.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
