@@ -128,10 +128,14 @@ await check('playback follows the order list', async () => {
     await page.evaluate(() => document.querySelector('#songs-dialog')?.close());
     const position = () =>
       page.evaluate(() => `${document.querySelector('#orders [aria-selected="true"]')?.dataset.index}:${document.querySelector('#pattern-no')?.textContent}`);
+    // Start four rows before the end of position 05 (Ctrl+Shift+Enter plays the song from the
+    // cursor row), so the check does not hang on how fast the browser's audio clock runs.
     await page.locator('#orders li[data-index="5"]').click();
-    await page.locator('#play-song').click({ force: true });
+    await page.keyboard.press('End');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Control+Shift+Enter');
     const seen = [];
-    for (let i = 0; i < 120 && seen.length < 2; i++) {
+    for (let i = 0; i < 200 && seen.length < 2; i++) {
       const now = await position();
       if (now !== seen.at(-1)) seen.push(now);
       await page.waitForTimeout(100);
