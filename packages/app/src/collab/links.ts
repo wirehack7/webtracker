@@ -17,6 +17,8 @@ import type { Link } from './session.ts';
 export const JAM_PARAM = 'jam';
 /** `#jam-tab=…` joins a jam in another tab of this browser. */
 export const JAM_TAB_PARAM = 'jam-tab';
+/** `#transfer=…` receives the songs and settings another browser sends. */
+export const TRANSFER_PARAM = 'transfer';
 
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 /** Gathering addresses rarely takes long; past this the ones found so far have to do. */
@@ -34,12 +36,17 @@ export function jamFromHash(hash: string): { kind: 'rtc' | 'tab'; value: string 
   return tab ? { kind: 'tab', value: tab } : null;
 }
 
+/** The offer of a transfer link in an address fragment, if any. */
+export function transferFromHash(hash: string): string | null {
+  return new URLSearchParams(hash.replace(/^#/, '')).get(TRANSFER_PARAM) || null;
+}
+
 async function packDescription(description: RTCSessionDescriptionInit): Promise<string> {
   const json = new TextEncoder().encode(JSON.stringify({ type: description.type, sdp: description.sdp }));
   return toBase64Url(await pipe(json, new CompressionStream('deflate-raw')));
 }
 
-async function unpackDescription(text: string, type: RTCSdpType): Promise<RTCSessionDescriptionInit> {
+async function unpackDescription(text: string, type: RTCSdpType, wrongOffer?: string): Promise<RTCSessionDescriptionInit> {
   let parsed: { type?: string; sdp?: string };
   try {
     const json = await pipe(fromBase64Url(text.trim()), new DecompressionStream('deflate-raw'));
@@ -48,7 +55,7 @@ async function unpackDescription(text: string, type: RTCSdpType): Promise<RTCSes
     throw new Error(t('This code is incomplete or broken'));
   }
   if (parsed.type !== type || typeof parsed.sdp !== 'string') {
-    throw new Error(type === 'answer' ? t('This is not an answer code') : t('This is not a jam invite'));
+    throw new Error(type === 'answer' ? t('This is not an answer code') : (wrongOffer ?? t('This is not a jam invite')));
   }
   return { type, sdp: parsed.sdp };
 }
@@ -163,9 +170,12 @@ export async function createInvite(): Promise<Invite> {
   };
 }
 
-/** Guest side: the answer code to send back, and the link once the host has taken it. */
-export async function answerInvite(offer: string): Promise<{ answer: string; link: Promise<Link>; cancel(): void }> {
-  const description = await unpackDescription(offer, 'offer');
+/**
+ * Guest side: the answer code to send back, and the link once the host has
+ * taken it. `wrongOffer` is the error for text that is no offer at all.
+ */
+export async function answerInvite(offer: string, wrongOffer?: string): Promise<{ answer: string; link: Promise<Link>; cancel(): void }> {
+  const description = await unpackDescription(offer, 'offer', wrongOffer);
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   const link = new Promise<Link>((resolve, reject) => {
     pc.addEventListener('datachannel', (event) => opened(pc, event.channel).then(resolve, reject), { once: true });

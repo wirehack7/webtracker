@@ -43,7 +43,7 @@ import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
 import { freePattern, patternInfos } from './editor/patterns.ts';
 import { SongEditor, type SongDocument } from './editor/song-editor.ts';
-import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, type Invite } from './collab/links.ts';
+import { answerInvite, createInvite, JAM_PARAM, JAM_TAB_PARAM, jamFromHash, joinInTab, listenInTabs, newRoom, TRANSFER_PARAM, transferFromHash, type Invite } from './collab/links.ts';
 import { JamSession, type JamDocument, type Link } from './collab/session.ts';
 import { noteForKey, octaveForKey } from './keyboard.ts';
 import { ask, askText, tell } from './ui/ask.ts';
@@ -1640,55 +1640,95 @@ function storedSettings(): Record<string, string> {
   return settings;
 }
 
-async function backUpLibrary(): Promise<void> {
+const today = () => {
+  const day = new Date();
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+};
+
+const backupError = (error: unknown) => (error instanceof Error && error.message === BLOCKED ? t(BLOCKED) : (error as Error).message);
+
+/** Downloads the songs, and with `withSettings` the settings too, as one ZIP. */
+async function downloadBackup(withSettings: boolean, info: HTMLElement): Promise<void> {
   try {
     const songs = await listSongs();
-    const day = new Date();
-    const stamp = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-    const file = `chiptrackr-backup-${stamp}.zip`;
-    download(createBackup(songs, storedSettings()), file, 'application/zip');
-    track('library-backup', { songs: songs.length });
-    libraryInfo.textContent = t('Saved {songs} and the settings to {file}.', { songs: songCount(songs.length), file });
+    if (!songs.length && !withSettings) {
+      info.textContent = t('No songs saved here yet.');
+      return;
+    }
+    const file = `chiptrackr-${withSettings ? 'backup' : 'songs'}-${today()}.zip`;
+    download(createBackup(songs, withSettings ? storedSettings() : undefined), file, 'application/zip');
+    track('library-backup', { songs: songs.length, settings: withSettings });
+    const saved = { songs: songCount(songs.length), file };
+    info.textContent = withSettings ? t('Saved {songs} and the settings to {file}.', saved) : t('Saved {songs} to {file}.', saved);
   } catch (error) {
-    libraryInfo.textContent = t('Could not back up: {error}', { error: (error as Error).message });
+    info.textContent = t('Could not back up: {error}', { error: backupError(error) });
   }
 }
 
-async function restoreLibrary(file: File): Promise<void> {
+/**
+ * Adds the songs of a backup ZIP to the library, then, with `withSettings`
+ * and if the backup has any, offers to take its settings (which reloads).
+ * Returns what was added, or null when nothing could be read.
+ */
+async function restoreBackup(bytes: Uint8Array, source: string, withSettings: boolean, info: HTMLElement): Promise<{ added: number; skipped: number } | null> {
   try {
-    const { songs, failed, settings } = readBackup(new Uint8Array(await file.arrayBuffer()));
-    if (!songs.length && !settings) {
-      libraryInfo.textContent = t('No songs found in {file}.', { file: file.name });
-      return;
+    const { songs, failed, settings } = readBackup(bytes);
+    const useSettings = withSettings ? settings : undefined;
+    if (!songs.length && !useSettings) {
+      info.textContent = t('No songs found in {file}.', { file: source });
+      return null;
     }
     const { add, skipped } = planRestore(await listSongs(), songs);
     await addSongs(add);
-    track('library-restore', { songs: add.length, settings: !!settings });
-    await showLibrary();
-    libraryInfo.textContent = [
-      t('Added {songs} from {file}.', { songs: songCount(add.length), file: file.name }),
+    track('library-restore', { songs: add.length, settings: !!useSettings });
+    if (songsDialog.open) await showLibrary();
+    info.textContent = [
+      t('Added {songs} from {file}.', { songs: songCount(add.length), file: source }),
       skipped ? t('Already here: {songs}.', { songs: songCount(skipped) }) : '',
       failed.length ? t('Could not read: {files}', { files: failed.join(', ') }) : '',
     ].filter(Boolean).join(' ');
-    if (settings && (await ask(t('The backup also holds settings (Setup, colours, Jam name). Replace the settings here with them? The tracker reloads; your song is kept, but other open song tabs and the undo history are not.'), { title: t('Restore settings'), ok: t('Replace and reload'), cancel: t('Keep mine') }))) {
-      for (const [key, value] of Object.entries(settings)) localStorage.setItem(key, value);
-      await autosaveNow();
-      reloading = true;
-      location.reload();
+    if (useSettings) {
+      // Answer the caller first, so a sending browser hears back before this one reloads.
+      setTimeout(() => void offerSettings(useSettings));
     }
+    return { added: add.length, skipped };
   } catch (error) {
-    libraryInfo.textContent = t('Could not restore {file}: {error}', { file: file.name, error: error instanceof Error && error.message === BLOCKED ? t(BLOCKED) : (error as Error).message });
+    info.textContent = t('Could not restore {file}: {error}', { file: source, error: backupError(error) });
+    return null;
   }
 }
 
+async function offerSettings(settings: Record<string, string>): Promise<void> {
+  const replace = await ask(t('The backup also holds settings (Setup, colours, Jam name). Replace the settings here with them? The tracker reloads; your song is kept, but other open song tabs and the undo history are not.'), {
+    title: t('Restore settings'),
+    ok: t('Replace and reload'),
+    cancel: t('Keep mine'),
+  });
+  if (!replace) return;
+  try {
+    for (const [key, value] of Object.entries(settings)) localStorage.setItem(key, value);
+  } catch {
+    status.textContent = t('Not available in this browser.');
+    return;
+  }
+  await autosaveNow();
+  reloading = true;
+  location.reload();
+}
+
+/** A file input that hands its file over, readied for picking again. */
+function onFilePicked(input: HTMLInputElement, use: (file: File) => void): void {
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) use(file);
+  });
+}
+
 const restoreFile = $<HTMLInputElement>('#library-restore-file');
-$('#library-backup').addEventListener('click', () => void backUpLibrary());
+$('#library-backup').addEventListener('click', () => void downloadBackup(false, libraryInfo));
 $('#library-restore').addEventListener('click', () => restoreFile.click());
-restoreFile.addEventListener('change', () => {
-  const file = restoreFile.files?.[0];
-  restoreFile.value = '';
-  if (file) void restoreLibrary(file);
-});
+onFilePicked(restoreFile, (file) => void file.arrayBuffer().then((buffer) => restoreBackup(new Uint8Array(buffer), file.name, false, libraryInfo)));
 $('#songs-open').addEventListener('click', openSongsDialog);
 $('#library-save').addEventListener('click', () => void saveToLibrary());
 $('#library-open').addEventListener('click', () => void openLibrarySong());
@@ -1802,6 +1842,8 @@ shareSend.addEventListener('click', () => void sendShare(false));
 shareFile.addEventListener('click', () => void sendShare(true));
 shareUrl.addEventListener('focus', () => shareUrl.select());
 window.addEventListener('hashchange', () => {
+  const offer = transferFromHash(location.hash);
+  if (offer) return openTransferOffer(offer);
   const invite = jamFromHash(location.hash);
   if (invite) return openJamInvite(invite);
   const text = shareFromHash(location.hash);
@@ -2013,15 +2055,15 @@ async function joinJam(): Promise<void> {
   }
 }
 
-/** Copies a jam code; `copied` and `select` are the messages for success and for copying by hand. */
-async function copyField(field: HTMLInputElement, copied: string, select: string): Promise<void> {
+/** Copies a code or link; `copied` and `select` are the messages for success and for copying by hand. */
+async function copyField(field: HTMLInputElement, copied: string, select: string, info: HTMLElement = jamInfo): Promise<void> {
   if (!field.value) return;
   try {
     await navigator.clipboard.writeText(field.value);
-    jamInfo.textContent = copied;
+    info.textContent = copied;
   } catch {
     field.select();
-    jamInfo.textContent = select;
+    info.textContent = select;
   }
 }
 
@@ -2081,8 +2123,162 @@ jamInviteUrl.addEventListener('focus', () => jamInviteUrl.select());
 jamAnswerOut.addEventListener('focus', () => jamAnswerOut.select());
 addEventListener('pagehide', () => jam?.leave());
 
+// ---- Backup and transfer (Setup) --------------------------------------------
+// A transfer is a one-off WebRTC link like a jam's: the sending browser makes
+// a link with its offer, the receiving one answers with a code, then the
+// sender sends one backup ZIP and the receiver replies with what it added.
+
+const transferDialog = $<HTMLDialogElement>('#transfer-dialog');
+const transferUrl = $<HTMLInputElement>('#transfer-url');
+const transferAnswer = $<HTMLInputElement>('#transfer-answer');
+const transferAnswerOut = $<HTMLInputElement>('#transfer-answer-out');
+const transferInfo = $('#transfer-info');
+let transferInvite: Invite | null = null;
+let transferOffer: string | null = null;
+let transferCancel: (() => void) | null = null;
+let transferLink: Link | null = null;
+
+function renderTransfer(): void {
+  const receiving = transferOffer !== null;
+  $('#transfer-start').hidden = receiving || !!transferInvite;
+  $('#transfer-sending').hidden = receiving || !transferInvite;
+  $('#transfer-receiving').hidden = !receiving;
+  $('#transfer-accept').hidden = !!transferAnswerOut.value;
+  $('#transfer-answer-box').hidden = !transferAnswerOut.value;
+}
+
+function endTransfer(): void {
+  transferInvite?.cancel();
+  transferCancel?.();
+  transferLink?.close();
+  transferInvite = transferLink = transferCancel = transferOffer = null;
+  transferUrl.value = transferAnswer.value = transferAnswerOut.value = '';
+}
+
+function openTransferDialog(): void {
+  if (!transferDialog.open) {
+    if (!transferLink) transferInfo.textContent = '';
+    transferDialog.showModal();
+  }
+  renderTransfer();
+}
+
+async function makeTransferLink(): Promise<void> {
+  endTransfer();
+  transferInfo.textContent = t('Making a transfer link…');
+  try {
+    transferInvite = await createInvite();
+    transferUrl.value = jamAddress(TRANSFER_PARAM, transferInvite.offer);
+    transferInfo.textContent = '';
+  } catch (error) {
+    transferInfo.textContent = t('Could not make a transfer link: {error}.', { error: (error as Error).message });
+  }
+  renderTransfer();
+}
+
+/** Sender: connects with the answer code, sends everything and waits for the receipt. */
+async function sendTransfer(): Promise<void> {
+  const invite = transferInvite;
+  if (!invite || !transferAnswer.value.trim()) return;
+  transferInfo.textContent = t('Connecting…');
+  try {
+    const link = await invite.accept(transferAnswer.value);
+    transferLink = link;
+    const songs = await listSongs();
+    const settings = storedSettings();
+    link.onMessage = (bytes) => {
+      let reply: { added?: number; skipped?: number } = {};
+      try {
+        reply = JSON.parse(new TextDecoder().decode(bytes)) as typeof reply;
+      } catch {
+        // An empty receipt still means it arrived.
+      }
+      transferInfo.textContent = t('Sent {songs} and the settings. The other browser added {added}.', { songs: songCount(songs.length), added: songCount(reply.added ?? 0) });
+      track('transfer-send', { songs: songs.length });
+      endTransfer();
+      renderTransfer();
+    };
+    link.onClose = () => {
+      if (transferLink !== link) return;
+      transferInfo.textContent = t('The other browser went away before the transfer was done.');
+      endTransfer();
+      renderTransfer();
+    };
+    transferInfo.textContent = t('Sending {songs}…', { songs: songCount(songs.length) });
+    link.send(createBackup(songs, settings));
+  } catch (error) {
+    transferInfo.textContent = t('Could not connect: {error}.', { error: (error as Error).message });
+  }
+}
+
+/** Receiver: opened from a transfer link. */
+function openTransferOffer(offer: string): void {
+  history.replaceState(null, '', location.pathname + location.search);
+  endTransfer();
+  transferOffer = offer;
+  transferInfo.textContent = '';
+  openTransferDialog();
+}
+
+async function receiveTransfer(): Promise<void> {
+  const offer = transferOffer;
+  if (!offer) return;
+  transferInfo.textContent = t('Making your answer code…');
+  try {
+    const { answer, link, cancel } = await answerInvite(offer, t('This is not a transfer link'));
+    transferCancel = cancel;
+    transferAnswerOut.value = answer;
+    transferInfo.textContent = '';
+    renderTransfer();
+    const open = await link;
+    transferLink = open;
+    transferInfo.textContent = t('Connected. Receiving…');
+    open.onMessage = (bytes) =>
+      void (async () => {
+        const result = await restoreBackup(bytes, t('the other browser'), true, transferInfo);
+        open.send(new TextEncoder().encode(JSON.stringify(result ?? { added: 0, skipped: 0 })));
+        track('transfer-receive', { songs: result?.added ?? 0 });
+        transferLink = null;
+        transferCancel = null;
+        transferOffer = null;
+        transferAnswerOut.value = '';
+        renderTransfer();
+      })();
+    open.onClose = () => {
+      if (transferLink !== open) return;
+      transferInfo.textContent = t('The other browser went away before the transfer was done.');
+      transferLink = null;
+    };
+  } catch (error) {
+    transferInfo.textContent = t('Could not receive: {error}.', { error: (error as Error).message });
+    renderTransfer();
+  }
+}
+
+const backupFile = $<HTMLInputElement>('#backup-file');
+$('#backup-all').addEventListener('click', () => void downloadBackup(true, $('#setup-info')));
+$('#backup-restore').addEventListener('click', () => backupFile.click());
+onFilePicked(backupFile, (file) => void file.arrayBuffer().then((buffer) => restoreBackup(new Uint8Array(buffer), file.name, true, $('#setup-info'))));
+$('#transfer-open').addEventListener('click', () => {
+  if (!transferLink && !transferAnswerOut.value) endTransfer();
+  openTransferDialog();
+});
+$('#transfer-send').addEventListener('click', () => void makeTransferLink());
+$('#transfer-copy').addEventListener('click', () => void copyField(transferUrl, t('Link copied.'), t('Select the link and copy it.'), transferInfo));
+$('#transfer-connect').addEventListener('click', () => void sendTransfer());
+$('#transfer-accept').addEventListener('click', () => void receiveTransfer());
+$('#transfer-answer-copy').addEventListener('click', () => void copyField(transferAnswerOut, t('Answer code copied.'), t('Select the answer code and copy it.'), transferInfo));
+transferUrl.addEventListener('focus', () => transferUrl.select());
+transferAnswerOut.addEventListener('focus', () => transferAnswerOut.select());
+
 /** On start, a shared song from the link wins over the last session. */
 async function startUp(): Promise<void> {
+  const offer = transferFromHash(location.hash);
+  if (offer) {
+    await restoreLastSession();
+    openTransferOffer(offer);
+    return;
+  }
   const invite = jamFromHash(location.hash);
   if (invite) {
     await restoreLastSession();
