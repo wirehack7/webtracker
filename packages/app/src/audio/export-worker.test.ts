@@ -66,11 +66,14 @@ describe('export worker', () => {
     expect(progress.at(-1)).toBeLessThanOrEqual(1);
   });
 
-  it('writes FLAC and MP3, the MP3 at a rate it supports', async () => {
+  it('writes FLAC', async () => {
     const flac = await exportSong({ kind: 'flac', depth: 16 });
     expect(flac.last.message).toMatchObject({ type: 'done', fileName: 'tune.flac' });
     expect(new TextDecoder().decode((flac.last.message as { bytes: Uint8Array }).bytes.subarray(0, 4))).toBe('fLaC');
-    replies = [];
+  });
+
+  // Encoding MP3 in JavaScript takes several seconds on a slow CI runner.
+  it('writes MP3 at a rate it supports', { timeout: 30_000 }, async () => {
     const mp3 = await exportSong({ kind: 'mp3', kbps: 128 }, { sampleRate: 96000 });
     expect(mp3.last.message).toMatchObject({ type: 'done', fileName: 'tune.mp3' });
     // Half the progress is rendering, half encoding.
