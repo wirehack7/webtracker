@@ -17,6 +17,7 @@ export interface Language {
 export const LANGUAGES: Record<string, Language> = {
   en: { name: 'English' },
   de: { name: 'Deutsch', load: () => import('./de.ts') },
+  fi: { name: 'Suomi', load: () => import('./fi.ts') },
 };
 
 let messages: Messages = {};

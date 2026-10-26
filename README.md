@@ -17,7 +17,7 @@ For your own demos and intros there is a [replayer](#replayer-for-demos-and-intr
 
 Jam lets several people edit one song live. The host sends each person an invite link; they open it and send back an answer code, and from then on every edit travels straight between the browsers over WebRTC, with everyone's cursor shown in the pattern. Only a public STUN server (Google's) helps the browsers find each other's address; no song data passes through it. Some strict networks (certain mobile carriers, corporate firewalls) block such direct connections. "Open in a new tab" jams between tabs of one browser.
 
-The interface, Help and the manual come in English and German. Setup > Language picks one, or Auto follows the browser. Tracker terms such as Pattern, Sample, Instrument, Envelope and the effect names stay in English in every language, as trackers have always called them. More languages are welcome: [docs/TRANSLATING.md](docs/TRANSLATING.md) says how to add one.
+The interface, Help and the manual come in English, German and Finnish. Setup > Language picks one, or Auto follows the browser. Tracker terms such as Pattern, Sample, Instrument, Envelope and the effect names stay in English in every language, as trackers have always called them. More languages are welcome: [docs/TRANSLATING.md](docs/TRANSLATING.md) says how to add one.
 
 ## Inspiration
 

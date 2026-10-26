@@ -1,8 +1,8 @@
 # Translating chiptrackr
 
 The tracker, its Help and the manual page can be shown in more than one
-language. English is the source and the default; German is the first
-translation. This page says how the language packs work and how to add one.
+language. English is the source and the default; German and Finnish are the
+translations so far. This page says how the language packs work and how to add one.
 
 ## How it works
 
@@ -90,7 +90,8 @@ concerned, when
 Check the result in the browser too, at desktop and phone size: `pnpm dev`,
 then choose the language in Setup. Longer words can crowd the buttons; the
 phone layout is the tightest. `pnpm build && pnpm smoke` checks the German
-pack at desktop and phone size; a new language can get the same check there.
+and Finnish packs at desktop and phone size; a new language can get the same
+check there.
 
 ## Changing English texts
 
