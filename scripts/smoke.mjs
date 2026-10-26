@@ -277,6 +277,8 @@ await check("What's new after an update", async () => {
     await page.locator('#whats-new[open] .whats-new-list li').first().waitFor();
     if (shots) await page.screenshot({ path: join(shots, 'whats-new-phone.png') });
     await page.locator('#whats-new button[type=submit]').click();
+    // The dialog records the release in its close event, which fires a moment after the click.
+    await page.waitForFunction(() => localStorage.getItem('webtracker.whatsNew') !== '2000-01-01');
     await page.reload({ waitUntil: 'load' });
     await page.waitForSelector('#pattern-no');
     await page.waitForTimeout(500);

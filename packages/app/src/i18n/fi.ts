@@ -1039,6 +1039,7 @@ export default {
   'Firefox is checked with every update, together with Chrome and Safari.': 'Firefox testataan jokaisen päivityksen yhteydessä, Chromen ja Safarin ohella.',
   'The manual has screenshots and uses the full width of large screens.': 'Käyttöohjeessa on kuvakaappauksia, ja se käyttää suurten näyttöjen koko leveyden.',
   'This What\'s new window shows what changed since your last visit. Help opens it any time.': 'Tämä ikkuna näyttää, mikä on muuttunut edellisen käyntisi jälkeen. Ohjeesta sen saa auki milloin vain.',
+  'Help on phones: Close sits beside the title and every topic tab is in view.': 'Ohje puhelimessa: Sulje on otsikon vieressä ja kaikki aihevälilehdet näkyvät.',
   'Export your song as WAV, FLAC or MP3 from the Save dialog.': 'Vie kappaleesi WAV-, FLAC- tai MP3-muodossa Tallenna-ikkunasta.',
   'Jam: make music together live with a friend through an invite link.': 'Jam: tee musiikkia livenä yhdessä kaverin kanssa kutsulinkin kautta.',
   'The replayer plays your song in demos and intros. Save > Open in replayer tries it right away.': 'Replayer soittaa kappaleesi demoissa ja introissa. Tallenna > Avaa replayerissa kokeilee sitä heti.',

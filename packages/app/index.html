@@ -177,10 +177,12 @@
     <dialog class="panel help help-dialog" id="help" aria-label="Help">
       <div class="help-head">
         <h2 class="ptitle">Help</h2>
-        <a class="btn help-manual" id="help-manual" href="./manual.html" target="_blank" rel="noopener" title="The full manual on its own page">Manual</a>
-        <button type="button" class="btn" id="whats-new-open" title="What changed in recent updates">What's new</button>
+        <div class="help-links">
+          <a class="btn help-manual" id="help-manual" href="./manual.html" target="_blank" rel="noopener" title="The full manual on its own page">Manual</a>
+          <button type="button" class="btn" id="whats-new-open" title="What changed in recent updates">What's new</button>
+        </div>
         <input type="search" class="value text help-search" placeholder="Search keys and effects" aria-label="Search help" spellcheck="false" />
-        <form method="dialog">
+        <form method="dialog" class="help-close">
           <button type="submit" class="btn" autofocus>Close</button>
         </form>
       </div>
