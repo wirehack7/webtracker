@@ -288,7 +288,7 @@ const WORKFLOWS: HelpSection = {
       title: 'Saving and sharing',
       entries: [
         { code: 'Save', text: 'Download as XM or MOD, export WAV, FLAC or MP3, or go back to one of the autosaved versions.' },
-        { code: 'Songs', text: 'Keeps songs in this browser so you can come back to them offline.' },
+        { code: 'Songs', text: 'Keeps songs in this browser so you can come back to them offline, and backs them all up as one ZIP.' },
         { code: 'Share', text: 'Packs the song into a link; whoever opens it gets the song in their tracker.' },
       ],
     },

@@ -58,8 +58,9 @@ import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
 import { BLOCKED } from './storage/db.ts';
-import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type AutosaveOrigin } from './storage/autosave.ts';
-import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
+import { applyOrigin, listAutosaves, originOf, writeAutosave, type Autosave } from './storage/autosave.ts';
+import { createBackup, planRestore, readBackup } from './storage/backup.ts';
+import { addSongs, deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { track } from './track.ts';
 import { initLanguage, language, LANGUAGES, msg, t, tNodes, translatePage } from './i18n/i18n.ts';
@@ -1512,11 +1513,6 @@ async function restoreLastSession(): Promise<void> {
   }
 }
 
-/** What saving as XM would lose of a MOD, kept beside the XM bytes. */
-function originOf(s: Song): AutosaveOrigin {
-  return { format: s.format, formatName: s.formatName, channelPanning: [...s.channelPanning] };
-}
-
 // ---- Library: songs kept in this browser ---------------------------------
 
 const songsDialog = $<HTMLDialogElement>('#songs-dialog');
@@ -1627,6 +1623,55 @@ async function deleteLibrarySong(): Promise<void> {
   await showLibrary();
 }
 
+const songCount = (count: number) => (count === 1 ? t('{count} song', { count }) : t('{count} songs', { count }));
+
+async function backUpLibrary(): Promise<void> {
+  try {
+    const songs = await listSongs();
+    if (!songs.length) {
+      libraryInfo.textContent = t('No songs saved here yet.');
+      return;
+    }
+    const day = new Date();
+    const stamp = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    const file = `chiptrackr-songs-${stamp}.zip`;
+    download(createBackup(songs), file, 'application/zip');
+    track('library-backup', { songs: songs.length });
+    libraryInfo.textContent = t('Saved {songs} to {file}.', { songs: songCount(songs.length), file });
+  } catch (error) {
+    libraryInfo.textContent = t('Could not back up: {error}', { error: (error as Error).message });
+  }
+}
+
+async function restoreLibrary(file: File): Promise<void> {
+  try {
+    const { songs, failed } = readBackup(new Uint8Array(await file.arrayBuffer()));
+    if (!songs.length) {
+      libraryInfo.textContent = t('No songs found in {file}.', { file: file.name });
+      return;
+    }
+    const { add, skipped } = planRestore(await listSongs(), songs);
+    await addSongs(add);
+    track('library-restore', { songs: add.length });
+    await showLibrary();
+    libraryInfo.textContent = [
+      t('Added {songs} from {file}.', { songs: songCount(add.length), file: file.name }),
+      skipped ? t('Already here: {songs}.', { songs: songCount(skipped) }) : '',
+      failed.length ? t('Could not read: {files}', { files: failed.join(', ') }) : '',
+    ].filter(Boolean).join(' ');
+  } catch (error) {
+    libraryInfo.textContent = t('Could not restore {file}: {error}', { file: file.name, error: error instanceof Error && error.message === BLOCKED ? t(BLOCKED) : (error as Error).message });
+  }
+}
+
+const restoreFile = $<HTMLInputElement>('#library-restore-file');
+$('#library-backup').addEventListener('click', () => void backUpLibrary());
+$('#library-restore').addEventListener('click', () => restoreFile.click());
+restoreFile.addEventListener('change', () => {
+  const file = restoreFile.files?.[0];
+  restoreFile.value = '';
+  if (file) void restoreLibrary(file);
+});
 $('#songs-open').addEventListener('click', openSongsDialog);
 $('#library-save').addEventListener('click', () => void saveToLibrary());
 $('#library-open').addEventListener('click', () => void openLibrarySong());
