@@ -16,11 +16,13 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       // Floors a little under the current numbers, so coverage can only go down on purpose.
       thresholds: {
-        lines: 58,
-        'packages/engine/src/**': { lines: 97, branches: 86 },
+        lines: 76,
+        'packages/engine/src/**': { lines: 97, branches: 87 },
         'packages/formats/src/**': { lines: 92, branches: 72 },
         'packages/replayer/src/**': { lines: 96, branches: 86 },
-        'packages/app/src/**': { lines: 19 },
+        'packages/app/src/**': { lines: 58 },
+        // The app without main.ts, which wires the page together and is left to the browser smoke tests.
+        'packages/app/src/*/**': { lines: 98, branches: 88 },
       },
     },
   },

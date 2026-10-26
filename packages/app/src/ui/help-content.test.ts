@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { HELP_SECTIONS, cellHelpTarget, effectHelpId, entryMatches, findEntry, sectionOf, volumeHelpId } from './help-content.ts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { useMessages } from '../i18n/i18n.ts';
+import { HELP_SECTIONS, cellHelpTarget, localizeHelp, effectHelpId, entryMatches, findEntry, sectionOf, volumeHelpId } from './help-content.ts';
 
 describe('help content', () => {
   it('has unique entry ids', () => {
@@ -38,5 +39,28 @@ describe('help content', () => {
     expect(entryMatches(entry, 'retrigger')).toBe(true);
     expect(entryMatches(entry, 'E9x drum')).toBe(true);
     expect(entryMatches(entry, 'retrigger vibrato')).toBe(false);
+  });
+});
+
+describe('localizeHelp', () => {
+  afterEach(() => useMessages('en', {}));
+
+  it('translates the help once and keeps the English text searchable', () => {
+    const entry = findEntry('fx-E9')!;
+    const english = `${entry.code} ${entry.name ?? ''} ${entry.text}`;
+    useMessages('de', { [entry.text]: 'Neu anschlagen', [HELP_SECTIONS[0]!.title]: 'Erster Teil' });
+    localizeHelp();
+    expect(entry.text).toBe('Neu anschlagen');
+    expect(entry.source).toBe(english);
+    expect(HELP_SECTIONS[0]!.title).toBe('Erster Teil');
+    // Searching in English still finds it, and a second call changes nothing.
+    expect(entryMatches(entry, 'E9x')).toBe(true);
+    useMessages('de', { 'Neu anschlagen': 'twice' });
+    localizeHelp();
+    expect(entry.text).toBe('Neu anschlagen');
+  });
+
+  it('has no entry for an empty cell', () => {
+    expect(cellHelpTarget('effect', { volume: 0, effect: 0, param: 0 })).toBeNull();
   });
 });

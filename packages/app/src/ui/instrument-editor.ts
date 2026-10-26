@@ -68,7 +68,8 @@ class EnvelopeView {
     select.title = t('Replace the envelope with a ready-made one');
     select.append(new Option(t('Preset'), ''), ...presets.map((p, i) => new Option(t(p.name), String(i))));
     select.addEventListener('change', () => {
-      const preset = presets[Number(select.value)];
+      // The placeholder has the value '', which Number() would read as the first preset.
+      const preset = select.value === '' ? undefined : presets[Number(select.value)];
       select.value = '';
       if (!preset) return;
       this.edit('envelope preset', (e) => Object.assign(e, preset.build()));

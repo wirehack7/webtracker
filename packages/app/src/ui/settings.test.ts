@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { midiToNote, parseColors, uiPixel, velocityToVolume } from './settings.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULTS, loadSettings, midiToNote, parseColors, saveSettings, uiPixel, velocityToVolume } from './settings.ts';
 
 describe('MIDI mapping', () => {
   it('puts MIDI 60 on C-4 and drops notes outside the tracker range', () => {
@@ -49,5 +49,46 @@ describe('uiPixel', () => {
   it('never goes below one device pixel', () => {
     expect(uiPixel('small', false, 0.5)).toBe(2);
     expect(uiPixel('small', false, 0)).toBe(1);
+  });
+});
+
+describe('stored settings', () => {
+  const storage = (data: Record<string, string> = {}, throws = false) => {
+    const store = new Map(Object.entries(data));
+    const check = () => {
+      if (throws) throw new Error('storage is off');
+    };
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (check(), store.get(k) ?? null),
+      setItem: (k: string, v: string) => (check(), store.set(k, v)),
+    });
+    return store;
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('starts from the defaults and saves what changed', () => {
+    const store = storage();
+    expect(loadSettings()).toEqual(DEFAULTS);
+    saveSettings({ ...DEFAULTS, theme: 'amber', beat: 8 });
+    expect(JSON.parse(store.get('webtracker.settings')!)).toMatchObject({ theme: 'amber', beat: 8 });
+    expect(loadSettings()).toMatchObject({ theme: 'amber', beat: 8, bar: DEFAULTS.bar });
+  });
+
+  it('drops unknown themes, sizes and colours, and maps the old interpolation switch', () => {
+    storage({
+      'webtracker.settings': JSON.stringify({ theme: 'neon', uiSize: 'huge', colors: { '--pat-note': '#ABCDEF', '--nope': '#000000' }, interpolation: false }),
+    });
+    const s = loadSettings();
+    expect(s).toMatchObject({ theme: DEFAULTS.theme, uiSize: DEFAULTS.uiSize, resampler: 'none', colors: { '--pat-note': '#abcdef' } });
+    expect(s).not.toHaveProperty('interpolation');
+  });
+
+  it('works without storage and with broken data', () => {
+    storage({ 'webtracker.settings': '{broken' });
+    expect(loadSettings()).toEqual(DEFAULTS);
+    storage({}, true);
+    expect(loadSettings()).toEqual(DEFAULTS);
+    expect(() => saveSettings(DEFAULTS)).not.toThrow();
   });
 });
