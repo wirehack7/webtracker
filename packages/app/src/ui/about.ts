@@ -2,6 +2,8 @@
 // logo and a sine scroller, drawn at 320x180 and scaled up in whole pixels.
 // The colours come from the current theme, so every scheme gets its own demo.
 
+import { msg, t as translate } from '../i18n/i18n.ts';
+
 export interface About {
   open(): void;
 }
@@ -12,11 +14,10 @@ const GLYPH = 16;
 const FONT = `${GLYPH}px 'Press Start 2P', ui-monospace, monospace`;
 const SMALL_FONT = `8px 'Press Start 2P', ui-monospace, monospace`;
 
-export const SCROLL_TEXT =
-  'chiptrackr by wirehack7 ... a tracker for chiptunes and modules, right in your browser ... ' +
-  'load a MOD, XM, S3M or IT and make some noise ... greetings to every coder, musician and ' +
-  'pixeler who still keeps the scene alive ... sixteen rows a beat, hex all the way down ... ' +
-  'see you at the next party ...     ';
+// One literal, so the language packs can find it.
+export const SCROLL_TEXT = msg(
+  'chiptrackr by wirehack7 ... a tracker for chiptunes and modules, right in your browser ... load a MOD, XM, S3M or IT and make some noise ... greetings to every coder, musician and pixeler who still keeps the scene alive ... sixteen rows a beat, hex all the way down ... see you at the next party ...     ',
+);
 
 export interface Glyph {
   char: string;
@@ -81,6 +82,7 @@ function readPalette(): Palette {
 
 export function mountAbout(dialog: HTMLDialogElement): About {
   const canvas = dialog.querySelector<HTMLCanvasElement>('.about-demo')!;
+  const scrollText = translate(SCROLL_TEXT);
   const ctx = canvas.getContext('2d')!;
   const logo = document.createElement('canvas');
   const logoCtx = logo.getContext('2d')!;
@@ -157,7 +159,7 @@ export function mountAbout(dialog: HTMLDialogElement): About {
 
     // Sine scroller along the bottom.
     ctx.font = FONT;
-    for (const glyph of scrollerGlyphs(SCROLL_TEXT, t * 60, t, 138, 14)) {
+    for (const glyph of scrollerGlyphs(scrollText, t * 60, t, 138, 14)) {
       ctx.fillStyle = palette.bg;
       ctx.fillText(glyph.char, glyph.x + 2, glyph.y + 2);
       ctx.fillStyle = palette.cycle[Math.floor(glyph.index / 3 + t * 2) % palette.cycle.length]!;

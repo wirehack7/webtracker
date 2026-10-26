@@ -62,9 +62,17 @@ import { applyOrigin, listAutosaves, writeAutosave, type Autosave, type Autosave
 import { deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { track } from './track.ts';
+import { initLanguage, language, LANGUAGES, msg, t, tNodes, translatePage } from './i18n/i18n.ts';
+import { editName } from './i18n/edit-names.ts';
 import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, uiPixel, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
 
 const $ = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
+
+/** Browser preferences from the Setup dialog. */
+const prefs: Settings = loadSettings();
+// The language pack loads before anything below writes text.
+await initLanguage(prefs.language);
+translatePage();
 
 const app = $<HTMLDivElement>('#app');
 const insPicker = $<HTMLDialogElement>('#ins-picker');
@@ -72,8 +80,6 @@ const patPicker = $<HTMLDialogElement>('#pat-picker');
 const status = $<HTMLSpanElement>('#status');
 const patternEl = $<HTMLDivElement>('#pattern');
 const view = new PatternEditor(patternEl);
-/** Browser preferences from the Setup dialog. */
-const prefs: Settings = loadSettings();
 
 const settings = { add: 1, octave: 4 };
 const limits = { bpm: [32, 255], speed: [1, 31], add: [0, 16], octave: [0, 7], channels: [1, MAX_CHANNELS] } as const;
@@ -128,12 +134,12 @@ function ensureEngine(): Promise<EngineNode | null> {
       node.send({ type: 'load', song: editor.song });
       node.send({ type: 'mute', muted });
       node.send(mixerMessage());
-      if (status.textContent === before) status.textContent = `Audio running at ${node.context.sampleRate} Hz.`;
+      if (status.textContent === before) status.textContent = t('Audio running at {rate} Hz.', { rate: node.context.sampleRate });
       return node;
     },
     (error: unknown) => {
       starting = null;
-      status.textContent = `Audio could not start: ${String(error)}`;
+      status.textContent = t('Audio could not start: {error}', { error: String(error) });
       return null;
     },
   );
@@ -165,7 +171,7 @@ function playNote(note: number, volume = 0): void {
     advance();
   }
   void previewOn(note);
-  status.textContent = `${noteName(note)}  Instr ${hex(instrument)}  Channel ${view.channel + 1}`;
+  status.textContent = t('{note}  Instr {instrument}  Channel {channel}', { note: noteName(note), instrument: hex(instrument), channel: view.channel + 1 });
 }
 
 // ---- Editing -------------------------------------------------------------
@@ -236,6 +242,18 @@ function clearAtCursor(): void {
 // the pattern, Alt for the selection. Ctrl+F4 and Alt+F4 belong to the
 // browser and the system, so Ctrl+Shift+F4 also copies the pattern.
 const BLOCK_ACTIONS: Record<string, 'cut' | 'copy' | 'paste'> = { F3: 'cut', F4: 'copy', F5: 'paste' };
+const BLOCK_MESSAGES = {
+  cut: {
+    block: msg('Cut block: {rows} rows × {channels} channels.'),
+    track: msg('Cut track: {rows} rows × {channels} channels.'),
+    pattern: msg('Cut pattern: {rows} rows × {channels} channels.'),
+  },
+  copy: {
+    block: msg('Copied block: {rows} rows × {channels} channels.'),
+    track: msg('Copied track: {rows} rows × {channels} channels.'),
+    pattern: msg('Copied pattern: {rows} rows × {channels} channels.'),
+  },
+};
 // Alt+Q..I jumps to channels 1-8, Alt+A..K to 9-16, as in FT2.
 const CHANNEL_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK'];
 
@@ -261,7 +279,7 @@ function blockKey(event: KeyboardEvent): boolean {
   }
   clipboard = copyBlock(song(), view.pattern, block);
   if (action === 'cut') editor.editPattern(view.patternIndex, `cut ${scope}`, (p) => clearBlock(song(), p, block));
-  status.textContent = `${action === 'cut' ? 'Cut' : 'Copied'} ${scope}: ${clipboard.rows} rows × ${clipboard.channels} channels.`;
+  status.textContent = t(BLOCK_MESSAGES[action === 'cut' ? 'cut' : 'copy'][scope], { rows: clipboard.rows, channels: clipboard.channels });
   return true;
 }
 
@@ -269,7 +287,8 @@ function copySelection(cut: boolean): void {
   const block = view.blockOrCursor();
   clipboard = copyBlock(song(), view.pattern, block);
   if (cut) editor.editPattern(view.patternIndex, 'cut', (p) => clearBlock(song(), p, block));
-  status.textContent = `${cut ? 'Cut' : 'Copied'} ${clipboard.rows} rows × ${clipboard.channels} channels.`;
+  const size = { rows: clipboard.rows, channels: clipboard.channels };
+  status.textContent = cut ? t('Cut {rows} rows × {channels} channels.', size) : t('Copied {rows} rows × {channels} channels.', size);
 }
 
 function paste(mix: boolean): void {
@@ -290,7 +309,7 @@ function transpose(semitones: number): void {
 function interpolateSelection(): void {
   const block = view.selection;
   if (!block || block.row1 - block.row0 < 2) {
-    status.textContent = 'Select at least three rows to interpolate.';
+    status.textContent = t('Select at least three rows to interpolate.');
     return;
   }
   const column = view.column >= Column.Effect ? 'effect' : 'volume';
@@ -298,9 +317,15 @@ function interpolateSelection(): void {
   editor.editPattern(view.patternIndex, 'interpolate', (p) => {
     changed = interpolateBlock(song(), p, block, column);
   });
-  status.textContent = changed
-    ? `Interpolated ${changed} ${column === 'effect' ? 'effect values' : 'volumes'}.`
-    : `Nothing to interpolate: the first and last row need the same kind of ${column === 'effect' ? 'effect' : 'volume command'}.`;
+  if (column === 'effect') {
+    status.textContent = changed
+      ? t('Interpolated {count} effect values.', { count: changed })
+      : t('Nothing to interpolate: the first and last row need the same kind of effect.');
+  } else {
+    status.textContent = changed
+      ? t('Interpolated {count} volumes.', { count: changed })
+      : t('Nothing to interpolate: the first and last row need the same kind of volume command.');
+  }
 }
 
 const JUMP_KEYS: Record<string, number> = { F9: 0, F10: 1, F11: 2, F12: 3 };
@@ -586,8 +611,8 @@ function fillPatternPicker(): void {
     const info = infos[Number((li as HTMLElement).dataset.index)]!;
     const rows = document.createElement('span');
     rows.className = 'rows';
-    rows.textContent = `${String(info.rows).padStart(3, '0')} rows `;
-    const at = info.positions.length ? `@ ${info.positions.map((p) => hex(p)).join(' ')}` : 'unused';
+    rows.textContent = `${t('{rows} rows', { rows: String(info.rows).padStart(3, '0') })} `;
+    const at = info.positions.length ? `@ ${info.positions.map((p) => hex(p)).join(' ')}` : t('unused');
     li.append(rows, at);
     li.classList.toggle('empty', info.empty);
   }
@@ -690,13 +715,15 @@ function step(key: keyof typeof limits, delta: number): void {
     const channels = clampTo(s.channels + delta);
     const apply = () => {
       editor.setChannels(channels);
-      status.textContent = `${channels} channels.`;
+      status.textContent = t('{count} channels.', { count: channels });
     };
     if (channels >= s.channels) apply();
     else {
-      const which = channels + 1 === s.channels ? `channel ${s.channels}` : `channels ${channels + 1}–${s.channels}`;
-      const message = `Remove ${which} from every pattern? Undo brings them back.`;
-      void ask(message, { title: 'Channels', ok: 'Remove' }).then((ok) => ok && apply());
+      const message =
+        channels + 1 === s.channels
+          ? t('Remove channel {channel} from every pattern? Undo brings it back.', { channel: s.channels })
+          : t('Remove channels {first}–{last} from every pattern? Undo brings them back.', { first: channels + 1, last: s.channels });
+      void ask(message, { title: t('Channels'), ok: t('Remove') }).then((ok) => ok && apply());
     }
     return;
   }
@@ -712,7 +739,7 @@ function step(key: keyof typeof limits, delta: number): void {
 function setOctave(octave: number, scroll = true): void {
   settings.octave = octave;
   showValue('octave', octave);
-  $('#bar-octave').textContent = `Oct ${octave}`;
+  $('#bar-octave').textContent = t('Oct {octave}', { octave });
   if (scroll) piano.showOctave(octave);
 }
 
@@ -732,7 +759,7 @@ function buildScopes(count: number): void {
     label.textContent = String(c + 1);
     box.append(document.createElement('canvas'), label);
     box.classList.toggle('muted', muted[c] === true);
-    box.title = 'Click: mute, right-click: solo';
+    box.title = t('Click: mute, right-click: solo');
     return box;
   });
   scopes.replaceChildren(...boxes);
@@ -793,7 +820,7 @@ function setMuted(next: boolean[]): void {
   engine?.send({ type: 'mute', muted });
   scopes.querySelectorAll('.scope').forEach((box, c) => box.classList.toggle('muted', muted[c] === true));
   const off = muted.filter(Boolean).length;
-  status.textContent = off ? `Muted: ${muted.flatMap((m, c) => (m ? [c + 1] : [])).join(' ')}` : 'All channels on.';
+  status.textContent = off ? t('Muted: {channels}', { channels: muted.flatMap((m, c) => (m ? [c + 1] : [])).join(' ') }) : t('All channels on.');
 }
 
 function scopeIndex(event: MouseEvent): number {
@@ -847,7 +874,7 @@ function handleWorkletMessage(message: WorkletMessage): void {
 function showPlaying(on: boolean): void {
   playing = on;
   const button = $('#bar-play');
-  button.textContent = on ? 'Stop' : 'Play';
+  button.textContent = on ? t('Stop') : t('Play');
   button.setAttribute('aria-pressed', String(on));
 }
 
@@ -943,7 +970,7 @@ function drawEntryPad(): void {
     field.querySelector('span')!.textContent = texts[i]!;
     field.setAttribute('aria-pressed', String(i === at));
   });
-  fields[0]!.querySelector('small')!.textContent = `Ch ${view.channel + 1}`;
+  fields[0]!.querySelector('small')!.textContent = t('Ch {channel}', { channel: view.channel + 1 });
   app.classList.toggle('value-entry', view.column !== Column.Note);
   const keysFor = `${view.column}:${cell.effect}`;
   if (view.column !== Column.Note && keysFor !== entryKeysFor) {
@@ -985,7 +1012,7 @@ entryPad.addEventListener('click', (event) => {
       break;
     case 'undo': {
       const label = editor.undo();
-      status.textContent = label ? `Undo: ${label}` : 'Nothing to undo.';
+      status.textContent = label ? t('Undo: {edit}', { edit: editName(label) }) : t('Nothing to undo.');
       break;
     }
   }
@@ -1014,18 +1041,18 @@ const SAMPLE_NAME = /\.(wav|aif|aiff|aifc|8svx|iff|xi|pat|flac|mp3|ogg|opus|m4a|
 /** Shows why a file did not open; a dialog, since phones hide the status bar. */
 function loadFailed(file: File, error: unknown): void {
   const message = (error as Error).message;
-  status.textContent = `Could not load ${file.name}: ${message}`;
-  void tell(`${file.name} could not be opened: ${message}`, 'Load');
+  status.textContent = t('Could not load {file}: {error}', { file: file.name, error: message });
+  void tell(t('{file} could not be opened: {error}', { file: file.name, error: message }), t('Load'));
 }
 
 async function confirmDiscard(): Promise<boolean> {
   // With tabs the next song gets its own, so nothing is discarded.
-  return opensNewTab() || !editor.dirty || ask('Discard the changes to the current song?', { title: 'Unsaved changes', ok: 'Discard' });
+  return opensNewTab() || !editor.dirty || ask(t('Discard the changes to the current song?'), { title: t('Unsaved changes'), ok: t('Discard') });
 }
 
 function startSong(next: Song): void {
   // The jam is about the song in the editor; another one there ends it, except the jam's own song arriving.
-  if (!adoptingJamSong) leaveJam('You left the jam to open another song. The jam song stays as it was.');
+  if (!adoptingJamSong) leaveJam(t('You left the jam to open another song. The jam song stays as it was.'));
   stop();
   if (opensNewTab()) {
     tabs[activeTab] = parkTab();
@@ -1099,17 +1126,17 @@ function showTab(index: number): void {
 
 async function switchTab(index: number): Promise<void> {
   if (index === activeTab || !tabs[index]) return;
-  if (jam?.active && !(await ask('Switching songs leaves the jam. Go on?', { title: 'Jam', ok: 'Switch' }))) return;
-  leaveJam('You left the jam to switch songs. The jam song stays as it was.');
+  if (jam?.active && !(await ask(t('Switching songs leaves the jam. Go on?'), { title: t('Jam'), ok: t('Switch') }))) return;
+  leaveJam(t('You left the jam to switch songs. The jam song stays as it was.'));
   tabs[activeTab] = parkTab();
   showTab(index);
-  status.textContent = `Song ${index + 1} of ${tabs.length}: ${tabName(song(), libraryEntry)}.`;
+  status.textContent = t('Song {index} of {count}: {name}.', { index: index + 1, count: tabs.length, name: tabName(song(), libraryEntry) });
 }
 
 async function closeTab(index: number): Promise<void> {
   if (index !== activeTab) {
     const tab = tabs[index]!;
-    if (tab.doc.dirty && !(await ask(`Close "${tabName(tab.doc.song, tab.library)}" and discard its changes?`, { title: 'Unsaved changes', ok: 'Close' }))) return;
+    if (tab.doc.dirty && !(await ask(t('Close "{name}" and discard its changes?', { name: tabName(tab.doc.song, tab.library) }), { title: t('Unsaved changes'), ok: t('Close') }))) return;
     // The list may have changed while the question was open.
     index = tabs.indexOf(tab);
     if (index < 0 || index === activeTab) return;
@@ -1118,9 +1145,9 @@ async function closeTab(index: number): Promise<void> {
     renderTabs();
     return;
   }
-  if (editor.dirty && !(await ask('Close this song and discard its changes?', { title: 'Unsaved changes', ok: 'Close' }))) return;
+  if (editor.dirty && !(await ask(t('Close this song and discard its changes?'), { title: t('Unsaved changes'), ok: t('Close') }))) return;
   if (index !== activeTab) return;
-  leaveJam('You left the jam by closing its song.');
+  leaveJam(t('You left the jam by closing its song.'));
   tabs.splice(index, 1);
   if (tabs.length === 0) {
     // The last song makes way for a new one.
@@ -1134,7 +1161,7 @@ async function closeTab(index: number): Promise<void> {
 }
 
 function tabName(s: Song, library: Tab['library']): string {
-  return s.title.trim() || library?.name || 'untitled';
+  return s.title.trim() || library?.name || t('untitled');
 }
 
 /** The tab strip only shows while more than one song is open. */
@@ -1154,14 +1181,14 @@ function renderTabs(): void {
     pick.setAttribute('role', 'tab');
     pick.setAttribute('aria-selected', String(active));
     pick.textContent = `${tabName(s, active ? libraryEntry : tab.library)}${dirty ? '*' : ''}`;
-    pick.title = `Song ${i + 1} (Alt+PageUp/PageDown switch songs)`;
+    pick.title = t('Song {index} (Alt+PageUp/PageDown switch songs)', { index: i + 1 });
     pick.addEventListener('click', () => void switchTab(i));
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'btn sm';
     close.textContent = 'x';
-    close.title = 'Close this song';
-    close.setAttribute('aria-label', `Close ${pick.textContent}`);
+    close.title = t('Close this song');
+    close.setAttribute('aria-label', t('Close {name}', { name: pick.textContent }));
     close.addEventListener('click', () => void closeTab(i));
     item.append(pick, close);
     return item;
@@ -1174,7 +1201,7 @@ async function openModule(file: File): Promise<void> {
   try {
     const loaded = loadModule(await file.arrayBuffer(), file.name);
     startSong(loaded);
-    status.textContent = `${file.name}: ${loaded.title || 'untitled'}, ${loaded.formatName}, ${loaded.channels} channels.`;
+    status.textContent = t('{file}: {title}, {format}, {channels} channels.', { file: file.name, title: loaded.title || t('untitled'), format: loaded.formatName, channels: loaded.channels });
     track('open-module', { format: loaded.formatName });
   } catch (error) {
     loadFailed(file, error);
@@ -1183,7 +1210,7 @@ async function openModule(file: File): Promise<void> {
 
 /** Headerless sample files; anything else that nothing can decode is read as raw too. */
 const RAW_NAME = /\.(raw|smp|sam|pcm|bin)$/i;
-const RAW_LABELS: Record<RawFormat, string> = { s8: '8-bit signed', u8: '8-bit unsigned', s16le: '16-bit little endian', s16be: '16-bit big endian' };
+const RAW_LABELS: Record<RawFormat, string> = { s8: msg('8-bit signed'), u8: msg('8-bit unsigned'), s16le: msg('16-bit little endian'), s16be: msg('16-bit big endian') };
 
 /** Puts a sample or XI instrument file into the current slot. */
 async function importIntoSlot(file: File): Promise<void> {
@@ -1213,7 +1240,7 @@ async function importIntoSlot(file: File): Promise<void> {
     if (imported.kind === 'instrument') {
       const ins = imported.instrument;
       editor.replaceInstrument(index, 'load instrument', ins);
-      status.textContent = `${file.name}: instrument with ${ins.samples.length} samples in ${hex(instrument)}.`;
+      status.textContent = t('{file}: instrument with {samples} samples in {instrument}.', { file: file.name, samples: ins.samples.length, instrument: hex(instrument) });
     } else {
       const sample = imported.sample;
       editor.editInstrument(index, 'load sample', (ins) => {
@@ -1221,7 +1248,10 @@ async function importIntoSlot(file: File): Promise<void> {
         ins.samples[slot] = sample;
         if (!ins.name) ins.name = sample.name;
       });
-      status.textContent = `${file.name}: ${sample.data.length} frames at ${imported.rate} Hz in ${hex(instrument)}/${hex(slot, 1)}${raw ? `, read as raw ${RAW_LABELS[prefs.rawFormat]} (Setup changes the format)` : ''}.`;
+      const where = { file: file.name, frames: sample.data.length, rate: imported.rate, slot: `${hex(instrument)}/${hex(slot, 1)}` };
+      status.textContent = raw
+        ? t('{file}: {frames} frames at {rate} Hz in {slot}, read as raw {format} (Setup changes the format).', { ...where, format: t(RAW_LABELS[prefs.rawFormat]) })
+        : t('{file}: {frames} frames at {rate} Hz in {slot}.', where);
     }
     sampleEditor.resetView();
     if (app.dataset.view === 'pattern') setView('sample');
@@ -1249,18 +1279,18 @@ const safeName = (name: string, fallback: string) => (name.trim() || fallback).r
 function saveSample(format: 'wav' | 'iff'): void {
   const s = song().instruments[instrument - 1]?.samples[sampleSlot];
   if (!s || s.data.length === 0) {
-    status.textContent = 'This sample slot is empty.';
+    status.textContent = t('This sample slot is empty.');
     return;
   }
   const name = safeName(s.name, `sample${hex(instrument)}-${hex(sampleSlot)}`);
   const rate = Math.round(rateForTuning(s.relativeNote, s.finetune));
   if (format === 'iff') {
     download(save8svx(s, rate), `${name}.8svx`, 'audio/x-8svx');
-    status.textContent = `Saved ${name}.8svx (8-bit) at ${rate} Hz.`;
+    status.textContent = t('Saved {file} (8-bit) at {rate} Hz.', { file: `${name}.8svx`, rate });
     return;
   }
   download(encodeWav([s.data], rate, 'pcm16'), `${name}.wav`, 'audio/wav');
-  status.textContent = `Saved ${name}.wav at ${rate} Hz.`;
+  status.textContent = t('Saved {file} at {rate} Hz.', { file: `${name}.wav`, rate });
 }
 
 function saveInstrument(): void {
@@ -1268,7 +1298,7 @@ function saveInstrument(): void {
   if (!ins) return;
   const name = safeName(ins.name, `instrument${hex(instrument)}`);
   download(saveXi(ins), `${name}.xi`, 'application/octet-stream');
-  status.textContent = `Saved ${name}.xi.`;
+  status.textContent = t('Saved {file}.', { file: `${name}.xi` });
 }
 
 function saveSong(): void {
@@ -1278,7 +1308,7 @@ function saveSong(): void {
   download(bytes, `${name}.xm`, 'application/octet-stream');
   editor.dirty = false;
   renderTabs();
-  status.textContent = `Saved ${name}.xm (${bytes.length} bytes).`;
+  status.textContent = t('Saved {file} ({bytes} bytes).', { file: `${name}.xm`, bytes: bytes.length });
   track('save-xm');
 }
 
@@ -1301,19 +1331,19 @@ async function openInReplayer(): Promise<void> {
     const url = await replayerUrl(location.href, bytes, fileName);
     if (url.length > MAX_REPLAYER_URL) {
       tab?.close();
-      info.textContent = 'The song is too big to hand over. Save XM and load the file on the replayer page.';
+      info.textContent = t('The song is too big to hand over. Save XM and load the file on the replayer page.');
       return;
     }
     if (!tab) {
-      info.textContent = 'The browser blocked the new tab. Allow pop-ups for this site, or save the song and load it on the replayer page.';
+      info.textContent = t('The browser blocked the new tab. Allow pop-ups for this site, or save the song and load it on the replayer page.');
       return;
     }
     tab.location.href = url;
-    info.textContent = `${fileName} opened in the replayer.`;
+    info.textContent = t('{file} opened in the replayer.', { file: fileName });
     track('open-in-replayer');
   } catch (error) {
     tab?.close();
-    info.textContent = `Could not open the replayer: ${(error as Error).message}`;
+    info.textContent = t('Could not open the replayer: {error}', { error: (error as Error).message });
   }
 }
 
@@ -1323,8 +1353,9 @@ function saveSongAsMod(): void {
   const name = safeName(s.title, 'untitled');
   download(bytes, `${name}.mod`, 'application/octet-stream');
   track('save-mod');
-  status.textContent = `Saved ${name}.mod (${bytes.length} bytes)${warnings.length ? `, ${warnings.length} things changed` : ''}.`;
-  $('#save-info').textContent = warnings.length ? `MOD can't hold everything: ${warnings.join(' ')}` : 'Saved as MOD with nothing lost.';
+  const saved = { file: `${name}.mod`, bytes: bytes.length, changes: warnings.length };
+  status.textContent = warnings.length ? t('Saved {file} ({bytes} bytes), {changes} things changed.', saved) : t('Saved {file} ({bytes} bytes).', saved);
+  $('#save-info').textContent = warnings.length ? t("MOD can't hold everything: {warnings}", { warnings: warnings.join(' ') }) : t('Saved as MOD with nothing lost.');
 }
 
 // ---- Save dialog: XM, MOD, audio export, autosaved versions ----------------
@@ -1346,7 +1377,7 @@ const MIME_TYPES: Record<string, string> = { zip: 'application/zip', wav: 'audio
 function exportAudio(): void {
   if (exporting) {
     exporting.terminate();
-    exportDone('Export cancelled.');
+    exportDone(t('Export cancelled.'));
     return;
   }
   const s = song();
@@ -1365,10 +1396,10 @@ function exportAudio(): void {
   };
   const worker = new Worker(new URL('./audio/export-worker.ts', import.meta.url), { type: 'module' });
   exporting = worker;
-  exportGo.textContent = 'Cancel';
+  exportGo.textContent = t('Cancel');
   exportProgress.hidden = false;
   exportProgress.value = 0;
-  exportInfo.textContent = 'Rendering…';
+  exportInfo.textContent = t('Rendering…');
   const started = performance.now();
   worker.onmessage = (event: MessageEvent<ExportReply>) => {
     const reply = event.data;
@@ -1378,25 +1409,27 @@ function exportAudio(): void {
     }
     worker.terminate();
     if (reply.type === 'error') {
-      exportDone(`Export failed: ${reply.message}`);
+      exportDone(t('Export failed: {error}', { error: reply.message }));
       return;
     }
     const extension = reply.fileName.slice(reply.fileName.lastIndexOf('.') + 1);
     download(reply.bytes, reply.fileName, MIME_TYPES[extension] ?? 'application/octet-stream');
     track('export-audio', { format: request.format.kind, stems: request.stems });
     const took = ((performance.now() - started) / 1000).toFixed(1);
-    exportDone(`${reply.fileName}: ${formatTime(reply.seconds)} of audio, ${(reply.bytes.length / 1e6).toFixed(1)} MB, rendered in ${took} s.`);
+    exportDone(
+      t('{file}: {length} of audio, {size} MB, rendered in {took} s.', { file: reply.fileName, length: formatTime(reply.seconds), size: (reply.bytes.length / 1e6).toFixed(1), took }),
+    );
   };
   worker.onerror = (event) => {
     worker.terminate();
-    exportDone(`Export failed: ${event.message}`);
+    exportDone(t('Export failed: {error}', { error: event.message }));
   };
   worker.postMessage(request);
 }
 
 function exportDone(message: string): void {
   exporting = null;
-  exportGo.textContent = 'Render';
+  exportGo.textContent = t('Render');
   exportProgress.hidden = true;
   exportInfo.textContent = message;
   status.textContent = message;
@@ -1441,9 +1474,9 @@ async function showAutosaves(): Promise<void> {
     const when = new Date(v.savedAt);
     const time = document.createElement('span');
     time.className = 'idx';
-    time.textContent = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    li.append(time, ` ${v.title || 'untitled'}`);
-    li.title = 'Open this version';
+    time.textContent = `${when.toLocaleDateString(language())} ${when.toLocaleTimeString(language(), { hour: '2-digit', minute: '2-digit' })}`;
+    li.append(time, ` ${v.title || t('untitled')}`);
+    li.title = t('Open this version');
     li.addEventListener('click', async () => {
       if (!(await confirmDiscard())) return;
       fileDialog.close();
@@ -1451,16 +1484,16 @@ async function showAutosaves(): Promise<void> {
     });
     return li;
   });
-  if (!items.length) items.push(Object.assign(document.createElement('li'), { textContent: 'Nothing saved yet.' }));
+  if (!items.length) items.push(Object.assign(document.createElement('li'), { textContent: t('Nothing saved yet.') }));
   list.replaceChildren(...items);
 }
 
 function restoreAutosave(version: Autosave): void {
   try {
     startSong(applyOrigin(loadModule(version.bytes.slice().buffer, 'autosave.xm'), version.origin));
-    status.textContent = `Restored ${version.title || 'untitled'} from ${new Date(version.savedAt).toLocaleString()}.`;
+    status.textContent = t('Restored {title} from {time}.', { title: version.title || t('untitled'), time: new Date(version.savedAt).toLocaleString(language()) });
   } catch (error) {
-    status.textContent = `Could not restore the autosave: ${(error as Error).message}`;
+    status.textContent = t('Could not restore the autosave: {error}', { error: (error as Error).message });
   }
 }
 
@@ -1503,11 +1536,11 @@ function listNote(text: string): HTMLLIElement {
 
 /** Why the browser storage failed, in words for the user. */
 function storageProblem(error: unknown): string {
-  return (error as Error).message === BLOCKED ? BLOCKED : 'Not available in this browser.';
+  return (error as Error).message === BLOCKED ? t(BLOCKED) : t('Not available in this browser.');
 }
 
 function openSongsDialog(): void {
-  libraryName.value = libraryEntry?.name ?? (song().title.trim() || 'untitled');
+  libraryName.value = libraryEntry?.name ?? (song().title.trim() || t('untitled'));
   void showLibrary();
   songsDialog.showModal();
 }
@@ -1526,14 +1559,14 @@ async function showLibrary(): Promise<void> {
     const when = new Date(entry.savedAt);
     const time = document.createElement('span');
     time.className = 'idx';
-    time.textContent = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    time.textContent = `${when.toLocaleDateString(language())} ${when.toLocaleTimeString(language(), { hour: '2-digit', minute: '2-digit' })}`;
     li.append(time, ` ${entry.name}`);
-    li.title = 'Double-click to open';
+    li.title = t('Double-click to open');
     li.addEventListener('click', () => selectLibrarySong(i));
     li.addEventListener('dblclick', () => void openLibrarySong());
     return li;
   });
-  if (!items.length) items.push(listNote('No songs saved here yet.'));
+  if (!items.length) items.push(listNote(t('No songs saved here yet.')));
   libraryList.replaceChildren(...items);
   selectLibrarySong(Math.max(0, librarySongs.findIndex((e) => e.id === libraryEntry?.id)));
 }
@@ -1545,21 +1578,21 @@ function selectLibrarySong(index: number): void {
 }
 
 async function saveToLibrary(): Promise<void> {
-  const name = libraryName.value.trim() || 'untitled';
+  const name = libraryName.value.trim() || t('untitled');
   const same = librarySongs.find((e) => e.name === name);
-  if (same && same.id !== libraryEntry?.id && !(await ask(`Replace the saved song "${name}"?`, { title: 'Save', ok: 'Replace' }))) return;
+  if (same && same.id !== libraryEntry?.id && !(await ask(t('Replace the saved song "{name}"?', { name }), { title: t('Save'), ok: t('Replace') }))) return;
   const s = song();
   try {
     const id = await putSong({ id: same?.id, name, savedAt: Date.now(), bytes: saveXm(s), origin: originOf(s) });
     libraryEntry = { id, name };
     editor.dirty = false;
     renderTabs();
-    status.textContent = `Saved ${name} in this browser.`;
+    status.textContent = t('Saved {name} in this browser.', { name });
     track('library-save');
     libraryInfo.textContent = status.textContent;
     await showLibrary();
   } catch (error) {
-    libraryInfo.textContent = `Could not save: ${(error as Error).message}`;
+    libraryInfo.textContent = t('Could not save: {error}', { error: (error as Error).message });
   }
 }
 
@@ -1571,15 +1604,15 @@ async function openLibrarySong(): Promise<void> {
     libraryEntry = { id: entry.id, name: entry.name };
     renderTabs();
     songsDialog.close();
-    status.textContent = `Opened ${entry.name}.`;
+    status.textContent = t('Opened {name}.', { name: entry.name });
   } catch (error) {
-    libraryInfo.textContent = `Could not open ${entry.name}: ${(error as Error).message}`;
+    libraryInfo.textContent = t('Could not open {name}: {error}', { name: entry.name, error: (error as Error).message });
   }
 }
 
 async function renameLibrarySong(): Promise<void> {
   const entry = librarySongs[librarySelected];
-  const name = entry && (await askText('New name:', entry.name, { title: 'Rename', ok: 'Rename' }))?.trim();
+  const name = entry && (await askText(t('New name:'), entry.name, { title: t('Rename'), ok: t('Rename') }))?.trim();
   if (!entry || !name || name === entry.name) return;
   await renameSong(entry.id, name);
   if (libraryEntry?.id === entry.id) libraryEntry.name = libraryName.value = name;
@@ -1588,7 +1621,7 @@ async function renameLibrarySong(): Promise<void> {
 
 async function deleteLibrarySong(): Promise<void> {
   const entry = librarySongs[librarySelected];
-  if (!entry || !(await ask(`Delete "${entry.name}" from this browser?`, { title: 'Delete', ok: 'Delete' }))) return;
+  if (!entry || !(await ask(t('Delete "{name}" from this browser?', { name: entry.name }), { title: t('Delete'), ok: t('Delete') }))) return;
   await deleteSong(entry.id);
   if (libraryEntry?.id === entry.id) libraryEntry = null;
   await showLibrary();
@@ -1625,7 +1658,7 @@ function openShareDialog(): void {
 async function updateShareLink(): Promise<void> {
   const packing = ++sharePacking;
   shareUrl.value = '';
-  shareInfo.textContent = 'Packing…';
+  shareInfo.textContent = t('Packing…');
   const s = song();
   try {
     const xm = saveXm(shrinkSong(s, shareQuality.value as ShareQuality));
@@ -1634,13 +1667,13 @@ async function updateShareLink(): Promise<void> {
     const url = new URL(location.href);
     url.hash = `${SHARE_PARAM}=${text}`;
     shareUrl.value = url.href;
-    const length = url.href.length.toLocaleString('en');
+    const length = url.href.length.toLocaleString(language());
     shareInfo.textContent =
       url.href.length > LONG_LINK
-        ? `${length} characters. Chat apps and mail may cut a link this long; a smaller quality or Send file is safer.`
-        : `${length} characters. The song travels inside the link; nothing is uploaded.`;
+        ? t('{length} characters. Chat apps and mail may cut a link this long; a smaller quality or Send file is safer.', { length })
+        : t('{length} characters. The song travels inside the link; nothing is uploaded.', { length });
   } catch (error) {
-    if (packing === sharePacking) shareInfo.textContent = `Could not make a link: ${(error as Error).message}`;
+    if (packing === sharePacking) shareInfo.textContent = t('Could not make a link: {error}', { error: (error as Error).message });
   }
 }
 
@@ -1648,17 +1681,17 @@ async function copyShareLink(): Promise<void> {
   if (!shareUrl.value) return;
   try {
     await navigator.clipboard.writeText(shareUrl.value);
-    shareInfo.textContent = 'Link copied.';
+    shareInfo.textContent = t('Link copied.');
     track('share-copy');
   } catch {
     shareUrl.select();
-    shareInfo.textContent = 'Select the link and copy it.';
+    shareInfo.textContent = t('Select the link and copy it.');
   }
 }
 
 async function sendShare(withFile: boolean): Promise<void> {
   const s = song();
-  const title = s.title.trim() || 'untitled';
+  const title = s.title.trim() || t('untitled');
   const name = `${safeName(s.title, 'untitled')}.xm`;
   const bytes = saveXm(s);
   const file = new File([bytes as BlobPart], name, { type: 'application/octet-stream' });
@@ -1675,13 +1708,13 @@ async function sendShare(withFile: boolean): Promise<void> {
     const reason = (error as Error).name;
     if (reason === 'AbortError') return;
     if (withFile && reason === 'NotAllowedError') downloadForSending(bytes, name);
-    else shareInfo.textContent = `Could not share: ${(error as Error).message}`;
+    else shareInfo.textContent = t('Could not share: {error}', { error: (error as Error).message });
   }
 }
 
 function downloadForSending(bytes: Uint8Array, name: string): void {
   download(bytes, name, 'application/octet-stream');
-  shareInfo.textContent = `This browser can't send ${name} directly, so it was downloaded; send it from your downloads.`;
+  shareInfo.textContent = t("This browser can't send {file} directly, so it was downloaded; send it from your downloads.", { file: name });
 }
 
 /** Opens the song in a `#song=…` link; returns the error, if any. */
@@ -1692,11 +1725,11 @@ async function openSharedSong(text: string): Promise<string | null> {
     const { xm, origin } = await decodeShare(text);
     const loaded = applyOrigin(loadModule(xm.slice().buffer, 'shared.xm'), origin);
     startSong(loaded);
-    status.textContent = `Opened the shared song ${loaded.title.trim() || 'untitled'}.`;
+    status.textContent = t('Opened the shared song {title}.', { title: loaded.title.trim() || t('untitled') });
     track('open-shared');
     return null;
   } catch (error) {
-    return `Could not open the shared song: ${(error as Error).message}.`;
+    return t('Could not open the shared song: {error}.', { error: (error as Error).message });
   }
 }
 
@@ -1787,7 +1820,7 @@ function showPeers(): void {
 }
 
 function jamPersonName(): string {
-  return jamName.value.trim() || 'Anonymous';
+  return jamName.value.trim() || t('Anonymous');
 }
 
 function wireJam(session: JamSession): void {
@@ -1796,8 +1829,8 @@ function wireJam(session: JamSession): void {
   session.onPeers = () => renderJam();
   session.onCursors = showPeers;
   session.onJoined = () => {
-    status.textContent = `You joined the jam: ${session.peers.map((p) => p.name).join(', ')}.`;
-    jamInfo.textContent = 'You are in. Edits show up for everyone as you make them.';
+    status.textContent = t('You joined the jam: {people}.', { people: session.peers.map((p) => p.name).join(', ') });
+    jamInfo.textContent = t('You are in. Edits show up for everyone as you make them.');
     pendingInvite = null;
     view.onMoved?.();
     renderJam();
@@ -1828,8 +1861,8 @@ function startJam(): void {
   wireJam(session);
   jamRoom = newRoom();
   stopTabs = listenInTabs(jamRoom, (link) => session.addGuest(link));
-  jamInfo.textContent = 'The jam is on. Invite people with a link, one link per person.';
-  status.textContent = 'Jam started.';
+  jamInfo.textContent = t('The jam is on. Invite people with a link, one link per person.');
+  status.textContent = t('Jam started.');
   track('jam-start');
   view.onMoved?.();
   renderJam();
@@ -1844,7 +1877,7 @@ function jamAddress(param: string, value: string): string {
 async function newJamInvite(): Promise<void> {
   jamInvite?.cancel();
   jamInvite = null;
-  jamInfo.textContent = 'Making an invite…';
+  jamInfo.textContent = t('Making an invite…');
   try {
     const invite = await createInvite();
     if (!jam?.active) return invite.cancel();
@@ -1853,7 +1886,7 @@ async function newJamInvite(): Promise<void> {
     jamAnswer.value = '';
     jamInfo.textContent = '';
   } catch (error) {
-    jamInfo.textContent = `Could not make an invite: ${(error as Error).message}.`;
+    jamInfo.textContent = t('Could not make an invite: {error}.', { error: (error as Error).message });
   }
   renderJam();
 }
@@ -1862,15 +1895,15 @@ async function connectJamGuest(): Promise<void> {
   const invite = jamInvite;
   const session = jam;
   if (!invite || !session || !jamAnswer.value.trim()) return;
-  jamInfo.textContent = 'Connecting…';
+  jamInfo.textContent = t('Connecting…');
   try {
     const link = await invite.accept(jamAnswer.value);
     session.addGuest(link);
     jamInvite = null;
     jamInviteUrl.value = '';
-    jamInfo.textContent = 'Connected. Make another invite for the next person.';
+    jamInfo.textContent = t('Connected. Make another invite for the next person.');
   } catch (error) {
-    jamInfo.textContent = `Could not connect: ${(error as Error).message}.`;
+    jamInfo.textContent = t('Could not connect: {error}.', { error: (error as Error).message });
   }
   renderJam();
 }
@@ -1879,7 +1912,7 @@ async function connectJamGuest(): Promise<void> {
 function openJamInvite(invite: { kind: 'rtc' | 'tab'; value: string }): void {
   history.replaceState(null, '', location.pathname + location.search);
   if (jam?.active) {
-    status.textContent = 'You are in a jam already; leave it to join another.';
+    status.textContent = t('You are in a jam already; leave it to join another.');
     return;
   }
   pendingInvite = invite;
@@ -1894,7 +1927,7 @@ function openJamInvite(invite: { kind: 'rtc' | 'tab'; value: string }): void {
 function joinWith(link: Link): void {
   wireJam(JamSession.join(jamDoc, jamPersonName(), link));
   track('jam-join');
-  jamInfo.textContent = 'Waiting for the song…';
+  jamInfo.textContent = t('Waiting for the song…');
   renderJam();
 }
 
@@ -1903,7 +1936,7 @@ async function joinJam(): Promise<void> {
   if (!invite) return;
   if (invite.kind === 'tab') return joinWith(joinInTab(invite.value));
   cancelAnswer?.();
-  jamInfo.textContent = 'Making your answer code…';
+  jamInfo.textContent = t('Making your answer code…');
   try {
     const { answer, link, cancel } = await answerInvite(invite.value);
     cancelAnswer = cancel;
@@ -1913,19 +1946,20 @@ async function joinJam(): Promise<void> {
     joinWith(await link);
     cancelAnswer = null;
   } catch (error) {
-    jamInfo.textContent = `Could not join: ${(error as Error).message}.`;
+    jamInfo.textContent = t('Could not join: {error}.', { error: (error as Error).message });
     renderJam();
   }
 }
 
-async function copyField(field: HTMLInputElement, what: string): Promise<void> {
+/** Copies a jam code; `copied` and `select` are the messages for success and for copying by hand. */
+async function copyField(field: HTMLInputElement, copied: string, select: string): Promise<void> {
   if (!field.value) return;
   try {
     await navigator.clipboard.writeText(field.value);
-    jamInfo.textContent = `${what} copied.`;
+    jamInfo.textContent = copied;
   } catch {
     field.select();
-    jamInfo.textContent = `Select the ${what.toLowerCase()} and copy it.`;
+    jamInfo.textContent = select;
   }
 }
 
@@ -1949,13 +1983,13 @@ function renderJam(): void {
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
       swatch.style.setProperty('--peer', peer.colour);
-      li.append(swatch, `${peer.name}${peer.id === session!.me ? ' (you)' : peer.id === 0 ? ' (host)' : ''}`);
+      li.append(swatch, peer.id === session!.me ? t('{name} (you)', { name: peer.name }) : peer.id === 0 ? t('{name} (host)', { name: peer.name }) : peer.name);
       return li;
     }),
   );
   const button = $('#jam-open');
   button.setAttribute('aria-pressed', String(!!session?.active));
-  button.title = session?.active ? `In a jam with ${people.map((p) => p.name).join(', ')}` : 'Edit this song together with others, live';
+  button.title = session?.active ? t('In a jam with {people}', { people: people.map((p) => p.name).join(', ') }) : t('Edit this song together with others, live');
 }
 
 $('#jam-open').addEventListener('click', () => {
@@ -1967,12 +2001,12 @@ $('#jam-invite').addEventListener('click', () => void newJamInvite());
 $('#jam-tab').addEventListener('click', () => {
   if (jam?.active) window.open(jamAddress(JAM_TAB_PARAM, jamRoom), '_blank');
 });
-$('#jam-invite-copy').addEventListener('click', () => void copyField(jamInviteUrl, 'Invite'));
+$('#jam-invite-copy').addEventListener('click', () => void copyField(jamInviteUrl, t('Invite copied.'), t('Select the invite and copy it.')));
 $('#jam-connect').addEventListener('click', () => void connectJamGuest());
 $('#jam-join').addEventListener('click', () => void joinJam());
-$('#jam-answer-copy').addEventListener('click', () => void copyField(jamAnswerOut, 'Answer code'));
+$('#jam-answer-copy').addEventListener('click', () => void copyField(jamAnswerOut, t('Answer code copied.'), t('Select the answer code and copy it.')));
 $('#jam-leave').addEventListener('click', async () => {
-  if (jam?.role === 'host' && jam.peers.length > 1 && !(await ask('Leaving ends the jam for everyone. Go on?', { title: 'Jam', ok: 'Leave' }))) return;
+  if (jam?.role === 'host' && jam.peers.length > 1 && !(await ask(t('Leaving ends the jam for everyone. Go on?'), { title: t('Jam'), ok: t('Leave') }))) return;
   if (jam) leaveJam();
   else {
     cancelAnswer?.();
@@ -2005,7 +2039,7 @@ $('#new').addEventListener('click', async () => {
   startSong(createSong());
   // A new song stays replaceable until it is edited.
   blankTab = true;
-  status.textContent = 'New song: 4 channels, five chip instruments.';
+  status.textContent = t('New song: 4 channels, five chip instruments.');
 });
 $('#load').addEventListener('click', () => fileInput.click());
 $('#save').addEventListener('click', openFileDialog);
@@ -2032,8 +2066,8 @@ function savePatternFile(track: boolean): void {
   if (track) download(saveXt(song(), pattern, view.channel), `${name}.xt`, 'application/octet-stream');
   else download(saveXp(song(), pattern), `${name}.xp`, 'application/octet-stream');
   $('#save-info').textContent = status.textContent = track
-    ? `Saved channel ${view.channel + 1} of pattern ${hex(index, 2)} as ${name}.xt.`
-    : `Saved pattern ${hex(index, 2)} as ${name}.xp.`;
+    ? t('Saved channel {channel} of pattern {pattern} as {file}.', { channel: view.channel + 1, pattern: hex(index, 2), file: `${name}.xt` })
+    : t('Saved pattern {pattern} as {file}.', { pattern: hex(index, 2), file: `${name}.xp` });
 }
 
 /** An .xp file replaces the current pattern, an .xt file the cursor's channel; both undo. */
@@ -2044,11 +2078,14 @@ async function importPatternFile(file: File): Promise<void> {
       const cells = loadXt(bytes);
       const channel = view.channel;
       editor.editPattern(view.patternIndex, 'load track', (p) => applyTrack(song(), p, channel, cells));
-      status.textContent = `Loaded ${file.name} into channel ${channel + 1}.`;
+      status.textContent = t('Loaded {file} into channel {channel}.', { file: file.name, channel: channel + 1 });
     } else {
       const { pattern, droppedChannels } = loadXp(bytes, song().channels);
       editor.editPattern(view.patternIndex, 'load pattern', () => pattern);
-      status.textContent = `Loaded ${file.name}, ${pattern.rows} rows${droppedChannels ? `; ${droppedChannels} channels past ${song().channels} were left out` : ''}.`;
+      const loaded = { file: file.name, rows: pattern.rows, dropped: droppedChannels, channels: song().channels };
+      status.textContent = droppedChannels
+        ? t('Loaded {file}, {rows} rows; {dropped} channels past {channels} were left out.', loaded)
+        : t('Loaded {file}, {rows} rows.', loaded);
     }
     showPosition();
   } catch (error) {
@@ -2072,7 +2109,10 @@ window.addEventListener('drop', (event) => {
   else if (PATTERN_NAME.test(file.name)) void importPatternFile(file);
   else void importIntoSlot(file);
 });
+/** Set when Setup reloads for a new language, after asking. */
+let reloading = false;
 window.addEventListener('beforeunload', (event) => {
+  if (reloading) return;
   if (editor.dirty || tabs.some((tab, i) => i !== activeTab && tab.doc.dirty)) event.preventDefault();
 });
 
@@ -2095,14 +2135,14 @@ function openEditTools(): void {
   editRange.value = view.selection ? 'selection' : 'track';
   $<HTMLOptionElement>('#edit-range option[value="selection"]').disabled = !view.selection;
   $<HTMLInputElement>('#rm-from').value = hex(instrument, 2);
-  editInfo.textContent = 'Applies to the range above; Ctrl+Z undoes it.';
+  editInfo.textContent = t('Applies to the range above; Ctrl+Z undoes it.');
   editTools.showModal();
 }
 
-function runEditTool(label: string, tool: (pattern: Pattern, block: Block) => number, what: string): void {
+/** `done` reports the count of changed cells, e.g. 'Transpose: {count} notes changed.'. */
+function runEditTool(label: string, tool: (pattern: Pattern, block: Block) => number, done: string, none: string): void {
   const changed = applyRange(editRange.value as EditRange, label, tool);
-  const name = label[0]!.toUpperCase() + label.slice(1);
-  editInfo.textContent = changed ? `${name}: ${changed} ${what} changed.` : `${name}: nothing to change.`;
+  editInfo.textContent = changed ? t(done, { count: changed }) : t(none);
   status.textContent = editInfo.textContent;
 }
 
@@ -2111,21 +2151,21 @@ $('#tr-go').addEventListener('click', () => {
   const amount = Math.trunc(numberField('#tr-amount'));
   const ins = hexField('#tr-ins') || 0;
   if (!amount) return;
-  runEditTool('transpose', (p, b) => transposeBlock(song(), p, b, amount, ins), 'notes');
+  runEditTool('transpose', (p, b) => transposeBlock(song(), p, b, amount, ins), msg('Transpose: {count} notes changed.'), msg('Transpose: nothing to change.'));
 });
 $('#rm-go').addEventListener('click', () => {
   const from = hexField('#rm-from');
   const to = hexField('#rm-to');
   if (!(from >= 1 && from <= 128 && to >= 1 && to <= 128) || from === to) {
-    editInfo.textContent = 'Instrument numbers are hex, 01 to 80.';
+    editInfo.textContent = t('Instrument numbers are hex, 01 to 80.');
     return;
   }
-  runEditTool('remap instrument', (p, b) => remapInstrument(song(), p, b, from, to), 'cells');
+  runEditTool('remap instrument', (p, b) => remapInstrument(song(), p, b, from, to), msg('Remap instrument: {count} cells changed.'), msg('Remap instrument: nothing to change.'));
 });
 $('#sc-go').addEventListener('click', () => {
   const start = Math.max(0, numberField('#sc-start'));
   const end = Math.max(0, numberField('#sc-end'));
-  runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), 'volumes');
+  runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), msg('Scale volume: {count} volumes changed.'), msg('Scale volume: nothing to change.'));
 });
 
 const cleanupOptions = (): CleanupOptions => ({
@@ -2137,33 +2177,36 @@ const cleanupOptions = (): CleanupOptions => ({
   sampleTails: $<HTMLInputElement>('#cu-tails').checked,
 });
 
+/** What a clean-up removes, as a list for a sentence; empty when nothing. */
 function describeCleanup(result: CleanupResult): string {
+  const count = (n: number, one: string, many: string) => (n ? [t(n === 1 ? one : many, { count: n })] : []);
   const parts = [
-    result.patterns && `${result.patterns} pattern${result.patterns === 1 ? '' : 's'}`,
-    result.instruments && `${result.instruments} instrument${result.instruments === 1 ? '' : 's'}`,
-    result.samples && `${result.samples} sample${result.samples === 1 ? '' : 's'}`,
-  ].filter(Boolean);
-  if (result.frames) parts.push(`${result.frames.toLocaleString('en')} sample frames`);
-  return parts.length ? parts.join(', ') : 'nothing';
+    ...count(result.patterns, msg('{count} pattern'), msg('{count} patterns')),
+    ...count(result.instruments, msg('{count} instrument'), msg('{count} instruments')),
+    ...count(result.samples, msg('{count} sample'), msg('{count} samples')),
+  ];
+  if (result.frames) parts.push(t('{count} sample frames', { count: result.frames.toLocaleString(language()) }));
+  return parts.join(', ');
 }
 
 function previewCleanup(): void {
-  editInfo.textContent = `Clean up would remove ${describeCleanup(cleanupPreview(song(), cleanupOptions()))}.`;
+  const what = describeCleanup(cleanupPreview(song(), cleanupOptions()));
+  editInfo.textContent = what ? t('Clean up would remove {what}.', { what }) : t('Clean up: nothing to remove.');
 }
 for (const id of ['#cu-patterns', '#cu-duplicates', '#cu-instruments', '#cu-compact', '#cu-samples', '#cu-tails']) {
   $(id).addEventListener('change', previewCleanup);
 }
 $('#cu-go').addEventListener('click', () => {
   const options = cleanupOptions();
-  if (describeCleanup(cleanupPreview(song(), options)) === 'nothing') {
-    editInfo.textContent = 'Clean up: nothing to remove.';
+  if (!describeCleanup(cleanupPreview(song(), options))) {
+    editInfo.textContent = t('Clean up: nothing to remove.');
     return;
   }
   let result!: CleanupResult;
   editor.editSong('clean up', (s) => {
     result = cleanupSong(s, options);
   });
-  editInfo.textContent = `Clean up removed ${describeCleanup(result)}; Ctrl+Z undoes it.`;
+  editInfo.textContent = t('Clean up removed {what}; Ctrl+Z undoes it.', { what: describeCleanup(result) });
   status.textContent = editInfo.textContent;
 });
 
@@ -2175,6 +2218,14 @@ $('#help-open').addEventListener('click', () => {
   help.open(app.dataset.view === 'pattern' && field ? cellHelpTarget(field, cursorCell()) : null);
 });
 
+const link = (href: string, text: string): HTMLAnchorElement => Object.assign(document.createElement('a'), { href, target: '_blank', rel: 'noopener', textContent: text });
+$('#about-info').append(
+  ...tNodes('A tracker for chiptunes, modules and the demoscene, right in your browser. Free and open source: the code is on {github} under the {license} ({notices}). Click the demo to pause it.', {
+    github: link('https://github.com/wirehack7/webtracker', 'GitHub'),
+    license: link('LICENSE.txt', t('MIT License')),
+    notices: link('third-party-licenses.txt', t('third-party licenses')),
+  }),
+);
 const about = mountAbout($<HTMLDialogElement>('#about'));
 for (const id of ['#about-open', '#brand-about']) {
   $(id).addEventListener('click', () => {
@@ -2263,12 +2314,13 @@ function handleCommand(event: KeyboardEvent): boolean {
   switch (event.code) {
     case 'KeyZ': {
       const label = event.shiftKey ? editor.redo() : editor.undo();
-      status.textContent = label ? `${event.shiftKey ? 'Redo' : 'Undo'}: ${label}` : 'Nothing to undo.';
+      if (event.shiftKey) status.textContent = label ? t('Redo: {edit}', { edit: editName(label) }) : t('Nothing to redo.');
+      else status.textContent = label ? t('Undo: {edit}', { edit: editName(label) }) : t('Nothing to undo.');
       return true;
     }
     case 'KeyY': {
       const label = editor.redo();
-      status.textContent = label ? `Redo: ${label}` : 'Nothing to redo.';
+      status.textContent = label ? t('Redo: {edit}', { edit: editName(label) }) : t('Nothing to redo.');
       return true;
     }
     case 'KeyC':
@@ -2297,7 +2349,7 @@ function handleCommand(event: KeyboardEvent): boolean {
       return true;
     case 'KeyF':
       followSong = !followSong;
-      status.textContent = followSong ? 'Follow song on.' : 'Follow song off: the cursor stays put while the song plays.';
+      status.textContent = followSong ? t('Follow song on.') : t('Follow song off: the cursor stays put while the song plays.');
       return true;
     case 'Enter':
     case 'NumpadEnter':
@@ -2501,7 +2553,7 @@ function previewKeys(event: KeyboardEvent): void {
   event.preventDefault();
   heldKeys.set(event.code, note);
   void previewOn(note);
-  status.textContent = `${noteName(note)}  Instr ${hex(instrument)}`;
+  status.textContent = t('{note}  Instr {instrument}', { note: noteName(note), instrument: hex(instrument) });
 }
 
 window.addEventListener('keyup', (event) => {
@@ -2512,7 +2564,7 @@ window.addEventListener('keyup', (event) => {
 });
 
 view.onCursor = () => {
-  status.textContent = `Row ${hex(view.row)}  Channel ${view.channel + 1}`;
+  status.textContent = t('Row {row}  Channel {channel}', { row: hex(view.row), channel: view.channel + 1 });
 };
 
 // ---- Setup: colours, mixer, highlights, keys, MIDI -----------------------
@@ -2520,10 +2572,15 @@ view.onCursor = () => {
 const setup = $<HTMLDialogElement>('#setup');
 const themeSelect = $<HTMLSelectElement>('#set-theme');
 themeSelect.replaceChildren(
-  ...Object.entries(THEMES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })),
+  ...Object.entries(THEMES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: t(label) })),
 );
 $('#set-ui-size').replaceChildren(
-  ...Object.entries(UI_SIZES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })),
+  ...Object.entries(UI_SIZES).map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: t(label) })),
+);
+// Language names stay in their own language, so everyone finds theirs.
+$('#set-language').replaceChildren(
+  Object.assign(document.createElement('option'), { value: 'auto', textContent: t('Auto (browser language)') }),
+  ...Object.entries(LANGUAGES).map(([value, { name }]) => Object.assign(document.createElement('option'), { value, textContent: name })),
 );
 const checkbox = (id: string) => $<HTMLInputElement>(id);
 
@@ -2553,7 +2610,7 @@ $('#colour-grid').replaceChildren(
     // The setup dialog's change handler would otherwise re-apply everything for each colour.
     input.addEventListener('change', (event) => event.stopPropagation());
     colourInputs.set(name, input);
-    row.append(input, Object.assign(document.createElement('span'), { className: 'label', textContent: label }));
+    row.append(input, Object.assign(document.createElement('span'), { className: 'label', textContent: t(label) }));
     return row;
   }),
 );
@@ -2586,7 +2643,7 @@ $('#colours-reset').addEventListener('click', () => {
   saveSettings(prefs);
   applySettings();
   showColours();
-  status.textContent = 'Colours reset to the scheme.';
+  status.textContent = t('Colours reset to the scheme.');
 });
 
 $('#colours-export').addEventListener('click', () => {
@@ -2609,10 +2666,10 @@ colourFile.addEventListener('change', async (event) => {
     saveSettings(prefs);
     applySettings();
     showSettings();
-    status.textContent = `Loaded colours from ${file.name}.`;
+    status.textContent = t('Loaded colours from {file}.', { file: file.name });
   } catch {
-    status.textContent = `${file.name} is not a colour file.`;
-    void tell(`${file.name} is not a colour file.`, 'Colours');
+    status.textContent = t('{file} is not a colour file.', { file: file.name });
+    void tell(status.textContent, t('Colours'));
   }
 });
 
@@ -2647,6 +2704,7 @@ function applySettings(): void {
 }
 
 function showSettings(): void {
+  $<HTMLSelectElement>('#set-language').value = prefs.language in LANGUAGES ? prefs.language : 'auto';
   themeSelect.value = prefs.theme;
   $<HTMLSelectElement>('#set-ui-size').value = prefs.uiSize;
   $<HTMLSelectElement>('#set-resampler').value = prefs.resampler;
@@ -2691,6 +2749,17 @@ setup.addEventListener('change', () => {
   applySettings();
   showColours();
 });
+// A new language takes a reload: texts are put in place once, as the page starts.
+$('#set-language').addEventListener('change', async (event) => {
+  event.stopPropagation();
+  const select = event.target as HTMLSelectElement;
+  prefs.language = select.value;
+  saveSettings(prefs);
+  if (!(await ask(t('The new language shows after a reload. Your song is kept, but other open song tabs and the undo history are not. Reload now?'), { title: t('Language'), ok: t('Reload'), cancel: t('Later') }))) return;
+  await autosaveNow();
+  reloading = true;
+  location.reload();
+});
 $('#setup-open').addEventListener('click', () => {
   showSettings();
   setup.showModal();
@@ -2719,17 +2788,17 @@ async function connectMidi(on: boolean): Promise<void> {
   }
   const info = $('#setup-info');
   if (!('requestMIDIAccess' in navigator)) {
-    info.textContent = 'This browser has no Web MIDI.';
+    info.textContent = t('This browser has no Web MIDI.');
     return;
   }
   try {
     midiAccess ??= await navigator.requestMIDIAccess();
     midiAccess.onstatechange = listenToInputs;
     listenToInputs();
-    const names = [...midiAccess.inputs.values()].map((i) => i.name ?? 'MIDI input');
-    info.textContent = names.length ? `MIDI: ${names.join(', ')}` : 'MIDI is on; no input device connected yet.';
+    const names = [...midiAccess.inputs.values()].map((i) => i.name ?? t('MIDI input'));
+    info.textContent = names.length ? `MIDI: ${names.join(', ')}` : t('MIDI is on; no input device connected yet.');
   } catch (error) {
-    info.textContent = `MIDI not allowed: ${(error as Error).message}`;
+    info.textContent = t('MIDI not allowed: {error}', { error: (error as Error).message });
   }
 }
 

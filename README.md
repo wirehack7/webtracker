@@ -17,6 +17,8 @@ For your own demos and intros there is a [replayer](#replayer-for-demos-and-intr
 
 Jam lets several people edit one song live. The host sends each person an invite link; they open it and send back an answer code, and from then on every edit travels straight between the browsers over WebRTC, with everyone's cursor shown in the pattern. Only a public STUN server (Google's) helps the browsers find each other's address; no song data passes through it. Some strict networks (certain mobile carriers, corporate firewalls) block such direct connections. "Open in a new tab" jams between tabs of one browser.
 
+The interface, Help and the manual come in English and German. Setup > Language picks one, or Auto follows the browser. Tracker terms such as Pattern, Sample, Instrument, Envelope and the effect names stay in English in every language, as trackers have always called them. More languages are welcome: [docs/TRANSLATING.md](docs/TRANSLATING.md) says how to add one.
+
 ## Inspiration
 
 chiptrackr is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([GitHub](https://github.com/milkytracker/MilkyTracker)), the open-source FastTracker II successor. We love MilkyTracker: its interface, its workflow and its sound are the benchmark this project measures itself against. If you want a native tracker on your desktop, go and use it.
@@ -54,7 +56,7 @@ MODULE_DIR=~/mods pnpm test
 | `packages/engine` | Song model, replayer, mixer. No DOM dependency; runs in the AudioWorklet, in the export worker and under Node. |
 | `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker), XM 1.04, S3M (Scream Tracker 3), IT (Impulse Tracker, including compressed samples), MTM (MultiTracker), 669 (Composer 669, UNIS 669) and OKT (Oktalyzer), also packed in ZIP, gzip, MMCMP, PowerPacker or UMX, saving XM, MOD, XI and 8SVX samples, XP pattern and XT track files, sample import (WAV, AIFF, 8SVX, XI, Gravis PAT, raw PCM), WAV, FLAC and ZIP writers for export. |
 | `packages/replayer` | The replayer for demos and intros: the engine in an AudioWorklet behind a small API, built into one JavaScript file. |
-| `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, service worker for offline use. MP3 export uses [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0, an unmodified npm package), loaded as a separate file only when an MP3 is exported. |
+| `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, language packs in `src/i18n/`, service worker for offline use. MP3 export uses [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0, an unmodified npm package), loaded as a separate file only when an MP3 is exported. |
 
 Every push to `main` is deployed to GitHub Pages. If the repository variable `TRACKING_CODE` is set (Settings > Secrets and variables > Actions > Variables), the deploy workflow puts its HTML in place of the `<!-- tracking-code -->` placeholder on every page; without it the pages ship with no tracking. The app itself only announces actions as a `chiptrackr:track` event on `window` (detail `{ name, data? }`, names such as `play`, `save-xm`, `export-audio`, `share-copy`, `jam-start`, `replayer-play`); the tracking code can listen for it and forward it to any analytics service.
 

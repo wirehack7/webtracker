@@ -4,6 +4,8 @@
 // buttons, or scroll with a mouse wheel or trackpad. Only part of it is visible at a time (1 octave on a
 // phone held upright, more on wider screens).
 
+import { t } from '../i18n/i18n.ts';
+
 const BLACK = new Set([1, 3, 6, 8, 10]);
 export const PIANO_OCTAVES = 8;
 
@@ -42,7 +44,7 @@ export function mountPiano(container: HTMLElement, handlers: PianoHandlers): Pia
     b.addEventListener('click', () => piano.showOctave(firstOctave() + delta, true));
     return b;
   };
-  container.replaceChildren(arrow('<', -1, 'Lower octave'), scroller, arrow('>', 1, 'Higher octave'));
+  container.replaceChildren(arrow('<', -1, t('Lower octave')), scroller, arrow('>', 1, t('Higher octave')));
 
   for (let o = 0; o < PIANO_OCTAVES; o++) {
     const label = document.createElement('span');

@@ -133,7 +133,7 @@
       <section class="entry-pad" id="entry-pad" aria-label="Touch entry">
         <div class="entry-fields">
           <button type="button" class="btn" data-pad="left" aria-label="Previous channel"><svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1 4 6 0v8z" fill="currentColor"/></svg></button>
-          <button type="button" class="btn field n" data-field="0"><small>Ch 1</small><span>---</span></button>
+          <button type="button" class="btn field n" data-field="0"><small translate="no">Ch 1</small><span>---</span></button>
           <button type="button" class="btn field i" data-field="1"><small>Ins</small><span>..</span></button>
           <button type="button" class="btn field v" data-field="3"><small>Vol</small><span>..</span></button>
           <button type="button" class="btn field e" data-field="5"><small>Fx</small><span>.</span></button>
@@ -161,7 +161,7 @@
         <button type="button" class="btn" data-proxy="rec" id="bar-rec" aria-pressed="false">Rec</button>
         <span class="bar-octave">
           <button type="button" class="btn" data-proxy-step="octave:-1" aria-label="Octave down">-</button>
-          <output class="value" id="bar-octave">Oct 4</output>
+          <output class="value" id="bar-octave" translate="no">Oct 4</output>
           <button type="button" class="btn" data-proxy-step="octave:1" aria-label="Octave up">+</button>
         </span>
         <button type="button" class="btn" id="bar-menu" aria-expanded="false" aria-controls="sheet">Menu</button>
@@ -170,7 +170,7 @@
 
       <footer class="statusbar">
         <span id="status">Press a key or tap the piano to start audio.</span>
-        <button type="button" class="brand" id="brand-about" title="About chiptrackr">chiptrackr</button>
+        <button type="button" class="brand" id="brand-about" title="About chiptrackr"><span translate="no">chiptrackr</span></button>
       </footer>
     </div>
 
@@ -192,9 +192,10 @@
     <dialog class="panel help file-dialog about" id="about" aria-label="About">
       <h2 class="ptitle">About</h2>
       <canvas class="about-demo" width="320" height="180" aria-label="Demo animation: copper bars, a starfield, the chiptrackr logo and a sine scroller"></canvas>
-      <p class="about-title">chiptrackr</p>
-      <p class="about-by">made by <a href="https://github.com/wirehack7" target="_blank" rel="noopener">wirehack7</a></p>
-      <p class="info">A tracker for chiptunes, modules and the demoscene, right in your browser. Free and open source: the code is on <a href="https://github.com/wirehack7/webtracker" target="_blank" rel="noopener">GitHub</a> under the <a href="LICENSE.txt" target="_blank" rel="noopener">MIT License</a> (<a href="third-party-licenses.txt" target="_blank" rel="noopener">third-party licenses</a>). Click the demo to pause it.</p>
+      <p class="about-title" translate="no">chiptrackr</p>
+      <p class="about-by">made by <a href="https://github.com/wirehack7" target="_blank" rel="noopener" translate="no">wirehack7</a></p>
+      <!-- Filled in by main.ts, so the links can sit anywhere in a translated sentence. -->
+      <p class="info" id="about-info"></p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>
@@ -213,28 +214,28 @@
       <div class="export-fields">
         <label><span class="label">Format</span>
           <select class="value" id="export-format">
-            <optgroup label="WAV">
-              <option value="wav:pcm16">WAV 16-bit</option>
-              <option value="wav:pcm24">WAV 24-bit</option>
-              <option value="wav:float32">WAV 32-bit float</option>
+            <optgroup label="WAV" translate="no">
+              <option value="wav:pcm16" translate="no">WAV 16-bit</option>
+              <option value="wav:pcm24" translate="no">WAV 24-bit</option>
+              <option value="wav:float32" translate="no">WAV 32-bit float</option>
             </optgroup>
             <optgroup label="FLAC (lossless, smaller)">
-              <option value="flac:16">FLAC 16-bit</option>
-              <option value="flac:24">FLAC 24-bit</option>
+              <option value="flac:16" translate="no">FLAC 16-bit</option>
+              <option value="flac:24" translate="no">FLAC 24-bit</option>
             </optgroup>
-            <optgroup label="MP3">
-              <option value="mp3:320">MP3 320 kbit/s</option>
-              <option value="mp3:256">MP3 256 kbit/s</option>
-              <option value="mp3:192">MP3 192 kbit/s</option>
-              <option value="mp3:128">MP3 128 kbit/s</option>
+            <optgroup label="MP3" translate="no">
+              <option value="mp3:320" translate="no">MP3 320 kbit/s</option>
+              <option value="mp3:256" translate="no">MP3 256 kbit/s</option>
+              <option value="mp3:192" translate="no">MP3 192 kbit/s</option>
+              <option value="mp3:128" translate="no">MP3 128 kbit/s</option>
             </optgroup>
           </select>
         </label>
         <label><span class="label">Rate</span>
           <select class="value" id="export-rate">
-            <option value="44100">44100 Hz</option>
-            <option value="48000">48000 Hz</option>
-            <option value="96000">96000 Hz</option>
+            <option value="44100" translate="no">44100 Hz</option>
+            <option value="48000" translate="no">48000 Hz</option>
+            <option value="96000" translate="no">96000 Hz</option>
           </select>
         </label>
         <label><span class="label">What</span>
@@ -374,6 +375,7 @@
     <dialog class="panel help file-dialog" id="setup">
       <h2 class="ptitle">Setup</h2>
       <div class="setup-fields">
+        <label><span class="label">Language</span><select class="value" id="set-language" title="Auto follows the language of the browser"></select></label>
         <label><span class="label">Colours</span><select class="value" id="set-theme"></select></label>
         <label class="desk-only"><span class="label">Interface size</span><select class="value" id="set-ui-size" title="How big panels, text and the pattern are on this screen; phones keep their own size"></select></label>
         <label><span class="label">Resampling</span>

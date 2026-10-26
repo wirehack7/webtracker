@@ -1,5 +1,6 @@
 import { noteName, type Envelope, type Instrument, type VoiceState } from '@webtracker/engine';
 import type { SongEditor } from '../editor/song-editor.ts';
+import { msg, t } from '../i18n/i18n.ts';
 import { copyEnvelope, PANNING_PRESETS, pastedEnvelope, VOLUME_PRESETS } from './envelope-presets.ts';
 import { hex } from './pattern-view.ts';
 import { button, cssColor, drawMarkers, el, fitCanvas, layeredCanvas, setPressed, stepper, textInput, toggle, type Stepper } from './widgets.ts';
@@ -15,7 +16,7 @@ export interface InstrumentEditorHost {
 
 type EnvelopeKey = 'volumeEnvelope' | 'panningEnvelope';
 const MAX_POINTS = 12;
-const VIBRATO_TYPES = ['Sine', 'Square', 'RampDn', 'RampUp'];
+const VIBRATO_TYPES = [msg('Sine'), msg('Square'), msg('RampDn'), msg('RampUp')];
 
 /** One envelope: a canvas with draggable points and its On/Sus/Loop controls. */
 class EnvelopeView {
@@ -35,21 +36,21 @@ class EnvelopeView {
     private readonly key: EnvelopeKey,
     title: string,
   ) {
-    this.on = toggle('On', () => this.edit('envelope on', (e) => (e.enabled = !e.enabled && e.points.length > 0)));
-    this.sus = toggle('Sus', () => this.edit('sustain', (e) => (e.sustain = !e.sustain)));
-    this.loop = toggle('Loop', () => this.edit('envelope loop', (e) => (e.loop = !e.loop)));
+    this.on = toggle(t('On'), () => this.edit('envelope on', (e) => (e.enabled = !e.enabled && e.points.length > 0)));
+    this.sus = toggle(t('Sus'), () => this.edit('sustain', (e) => (e.sustain = !e.sustain)));
+    this.loop = toggle(t('Loop'), () => this.edit('envelope loop', (e) => (e.loop = !e.loop)));
     const row = el('div', 'tool-row');
     row.append(
       el('span', 'label', title),
       this.on,
       this.sus,
       this.loop,
-      button('Sus=Pt', () => this.edit('sustain point', (e) => (e.sustainPoint = this.selected)), 'Sustain at the selected point'),
-      button('LpS=Pt', () => this.edit('loop start', (e) => (e.loopStart = Math.min(this.selected, e.loopEnd))), 'Loop starts at the selected point'),
-      button('LpE=Pt', () => this.edit('loop end', (e) => (e.loopEnd = Math.max(this.selected, e.loopStart))), 'Loop ends at the selected point'),
-      button('DelPt', () => this.deletePoint(this.selected), 'Delete the selected point (or right-click it)'),
-      button('Copy', () => this.copy(), 'Copy this envelope'),
-      button('Paste', () => this.paste(), 'Paste a copied envelope (volume and panning share the clipboard)'),
+      button(t('Sus=Pt'), () => this.edit('sustain point', (e) => (e.sustainPoint = this.selected)), t('Sustain at the selected point')),
+      button(t('LpS=Pt'), () => this.edit('loop start', (e) => (e.loopStart = Math.min(this.selected, e.loopEnd))), t('Loop starts at the selected point')),
+      button(t('LpE=Pt'), () => this.edit('loop end', (e) => (e.loopEnd = Math.max(this.selected, e.loopStart))), t('Loop ends at the selected point')),
+      button(t('DelPt'), () => this.deletePoint(this.selected), t('Delete the selected point (or right-click it)')),
+      button(t('Copy'), () => this.copy(), t('Copy this envelope')),
+      button(t('Paste'), () => this.paste(), t('Paste a copied envelope (volume and panning share the clipboard)')),
       this.presetSelect(key === 'volumeEnvelope' ? VOLUME_PRESETS : PANNING_PRESETS),
       this.info,
     );
@@ -63,14 +64,14 @@ class EnvelopeView {
 
   private presetSelect(presets: typeof VOLUME_PRESETS): HTMLSelectElement {
     const select = el('select', 'value preset');
-    select.title = 'Replace the envelope with a ready-made one';
-    select.append(new Option('Preset', ''), ...presets.map((p, i) => new Option(p.name, String(i))));
+    select.title = t('Replace the envelope with a ready-made one');
+    select.append(new Option(t('Preset'), ''), ...presets.map((p, i) => new Option(t(p.name), String(i))));
     select.addEventListener('change', () => {
       const preset = presets[Number(select.value)];
       select.value = '';
       if (!preset) return;
-      this.edit(`${preset.name.toLowerCase()} envelope`, (e) => Object.assign(e, preset.build()));
-      this.host.status(`${preset.name} envelope.`);
+      this.edit('envelope preset', (e) => Object.assign(e, preset.build()));
+      this.host.status(t('{preset} envelope.', { preset: t(preset.name) }));
     });
     return select;
   }
@@ -79,13 +80,13 @@ class EnvelopeView {
     const env = this.envelope();
     if (!env) return;
     copyEnvelope(env);
-    this.host.status(`Copied the envelope, ${env.points.length} points.`);
+    this.host.status(t('Copied the envelope, {points} points.', { points: env.points.length }));
   }
 
   private paste(): void {
     const pasted = pastedEnvelope();
     if (!pasted) {
-      this.host.status('Copy an envelope first.');
+      this.host.status(t('Copy an envelope first.'));
       return;
     }
     this.edit('paste envelope', (e) => Object.assign(e, pasted));
@@ -216,7 +217,7 @@ class EnvelopeView {
     const n = env?.points.length ?? 0;
     this.selected = Math.min(this.selected, Math.max(0, n - 1));
     const p = env?.points[this.selected];
-    this.info.textContent = p ? `Pt ${this.selected + 1}/${n}  X ${p.x}  Y ${hex(p.y)}` : 'Click to add points';
+    this.info.textContent = p ? `Pt ${this.selected + 1}/${n}  X ${p.x}  Y ${hex(p.y)}` : t('Click to add points');
     this.draw();
     this.drawTicks();
   }
@@ -275,21 +276,21 @@ export class InstrumentEditor {
   private readonly keys: HTMLButtonElement[] = [];
 
   constructor(private readonly host: InstrumentEditorHost) {
-    this.name = textInput('Name', 22, (value) => this.edit('name', (ins) => (ins.name = value)));
-    this.envelopes = [new EnvelopeView(host, 'volumeEnvelope', 'Volume'), new EnvelopeView(host, 'panningEnvelope', 'Panning')];
-    this.fadeout = stepper('Fadeout', (d) => this.edit('fadeout', (ins) => (ins.fadeout = Math.max(0, Math.min(0xfff, ins.fadeout + d)))), (v) => hex(v, 3), 256);
+    this.name = textInput(t('Name'), 22, (value) => this.edit('name', (ins) => (ins.name = value)));
+    this.envelopes = [new EnvelopeView(host, 'volumeEnvelope', t('Volume')), new EnvelopeView(host, 'panningEnvelope', t('Panning'))];
+    this.fadeout = stepper(t('Fadeout'), (d) => this.edit('fadeout', (ins) => (ins.fadeout = Math.max(0, Math.min(0xfff, ins.fadeout + d)))), (v) => hex(v, 3), 256);
     const vib = (key: 'vibratoSweep' | 'vibratoDepth' | 'vibratoRate', label: string, max: number) =>
       stepper(label, (d) => this.edit('vibrato', (ins) => (ins[key] = Math.max(0, Math.min(max, ins[key] + d)))), (v) => hex(v), 16);
-    this.vibrato = { vibratoSweep: vib('vibratoSweep', 'Sweep', 255), vibratoDepth: vib('vibratoDepth', 'Depth', 15), vibratoRate: vib('vibratoRate', 'Rate', 63) };
-    this.vibratoType = button('Sine', () => this.edit('vibrato', (ins) => (ins.vibratoType = (ins.vibratoType + 1) % 4)), 'Auto-vibrato waveform');
+    this.vibrato = { vibratoSweep: vib('vibratoSweep', t('Sweep'), 255), vibratoDepth: vib('vibratoDepth', t('Depth'), 15), vibratoRate: vib('vibratoRate', t('Rate'), 63) };
+    this.vibratoType = button(t('Sine'), () => this.edit('vibrato', (ins) => (ins.vibratoType = (ins.vibratoType + 1) % 4)), t('Auto-vibrato waveform'));
 
     const top = el('div', 'tool-row');
     top.append(
       this.name.root,
-      button('Load', () => host.importFile(), 'Load an XI instrument, or a sample into the current slot'),
-      button('Save XI', () => host.saveInstrument(), 'Save this instrument as XI'),
+      button(t('Load'), () => host.importFile(), t('Load an XI instrument, or a sample into the current slot')),
+      button(t('Save XI'), () => host.saveInstrument(), t('Save this instrument as XI')),
       this.fadeout.root,
-      el('span', 'label', 'Vibrato'),
+      el('span', 'label', t('Vibrato')),
       this.vibratoType,
       ...Object.values(this.vibrato).map((s) => s.root),
     );
@@ -303,9 +304,9 @@ export class InstrumentEditor {
     }
     const keyRow = el('div', 'tool-row');
     keyRow.append(
-      el('span', 'label', 'Keymap'),
-      button('All', () => this.assign(0, 95), 'Map every note to the selected sample'),
-      el('span', 'info', 'Click a key to play the selected sample there'),
+      el('span', 'label', t('Keymap')),
+      button(t('All'), () => this.assign(0, 95), t('Map every note to the selected sample')),
+      el('span', 'info', t('Click a key to play the selected sample there')),
     );
     this.keymap.append(...this.keys);
     this.root.append(top, ...this.envelopes.map((e) => e.root), keyRow, this.keymap);
@@ -336,7 +337,7 @@ export class InstrumentEditor {
     for (const e of this.envelopes) e.render();
     this.fadeout.show(ins?.fadeout ?? 0);
     for (const [key, s] of Object.entries(this.vibrato) as [keyof typeof this.vibrato, Stepper][]) s.show(ins?.[key] ?? 0);
-    this.vibratoType.textContent = VIBRATO_TYPES[ins?.vibratoType ?? 0] ?? 'Sine';
+    this.vibratoType.textContent = t(VIBRATO_TYPES[ins?.vibratoType ?? 0] ?? 'Sine');
     const samples = ins?.samples.length ?? 0;
     this.keys.forEach((key, k) => {
       const s = ins?.keymap[k] ?? 0;

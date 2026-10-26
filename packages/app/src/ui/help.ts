@@ -1,7 +1,8 @@
 // The Help dialog: tabs for keys, effects, formats and workflows, a search
 // across all of them, and a jump to the effect under the pattern cursor.
 
-import { HELP_SECTIONS, entryMatches, findEntry, sectionOf, type HelpEntry, type HelpGroup, type HelpTarget } from './help-content.ts';
+import { t } from '../i18n/i18n.ts';
+import { HELP_SECTIONS, entryMatches, findEntry, localizeHelp, sectionOf, type HelpEntry, type HelpGroup, type HelpTarget } from './help-content.ts';
 
 export interface Help {
   open(target?: HelpTarget | null): void;
@@ -30,6 +31,7 @@ export function mountHelp(dialog: HTMLDialogElement): Help {
   const context = dialog.querySelector<HTMLElement>('.help-context')!;
   const empty = dialog.querySelector<HTMLElement>('.help-empty')!;
   const manual = dialog.querySelector<HTMLAnchorElement>('.help-manual');
+  localizeHelp();
 
   tabs.innerHTML = HELP_SECTIONS.map(
     (s) => `<button type="button" class="btn sm" role="tab" data-section="${s.id}">${escape(s.title)}</button>`,
@@ -101,7 +103,7 @@ export function mountHelp(dialog: HTMLDialogElement): Help {
       const entry = target ? findEntry(target.id) : null;
       context.hidden = !entry;
       if (target && entry) {
-        context.textContent = `Under the cursor: ${target.shown} – ${entry.name ?? entry.code}`;
+        context.textContent = t('Under the cursor: {shown} – {name}', { shown: target.shown, name: entry.name ?? entry.code });
         show(sectionOf(target.id)!.id);
       } else {
         render();
