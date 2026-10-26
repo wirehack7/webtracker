@@ -73,7 +73,7 @@
               <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
               <button type="button" class="btn" id="new" title="New song">New</button>
               <button type="button" class="btn" id="load" title="Load a module: MOD, XM, S3M, IT, MTM, 669 or OKT, also packed as ZIP, gzip, MMCMP, PowerPacker or UMX; or an XP pattern / XT track into the current pattern (Ctrl+O)">Load</button>
-              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, FLAC or MP3, autosaved versions (Ctrl+S saves XM)">Save</button>
+              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, FLAC, MP3 or a video, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
               <button type="button" class="btn" id="stats-open" title="Play time, file size, unused parts; make the song smaller for intros">Stats</button>
@@ -261,6 +261,36 @@
         <progress id="export-progress" max="1" value="0" hidden></progress>
       </div>
       <p class="info" id="export-info">Muted channels stay out of the song mix. MP3 renders at 48000 Hz at most.</p>
+
+      <h2 class="ptitle">Export video</h2>
+      <div class="export-fields">
+        <label><span class="label">Size</span>
+          <select class="value" id="video-size">
+            <option value="1280x720">1280 x 720, wide</option>
+            <option value="1920x1080">1920 x 1080, wide</option>
+            <option value="1080x1080">1080 x 1080, square</option>
+            <option value="1080x1920">1080 x 1920, upright for phones</option>
+          </select>
+        </label>
+        <label><span class="label">Frames</span>
+          <select class="value" id="video-fps">
+            <option value="30" translate="no">30 fps</option>
+            <option value="60" translate="no">60 fps</option>
+          </select>
+        </label>
+        <label><span class="label">Format</span>
+          <select class="value" id="video-format">
+            <option value="mp4" translate="no">MP4 (H.264)</option>
+            <option value="webm" translate="no">WebM (VP9)</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="video-go">Render video</button>
+        <progress id="video-progress" max="1" value="0" hidden></progress>
+      </div>
+      <div id="video-preview"></div>
+      <p class="info" id="video-info">The pattern and the scopes in your colours, with the song's sound, for Mastodon, YouTube and the like. Muted channels stay silent.</p>
 
       <h2 class="ptitle">Use in a demo or intro</h2>
       <div class="row">

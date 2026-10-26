@@ -6,6 +6,7 @@ chiptrackr itself is released under the [MIT License](LICENSE). The deployed app
 | --- | --- | --- |
 | [Press Start 2P](https://github.com/fontsource/font-files/tree/main/fonts/google/press-start-2p) via `@fontsource/press-start-2p` | The interface font | SIL Open Font License 1.1 |
 | [lamejs](https://github.com/zhuker/lamejs) via `@breezystack/lamejs` | MP3 export | GNU Lesser General Public License 3.0 |
+| [Mediabunny](https://github.com/Vanilagy/mediabunny) via `mediabunny` | Video export (writing MP4 and WebM files) | Mozilla Public License 2.0 |
 
 ## Press Start 2P
 
@@ -14,6 +15,10 @@ Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserv
 ## lamejs
 
 lamejs is a JavaScript port of [LAME](https://lame.sourceforge.io/), copyright its authors. The texts of the [LGPL 3.0](licenses/LGPL-3.0.txt) and the [GPL 3.0](licenses/GPL-3.0.txt) it builds on are in `licenses/`. The npm package is used unmodified and is built into its own file (`assets/lamejs-*.js` in the deployed app), which is loaded only when an MP3 is exported. It can be replaced by any compatible build of lamejs: install another version of `@breezystack/lamejs` (or point the dependency at your own build) and run `pnpm build`. The source of the version in use is at https://github.com/shijinyu/lamejs and on npm.
+
+## Mediabunny
+
+Mediabunny is copyright Vanilagy and its contributors. It is used unmodified from the npm package and built into the video export worker (`assets/video-worker-*.js` in the deployed app), which is loaded only when a video is exported. Its source code is at https://github.com/Vanilagy/mediabunny and on npm; the [MPL 2.0](licenses/MPL-2.0.txt) text is in `licenses/`. The MPL 2.0 applies to Mediabunny's own files only; the rest of chiptrackr stays under the MIT License.
 
 ## Not third-party code
 

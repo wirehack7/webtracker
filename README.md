@@ -56,9 +56,9 @@ MODULE_DIR=~/mods pnpm test
 | `packages/engine` | Song model, replayer, mixer. No DOM dependency; runs in the AudioWorklet, in the export worker and under Node. |
 | `packages/formats` | Loading MOD (ProTracker, xCHN, Soundtracker), XM 1.04, S3M (Scream Tracker 3), IT (Impulse Tracker, including compressed samples), MTM (MultiTracker), 669 (Composer 669, UNIS 669) and OKT (Oktalyzer), also packed in ZIP, gzip, MMCMP, PowerPacker or UMX, saving XM, MOD, XI and 8SVX samples, XP pattern and XT track files, sample import (WAV, AIFF, 8SVX, XI, Gravis PAT, raw PCM), WAV, FLAC and ZIP writers for export. |
 | `packages/replayer` | The replayer for demos and intros: the engine in an AudioWorklet behind a small API, built into one JavaScript file. |
-| `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, language packs in `src/i18n/`, service worker for offline use. MP3 export uses [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0, an unmodified npm package), loaded as a separate file only when an MP3 is exported. |
+| `packages/app` | Vite app: UI, AudioWorklet and export worker in `src/audio/`, autosave in `src/storage/`, language packs in `src/i18n/`, service worker for offline use. MP3 export uses [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0, an unmodified npm package), loaded as a separate file only when an MP3 is exported. Video export (`src/video/`) draws pattern and scopes on an OffscreenCanvas in a worker and encodes with WebCodecs; [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, unmodified npm package) writes the MP4 or WebM file. Browsers without WebCodecs encoders record in real time with MediaRecorder instead. |
 
-Every push to `main` is deployed to GitHub Pages. If the repository variable `TRACKING_CODE` is set (Settings > Secrets and variables > Actions > Variables), the deploy workflow puts its HTML in place of the `<!-- tracking-code -->` placeholder on every page; without it the pages ship with no tracking. The app itself only announces actions as a `chiptrackr:track` event on `window` (detail `{ name, data? }`, names such as `play`, `save-xm`, `export-audio`, `share-copy`, `jam-start`, `replayer-play`); the tracking code can listen for it and forward it to any analytics service.
+Every push to `main` is deployed to GitHub Pages. If the repository variable `TRACKING_CODE` is set (Settings > Secrets and variables > Actions > Variables), the deploy workflow puts its HTML in place of the `<!-- tracking-code -->` placeholder on every page; without it the pages ship with no tracking. The app itself only announces actions as a `chiptrackr:track` event on `window` (detail `{ name, data? }`, names such as `play`, `save-xm`, `export-audio`, `export-video`, `share-copy`, `jam-start`, `replayer-play`); the tracking code can listen for it and forward it to any analytics service.
 
 ## Replayer for demos and intros
 
@@ -101,7 +101,7 @@ The keys follow the FT2 layout. The Help button in the app shows the full list. 
 | Shift+arrows, mouse drag | Select a block; Ctrl+C/X/V copy, cut, paste |
 | Alt+↑/↓ | Transpose (with Shift by an octave) |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
-| Ctrl+S | Save as XM; the Save button also saves MOD and exports WAV, FLAC or MP3 (whole song or one file per channel) |
+| Ctrl+S | Save as XM; the Save button also saves MOD, exports WAV, FLAC or MP3 (whole song or one file per channel) and renders a video of pattern and scopes (MP4 or WebM, wide, square or upright) |
 | Click / right-click a scope | Mute / solo a channel |
 | Ctrl+I | Interpolate the volume column or effect across the selection |
 | Ctrl+E / Edit button | Transpose with instrument filter, remap instruments, scale volume (selection, track, pattern or whole song) |
@@ -126,4 +126,4 @@ Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, w
 
 chiptrackr is released under the [MIT License](LICENSE), copyright Markus Fritz (wirehack7). You may use, change and share it, also in your own demos, intros and commercial productions, as long as the copyright notice stays with it. The built replayer files carry a one-line notice for that.
 
-The interface font Press Start 2P (SIL Open Font License 1.1) and lamejs for MP3 export (LGPL-3.0) come with their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Songs you make with chiptrackr are yours.
+The interface font Press Start 2P (SIL Open Font License 1.1) lamejs for MP3 export (LGPL-3.0) and Mediabunny for video export (MPL-2.0) come with their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Songs you make with chiptrackr are yours.

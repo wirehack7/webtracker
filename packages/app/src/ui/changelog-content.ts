@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-26c',
+    items: [
+      msg('Export your song as a video, with the pattern scrolling and a scope per channel in your colours: Save > Export video. Wide, square or upright, ready for Mastodon and YouTube.'),
+    ],
+  },
+  {
     id: '2026-10-26b',
     items: [
       msg('The sample library has chip waves, PWM loops, drums and effects, all made by the tracker and free to use. Open it with Library in the sample or instrument editor, or from the instrument picker on phones.'),

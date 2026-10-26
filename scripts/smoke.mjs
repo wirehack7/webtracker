@@ -8,7 +8,7 @@
  * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. What's new
  * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
- * over files. The sample library must load a drum and a chip wave on a phone. The replayer page must load and play its demo too, and a German browser must get
+ * over files, as must the video export (in Chromium also its real-time fallback). The sample library must load a drum and a chip wave on a phone. The replayer page must load and play its demo too, and a German browser must get
  * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only). Screenshots go to the given folder.
  */
 import { mkdirSync } from 'node:fs';
@@ -185,6 +185,31 @@ await check('editing, saving and audio export', async () => {
     await context.close();
   }
 });
+
+// Video export of the new (short) song: WebCodecs in the worker, and in Chromium also the
+// MediaRecorder fallback in real time, with the encoders taken away. Headless Firefox on the
+// CI runners has no running audio clock, so a recording could not finish there.
+for (const fallback of useFirefox ? [false] : [false, true]) {
+  await check(`video export${fallback ? ' (recorded in real time)' : ''}`, async () => {
+    const { context, page, errors } = await open(base, viewports[0]);
+    try {
+      if (fallback) await page.addInitScript(() => { delete window.VideoEncoder; delete window.AudioEncoder; });
+      if (fallback) await page.reload();
+      await page.waitForSelector('#pattern-no');
+      const file = await downloadBytes(page, () => document.querySelector('#video-go')?.click(), 120000);
+      const info = await page.locator('#video-info').textContent();
+      assert(file.bytes.length > 20000, `video is only ${file.bytes.length} bytes (${info})`);
+      const mp4 = file.bytes.subarray(4, 8).toString('latin1') === 'ftyp';
+      const webm = file.bytes.readUInt32BE(0) === 0x1a45dfa3;
+      assert(mp4 || webm, `${file.name} is neither MP4 nor WebM`);
+      assert(/\.(mp4|webm)$/.test(file.name) && (mp4 ? file.name.endsWith('.mp4') : file.name.endsWith('.webm')), `video is called ${file.name}`);
+      console.log(`     ${info}`);
+      assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 // Backing up the song library and restoring it in a browser that has none, on a phone.
 // Backups and the transfer between browsers, on a phone. Each browser context

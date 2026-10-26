@@ -1647,6 +1647,15 @@ select.value {
   accent-color: var(--scope-line);
 }
 
+/* A video that records in real time shows here while it runs. */
+.video-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: calc(var(--px) * 4);
+  box-shadow: 0 0 0 var(--px) var(--desk-lo);
+}
+
 .file-dialog .list li .idx {
   margin-right: calc(var(--px) * 2);
 }
