@@ -29,8 +29,11 @@ jobs:
           name: coverage
           path: coverage/
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm exec playwright install --with-deps chromium webkit firefox
       - run: pnpm smoke smoke-screenshots
+      - name: Firefox smoke test
+        if: always()
+        run: pnpm smoke smoke-screenshots/firefox --firefox
       - name: iPhone and iPad smoke test (WebKit)
         if: always()
         run: pnpm smoke:ios smoke-screenshots/ios
