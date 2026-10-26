@@ -63,6 +63,7 @@ export class Replayer {
   private playing = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private scopeData: Float32Array[] = [];
+  private scopesOn = false;
 
   private constructor(
     readonly song: Song,
@@ -118,7 +119,10 @@ export class Replayer {
         this.onRow?.(event.state);
       });
     } else if (event.type === 'scopes') {
-      this.later(event.when, () => (this.scopeData = event.channels));
+      // A snapshot still on its way when scopes are switched off is dropped.
+      this.later(event.when, () => {
+        if (this.scopesOn) this.scopeData = event.channels;
+      });
     } else {
       this.later(event.when, () => {
         this.playing = false;
@@ -206,6 +210,7 @@ export class Replayer {
    */
   enableScopes(frames = 1024, rate = 30): void {
     this.scopeData = [];
+    this.scopesOn = frames > 0 && rate > 0;
     this.send({ type: 'scopes', frames, rate: frames > 0 ? rate : 0 });
   }
 
