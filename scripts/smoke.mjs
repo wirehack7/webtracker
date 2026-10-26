@@ -8,7 +8,7 @@
  * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
  * over files. The replayer page must load and play its demo too, and a German browser must get
- * the German language pack. Screenshots go to the given folder.
+ * the German language pack (and a Finnish one the Finnish pack). Screenshots go to the given folder.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -184,6 +184,29 @@ await check('German language pack', async () => {
         await page.waitForSelector('#start');
         assert((await page.textContent('#start h2')) === 'Erste Schritte', 'manual is not translated');
       } else if (shots) await page.screenshot({ path: join(shots, 'german-phone.png') });
+      assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+// Finnish has the longest words of the packs: it must fit at desktop and phone size too.
+await check('Finnish language pack', async () => {
+  for (const viewport of [viewports[0], viewports[3]]) {
+    const { context, page, errors } = await open(base, viewport, 'fi-FI');
+    try {
+      await page.waitForSelector('#pattern-no');
+      const shown = await page.evaluate(() => ({
+        lang: document.documentElement.lang,
+        save: document.querySelector('#save').textContent,
+        status: document.querySelector('#status').textContent,
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+      }));
+      assert(shown.lang === 'fi', `page language is ${shown.lang}`);
+      assert(shown.save === 'Tallenna' && /näppäin/.test(shown.status), `not translated: ${shown.save} / ${shown.status}`);
+      assert(shown.overflow <= 1, `page scrolls sideways by ${shown.overflow}px at ${viewport.name}`);
+      if (shots) await page.screenshot({ path: join(shots, `finnish-${viewport.name}.png`) });
       assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
     } finally {
       await context.close();
