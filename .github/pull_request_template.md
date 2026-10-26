@@ -13,3 +13,4 @@
 - [ ] UI changes work on a phone as well as on desktop
 - [ ] New third-party code or assets are added to `THIRD_PARTY_NOTICES.md`
 - [ ] README or in-app help updated if behaviour changed
+- [ ] Changes players notice have a line in What's new (`packages/app/src/ui/changelog-content.ts`)

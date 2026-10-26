@@ -23,7 +23,7 @@ const { base, server } = await serveDist(root);
 const browser = await chromium.launch();
 console.log(`browser: Chromium ${browser.version()}`);
 
-const dialogs = ['setup', 'edit-tools', 'file-dialog', 'songs-dialog', 'share-dialog', 'jam-dialog', 'transfer-dialog', 'ins-picker', 'pat-picker', 'about', 'help'];
+const dialogs = ['setup', 'edit-tools', 'file-dialog', 'songs-dialog', 'share-dialog', 'jam-dialog', 'transfer-dialog', 'ins-picker', 'pat-picker', 'whats-new', 'about', 'help'];
 const screens = [320, 360, 375, 390, 414, 480, 560, 639].map((width) => ({ width, height: 740 }));
 screens.push({ width: 844, height: 390 }, { width: 1024, height: 768 });
 // Below this a tap target is too small for a thumb (CSS pixels).
@@ -44,6 +44,8 @@ for (const locale of ['en-US', 'de-DE', 'fi-FI']) {
           const dialog = document.getElementById(id);
           // Setup fills in its values when its button opens it.
           if (id === 'setup') document.getElementById('setup-open').click();
+          // What's new fills in its list when it opens.
+          if (id === 'whats-new') document.getElementById('whats-new-open').click();
           if (!dialog.open) dialog.showModal();
           // Every collapsible part open, so its contents are checked too.
           for (const details of dialog.querySelectorAll('details')) details.open = true;

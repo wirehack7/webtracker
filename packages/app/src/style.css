@@ -1954,6 +1954,57 @@ canvas.drawing {
   margin-top: calc(var(--px) * 6);
 }
 
+/* ---- What's new ------------------------------------------------------ */
+
+.whats-new {
+  width: min(calc(100vw - 32px), calc(var(--px) * 420));
+}
+
+.whats-new-body {
+  max-height: min(60dvh, calc(var(--px) * 400));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.whats-new-body .ptitle:not(:first-child) {
+  margin-top: calc(var(--px) * 8);
+}
+
+.whats-new-badge {
+  color: var(--pat-fx);
+}
+
+.whats-new-list {
+  margin: calc(var(--px) * 2) 0 0;
+  padding-left: calc(var(--px) * 10);
+  line-height: 1.6;
+}
+
+.whats-new-list li + li {
+  margin-top: calc(var(--px) * 2);
+}
+
+/* Phones scroll the whole dialog instead, with Close kept at the bottom. */
+@media (max-width: 639px), (max-height: 500px) and (orientation: landscape) {
+  .whats-new-body {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* The Help head puts its search on a line of its own when the buttons need the room. */
+@media (max-width: 639px) {
+  .help-head {
+    flex-wrap: wrap;
+    row-gap: calc(var(--px) * 2);
+  }
+
+  .help-head .help-search.value.text {
+    order: 1;
+    flex-basis: 100%;
+  }
+}
+
 /* ---- About ----------------------------------------------------------- */
 
 .about-demo {

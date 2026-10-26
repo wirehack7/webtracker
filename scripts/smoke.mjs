@@ -5,7 +5,8 @@
  *
  * Serves packages/app/dist and, at several screen sizes, checks that the
  * tracker loads without errors and without sideways scrolling, that the
- * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. On the desktop
+ * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. What's new
+ * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
  * over files. The replayer page must load and play its demo too, and a German browser must get
  * the German language pack (and a Finnish one the Finnish pack). Screenshots go to the given folder.
@@ -258,6 +259,32 @@ await check('replayer page plays its demo', async () => {
     await page.waitForTimeout(1500);
     assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
     if (shots) await page.screenshot({ path: join(shots, 'replayer.png') });
+  } finally {
+    await context.close();
+  }
+});
+
+// What's new stays shut on a first visit, opens once after an update, and opens from Help.
+await check("What's new after an update", async () => {
+  const { context, page, errors } = await open(base, phone);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.waitForFunction(() => localStorage.getItem('webtracker.whatsNew'));
+    assert(!(await page.evaluate(() => document.querySelector('#whats-new').open)), 'it opened on a first visit');
+    // An older release seen last time: the next visit shows what is new.
+    await page.evaluate(() => localStorage.setItem('webtracker.whatsNew', '2000-01-01'));
+    await page.reload({ waitUntil: 'load' });
+    await page.locator('#whats-new[open] .whats-new-list li').first().waitFor();
+    if (shots) await page.screenshot({ path: join(shots, 'whats-new-phone.png') });
+    await page.locator('#whats-new button[type=submit]').click();
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForSelector('#pattern-no');
+    await page.waitForTimeout(500);
+    assert(!(await page.evaluate(() => document.querySelector('#whats-new').open)), 'it opened again after being closed');
+    await page.evaluate(() => document.querySelector('#help-open').click());
+    await page.locator('#whats-new-open').click();
+    await page.locator('#whats-new[open]').waitFor();
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
   } finally {
     await context.close();
   }
