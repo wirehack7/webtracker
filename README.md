@@ -23,6 +23,12 @@ The interface, Help and the manual come in English, German and Finnish. Setup > 
 
 chiptrackr is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([GitHub](https://github.com/milkytracker/MilkyTracker)), the open-source FastTracker II successor. We love MilkyTracker: its interface, its workflow and its sound are the benchmark this project measures itself against. If you want a native tracker on your desktop, go and use it.
 
+## How this was built
+
+chiptrackr is written with the help of an AI coding assistant, Anthropic's Claude. Markus Fritz (wirehack7) decides what gets built and tries out the results, and every change goes through a pull request with CI; commits written with the assistant carry a `Co-Authored-By: Claude` line, so the history shows which ones they are. Since generated code can look right and still be wrong, the replayer is checked against [libopenmpt](https://lib.openmpt.org/) in CI on every change to the engine or the file formats, and the test suite and browser smoke tests are described in [docs/TESTING.md](docs/TESTING.md).
+
+No generative audio or image models were used. The sounds in the sample library and the demo song are produced by plain code in this repository, and the music you write in chiptrackr is entirely your own.
+
 ## Development
 
 Requirements: Node 22 and pnpm 12 (`corepack enable` is enough).
