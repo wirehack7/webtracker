@@ -8,6 +8,20 @@ import type { WorkletMessage } from './messages.ts';
  * record what the tracker asks of them; the worklet itself has its own test.
  */
 
+class FakeGain {
+  connectedTo: unknown = null;
+  calls: string[] = [];
+  readonly gain = {
+    value: 1,
+    cancelScheduledValues: (time: number) => this.calls.push(`cancel ${time}`),
+    setValueAtTime: (value: number, time: number) => this.calls.push(`set ${value} ${time}`),
+    setTargetAtTime: (value: number, time: number) => this.calls.push(`glide ${value} ${time}`),
+  };
+  connect(destination: unknown) {
+    this.connectedTo = destination;
+  }
+}
+
 class FakeContext extends EventTarget {
   static last: FakeContext;
   state: AudioContextState = 'suspended';
@@ -17,6 +31,11 @@ class FakeContext extends EventTarget {
   /** What resume() does: resolve, fail, or never settle. */
   static resume: 'ok' | 'fail' | 'hang' = 'ok';
   readonly audioWorklet = { addModule: async (url: string) => void this.modules.push(url) };
+  currentTime = 2;
+  readonly gain = new FakeGain();
+  createGain() {
+    return this.gain;
+  }
 
   constructor(readonly options: AudioContextOptions) {
     super();
@@ -70,7 +89,7 @@ afterEach(() => {
 });
 
 describe('EngineNode', () => {
-  it('starts an interactive context, loads the worklet and connects it to the speakers', async () => {
+  it('starts an interactive context, loads the worklet and connects it to the speakers through the master volume', async () => {
     const engine = await EngineNode.start();
     const context = FakeContext.last;
     expect(engine.context).toBe(context);
@@ -78,7 +97,18 @@ describe('EngineNode', () => {
     expect(context.modules).toHaveLength(1);
     expect(FakeNode.last.name).toBe('webtracker-engine');
     expect(FakeNode.last.options).toEqual({ numberOfInputs: 0, outputChannelCount: [2] });
-    expect(FakeNode.last.connectedTo).toBe(context.destination);
+    expect(FakeNode.last.connectedTo).toBe(context.gain);
+    expect(engine.output).toBe(context.gain);
+    expect(context.gain.connectedTo).toBe(context.destination);
+    expect(context.gain.gain.value).toBe(1);
+  });
+
+  it('starts at the stored master volume and glides to a new one', async () => {
+    const engine = await EngineNode.start(0.25);
+    const gain = FakeContext.last.gain;
+    expect(gain.gain.value).toBe(0.25);
+    engine.setGain(0.5);
+    expect(gain.calls).toEqual(['cancel 2', 'set 0.25 2', 'glide 0.5 2']);
   });
 
   it('passes messages both ways', async () => {

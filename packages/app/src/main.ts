@@ -68,6 +68,8 @@ import { createBackup, isSettingsKey, planRestore, readBackup } from './storage/
 import { addSongs, deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { track } from './track.ts';
+import { loadVolume, saveVolume, volumeGain } from './audio/master-volume.ts';
+import { mountVolumeControl } from './ui/volume-control.ts';
 import { initLanguage, language, LANGUAGES, msg, t, tNodes, translatePage } from './i18n/i18n.ts';
 import { editName } from './i18n/edit-names.ts';
 import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, uiPixel, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
@@ -113,6 +115,12 @@ let followSong = true;
 // ---- Audio ---------------------------------------------------------------
 
 let engine: EngineNode | null = null;
+let masterVolume = loadVolume();
+mountVolumeControl($('#master-vol'), masterVolume, (volume) => {
+  masterVolume = volume;
+  saveVolume(volume);
+  engine?.setGain(volumeGain(volume));
+});
 let starting: Promise<EngineNode | null> | null = null;
 let sounding: number | null = null;
 
@@ -142,7 +150,7 @@ $('#editors').append(sampleEditor.root, instrumentEditor.root);
 function ensureEngine(): Promise<EngineNode | null> {
   // Audio may start on a tap that also loads a file; that file's message stays.
   const before = status.textContent;
-  starting ??= EngineNode.start().then(
+  starting ??= EngineNode.start(volumeGain(masterVolume)).then(
     (node) => {
       engine = node;
       node.onMessage = handleWorkletMessage;
@@ -621,7 +629,7 @@ async function auditionSample(sample: Sample): Promise<void> {
     gain.gain.setValueAtTime(level, now + 0.5);
     gain.gain.linearRampToValueAtTime(0, now + 0.6);
   }
-  source.connect(gain).connect(ctx.destination);
+  source.connect(gain).connect(node.output);
   source.start();
   if (source.loop) source.stop(ctx.currentTime + 0.6);
   audition = source;

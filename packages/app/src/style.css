@@ -540,6 +540,130 @@ a.btn {
   white-space: nowrap;
 }
 
+.statusbar {
+  align-items: center;
+}
+
+.statusbar #status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Master volume: a mute button, a slider drawn as a value field with a lit
+   bar and a button for a handle, and the level. */
+.master-vol {
+  --vol: 100%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  margin-block: calc(var(--px) * -2);
+}
+
+.master-vol .btn {
+  min-height: calc(var(--px) * 12);
+  padding-block: calc(var(--px) * 1);
+}
+
+.master-vol .btn[aria-pressed='true'] {
+  padding-block: calc(var(--px) * 2) 0;
+}
+
+.master-vol .value {
+  min-width: calc(var(--px) * 30);
+  padding-block: calc(var(--px) * 1);
+}
+
+.master-vol.muted .value {
+  color: var(--dim);
+}
+
+.master-vol input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--px) * 72);
+  height: calc(var(--px) * 12);
+  margin: 0;
+  padding: 0 calc(var(--px) * 2);
+  background:
+    linear-gradient(to right, var(--btn-on) var(--vol), transparent var(--vol)) no-repeat
+      calc(var(--px) * 3) 50% / calc(100% - var(--px) * 6) calc(var(--px) * 4),
+    var(--field-bg);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-hi);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.master-vol.muted input[type='range'] {
+  background:
+    linear-gradient(to right, var(--dim) var(--vol), transparent var(--vol)) no-repeat
+      calc(var(--px) * 3) 50% / calc(100% - var(--px) * 6) calc(var(--px) * 4),
+    var(--field-bg);
+}
+
+.master-vol input[type='range']:focus-visible {
+  outline: var(--px) dotted var(--text);
+  outline-offset: var(--px);
+}
+
+.master-vol input[type='range']::-webkit-slider-runnable-track {
+  height: 100%;
+  background: none;
+}
+
+.master-vol input[type='range']::-moz-range-track {
+  height: 100%;
+  background: none;
+}
+
+.master-vol input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--px) * 6);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--btn);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-lo);
+}
+
+.master-vol input[type='range']::-moz-range-thumb {
+  width: calc(var(--px) * 6);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--btn);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-lo);
+}
+
+/* Fingers need a bigger slider and handle. */
+@media (pointer: coarse) {
+  .master-vol .btn,
+  .master-vol input[type='range'] {
+    min-height: calc(var(--px) * 16);
+    height: calc(var(--px) * 16);
+  }
+  .master-vol input[type='range']::-webkit-slider-thumb {
+    width: calc(var(--px) * 10);
+  }
+  .master-vol input[type='range']::-moz-range-thumb {
+    width: calc(var(--px) * 10);
+  }
+}
+
+/* Narrow phones: the status text gives way, the slider gets what is left. */
+@media (max-width: 419px) {
+  .master-vol input[type='range'] {
+    width: calc(var(--px) * 56);
+  }
+}
+
 .brand {
   color: var(--dim);
   flex: none;

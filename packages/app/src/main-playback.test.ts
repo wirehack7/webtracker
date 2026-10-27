@@ -18,6 +18,38 @@ const state = (fields: Partial<PlayerState>): PlayerState => ({ ...start, playin
 const settings = (fields: Record<string, unknown>) => ({ 'webtracker.settings': JSON.stringify(fields) });
 
 describe('transport', () => {
+  it('plays everything through the master volume in the status bar and remembers it', async () => {
+    app = await bootApp({ storage: { 'webtracker.volume': '{"level":50,"muted":false}' } });
+    const slider = app.$<HTMLInputElement>('#master-vol input');
+    expect(slider.value).toBe('50');
+    expect(app.$('#master-vol output').textContent).toBe('050');
+    app.click('#play-song');
+    await app.settle();
+    const master = fakeAudio.last!.gains[0]!;
+    expect(master.gain.value).toBe(0.25);
+    expect(master.connectedTo).toBe(fakeAudio.last!.destination);
+
+    slider.value = '100';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(master.gain.value).toBe(1);
+    expect(localStorage.getItem('webtracker.volume')).toBe('{"level":100,"muted":false}');
+    app.click('#master-vol .vol-mute');
+    expect(master.gain.value).toBe(0);
+    expect(app.$('#master-vol output').textContent).toBe('---');
+    expect(app.$('#master-vol .vol-mute').getAttribute('aria-pressed')).toBe('true');
+    // The wheel turns it down and unmutes.
+    app.$('#master-vol').dispatchEvent(new WheelEvent('wheel', { deltaY: 100, cancelable: true }));
+    expect(master.gain.value).toBeCloseTo(0.9025);
+    expect(app.$('#master-vol output').textContent).toBe('095');
+
+    // Sample previews go through it too.
+    app.click('[data-view-target="sample"]');
+    [...app.$('#editors').querySelectorAll('button')].find((b) => b.textContent === 'Library')!.click();
+    app.click('#sample-library .list li[data-id="square"]');
+    await app.settle();
+    expect(fakeAudio.last!.gains.at(-1)!.connectedTo).toBe(master);
+  });
+
   it('plays the song or the pattern from the current position, and stops', async () => {
     app = await bootApp();
     app.click('#play-song');

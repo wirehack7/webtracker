@@ -171,6 +171,11 @@
 
       <footer class="statusbar">
         <span id="status">Press a key or tap the piano to start audio.</span>
+        <span class="master-vol" id="master-vol" role="group" aria-label="Master volume">
+          <button type="button" class="btn sm vol-mute" aria-pressed="false" title="Mute everything this page plays">Vol</button>
+          <input type="range" min="0" max="100" step="1" value="100" aria-label="Master volume" title="Master volume: how loud everything this page plays comes out of this browser. Exports and the song itself stay as they are." />
+          <output class="value" translate="no">100</output>
+        </span>
         <button type="button" class="brand" id="brand-about" title="About chiptrackr"><span translate="no">chiptrackr</span></button>
       </footer>
     </div>
