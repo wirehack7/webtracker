@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-27b',
+    items: [
+      msg('A master volume in the status bar sets how loud the whole page plays: songs, previews, the sample library and jams. Vol mutes, the mouse wheel works too, and the browser remembers it. Your song and exports stay untouched.'),
+    ],
+  },
+  {
     id: '2026-10-27',
     items: [msg('Alt+Enter plays only the cursor row again and moves down one row, as Help says.')],
   },

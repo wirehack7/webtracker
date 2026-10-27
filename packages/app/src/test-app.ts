@@ -53,6 +53,11 @@ class FakeParam {
   value = 0;
   setValueAtTime() {}
   linearRampToValueAtTime() {}
+  cancelScheduledValues() {}
+  /** Jumps straight to the target, so tests read the volume from value. */
+  setTargetAtTime(target: number) {
+    this.value = target;
+  }
 }
 
 /** Enough of an AudioContext for the engine node and the sample library's audition. */
@@ -86,8 +91,11 @@ class FakeAudioContext extends EventTarget {
       stop: () => (source.stopped = true),
     });
   }
+  gains: { gain: FakeParam; connectedTo: unknown }[] = [];
   createGain() {
-    return { gain: new FakeParam(), connect: (node: unknown) => node };
+    const node = { gain: new FakeParam(), connectedTo: null as unknown, connect: (to: unknown) => ((node.connectedTo = to), to) };
+    this.gains.push(node);
+    return node;
   }
 }
 
