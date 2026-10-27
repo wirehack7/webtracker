@@ -25,7 +25,7 @@ chiptrackr is heavily inspired by [MilkyTracker](https://milkytracker.org/) ([Gi
 
 ## How this was built
 
-chiptrackr is written with the help of an AI coding assistant, Anthropic's Claude. Markus Fritz (wirehack7) decides what gets built and tries out the results, and every change goes through a pull request with CI; commits written with the assistant carry a `Co-Authored-By: Claude` line, so the history shows which ones they are. Since generated code can look right and still be wrong, the replayer is checked against [libopenmpt](https://lib.openmpt.org/) in CI on every change to the engine or the file formats, and the test suite and browser smoke tests are described in [docs/TESTING.md](docs/TESTING.md).
+chiptrackr is written with the help of an AI coding assistant, Anthropic's Claude. I decide what gets built and try out the results, and every change goes through a pull request with CI; commits written with the assistant carry a `Co-Authored-By: Claude` line, so the history shows which ones they are. Since generated code can look right and still be wrong, the replayer is checked against [libopenmpt](https://lib.openmpt.org/) in CI on every change to the engine or the file formats, and the test suite and browser smoke tests are described in [docs/TESTING.md](docs/TESTING.md).
 
 No generative audio or image models were used. The sounds in the sample library and the demo song are produced by plain code in this repository, and the music you write in chiptrackr is entirely your own.
 
