@@ -657,10 +657,25 @@ a.btn {
   }
 }
 
-/* Narrow phones: the status text gives way, the slider gets what is left. */
-@media (max-width: 419px) {
+/* Phones held upright: the volume gets a full-width row of its own above the
+   status text, with a long slider that is easy to hit with a thumb. */
+@media (max-width: 639px) {
+  .statusbar {
+    flex-wrap: wrap;
+    row-gap: calc(var(--px) * 4);
+  }
+  .master-vol {
+    order: -1;
+    flex: 1 1 100%;
+    margin-block: 0;
+  }
   .master-vol input[type='range'] {
-    width: calc(var(--px) * 56);
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  .statusbar #status {
+    flex-basis: 100%;
   }
 }
 
