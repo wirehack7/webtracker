@@ -132,4 +132,4 @@ Setup sets the sound: resampling (Auto plays MOD through the Amiga 500 filter, w
 
 chiptrackr is released under the [MIT License](LICENSE), copyright Markus Fritz (wirehack7). You may use, change and share it, also in your own demos, intros and commercial productions, as long as the copyright notice stays with it. The built replayer files carry a one-line notice for that.
 
-The interface font Press Start 2P (SIL Open Font License 1.1) lamejs for MP3 export (LGPL-3.0) and Mediabunny for video export (MPL-2.0) come with their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Songs you make with chiptrackr are yours.
+The interface font Press Start 2P (SIL Open Font License 1.1), lamejs for MP3 export (LGPL-3.0) and Mediabunny for video export (MPL-2.0) come with their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Songs you make with chiptrackr are yours.
