@@ -5,7 +5,7 @@ plainly, what they do not. Every number here comes from a check in this
 repository that you can run yourself, and all of them except the last section
 run in CI on every pull request.
 
-Numbers are from 2026-10-25. The CI job summaries always show the current ones:
+Numbers are from 2026-10-26. The CI job summaries always show the current ones:
 [CI](../.github/workflows/ci.yml) (unit tests, coverage, browser smoke test) and
 [Replayer vs libopenmpt](../.github/workflows/reference.yml).
 
@@ -13,10 +13,10 @@ Numbers are from 2026-10-25. The CI job summaries always show the current ones:
 
 | Check | What it proves | Result |
 | --- | --- | --- |
-| Unit tests (Vitest) | Loaders, writers, replayer rules, editing, sharing, Jam sync, encoders | 248 tests in 40 files, all passing |
-| Code coverage (V8) | Which source lines those tests execute | 55 % of lines overall; formats 93 %, engine 79 %, app 20 % |
+| Unit tests (Vitest) | Loaders, writers, every replayer effect on all three playback paths, the replayer API, editing, sharing, Jam sync and links, the song library, the editors and dialogs, the audio and video export workers, encoders | 787 tests in 76 files, all passing |
+| Code coverage (V8) | Which source lines those tests execute; CI fails below a floor per package | 98 % of lines overall; engine 99 %, replayer 98 %, formats 94 %, app 99 % |
 | Replayer vs libopenmpt | XM and MOD playback against an independent player on the OpenMPT test suite | XM 78 of 84 match; MOD 22 of 22 match on the ProTracker side-by-side check |
-| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; the replayer page plays; playback follows the order list; a German browser gets the German language pack; after one visit the site works offline and a new version offers a reload | 15 of 15 checks passing in headless Chromium, 14 of 14 in headless Firefox (its audio clock does not run on the CI runners, so the order list check is Chromium only) |
+| Browser smoke test (Playwright) | The built site loads, plays and stops at six screen sizes, with no errors and no sideways scrolling; typing notes changes the saved XM; WAV and MP3 export produce files; video export produces an MP4 or WebM file (in Chromium also through the real-time MediaRecorder fallback); the replayer page plays; playback follows the order list; Stats shows the play time and optimizes; a German browser gets the German language pack; after one visit the site works offline and a new version offers a reload | 19 of 19 checks passing in headless Chromium; in headless Firefox the order list check and the recorded video fallback are skipped (its audio clock does not run on the CI runners) |
 | iPhone / iPad smoke test (Playwright WebKit) | Picking, loading and saving files, tap to play, IndexedDB and the replayer page on emulated iPhone 15, iPhone SE and iPad Mini | 4 of 4 checks passing in headless WebKit |
 | Dialogs on phones (Playwright) | Every dialog at 320 to 639 px wide, on a phone on its side and on a touch tablet, in English, German and Finnish: nothing outside the screen or the dialog, no sideways scrolling, nothing cut off, buttons, fields and checkbox rows at least 24 px high | 0 problems in headless Chromium |
 | Type check | TypeScript in strict mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) across all packages | Clean |
@@ -69,30 +69,69 @@ helpers excluded):
 
 | Package | Lines | Statements | Branches | Functions |
 | --- | ---: | ---: | ---: | ---: |
-| formats | 93.4 % | 89.4 % | 73.3 % | 95.5 % |
-| engine | 78.6 % | 76.2 % | 60.7 % | 92.8 % |
-| replayer | 35.4 % | 32.0 % | 27.5 % | 11.4 % |
-| app | 19.9 % | 20.2 % | 17.5 % | 21.5 % |
-| **all** | **55.0 %** | **53.7 %** | **47.1 %** | **46.8 %** |
+| engine | 98.7 % | 97.1 % | 89.4 % | 99.8 % |
+| replayer | 98.3 % | 96.6 % | 90.0 % | 100.0 % |
+| formats | 94.2 % | 90.4 % | 75.0 % | 96.9 % |
+| app | 99.1 % | 97.5 % | 90.8 % | 97.8 % |
+| app, `main.ts` alone | 98.3 % | 96.3 % | 89.2 % | 96.2 % |
+| **all** | **97.9 %** | **95.8 %** | **86.5 %** | **98.2 %** |
+
+`vitest.config.ts` sets a floor a little under these numbers for each package
+(lines and branches), so `pnpm test:coverage` and CI fail when coverage drops.
 
 How to read this:
 
-- **formats** (loaders, writers, encoders) and **engine** (song model, replayer,
-  mixer, editing) are where the logic lives, and they are well covered. The
-  engine's `player.ts` is at 71 % of lines. The biggest gaps are the simpler
-  S3M/IT playback path, and effect branches that only the libopenmpt
-  comparison below exercises (for example Lxx set envelope position, several
-  ProTracker E commands, tremolo and multi-retrig volumes); that run is not
-  counted in these numbers.
-- **app** is low because most of it is DOM code: `main.ts`, the pattern, sample
-  and instrument editors, the piano and the dialogs. Unit tests cover the logic
-  that sits behind the UI (note entry, undo, song editing, share links, Jam
-  sync, settings, help content), and the browser smoke test exercises the UI as
-  a whole, but that run is not counted in these numbers. Interactions such as
-  drawing in the sample editor or dragging envelope points are not tested
-  automatically.
-- **replayer**: the core logic is at 93 %; the AudioWorklet wrapper and the
-  public API around it run only in a browser, where the smoke test plays the
+- **engine** (song model, replayer, mixer, editing) is where the logic lives.
+  `player.ts` is at 98 % of lines: every effect and volume column command is
+  tested on each of its three playback paths (FastTracker 2 for XM,
+  ProTracker 2 for MOD, and the shared path for S3M and IT) in
+  `player-ft2-effects.test.ts`, `player-pt-effects.test.ts` and
+  `player-compat.test.ts`. These tests play a constant-level sample, so the
+  output frame is the channel's gain and the voice position gives the exact
+  pitch, tick by tick, with no estimating from waveforms (`test-probe.ts`).
+  What is left are a few guards for values the loaders never produce.
+- **formats** (loaders, writers, encoders) is at 94 %; the gaps are mostly
+  error paths for damaged files.
+- **app**: the pattern, sample and instrument editors, the piano, the dialogs
+  and the help run under [happy-dom](https://github.com/capricorn86/happy-dom)
+  with a 2D canvas that records what is drawn and pointer events at known
+  positions (`test-dom.ts`), so selecting, cutting, drawing a waveform,
+  dragging loop markers and envelope points are tested through the UI, with a
+  real `SongEditor` behind it. The song library and autosave run against
+  [fake-indexeddb](https://github.com/dumbmatter/fakeIndexedDB), including the
+  upgrade from version 1 and a tab that blocks it. Jam links run over a fake
+  `RTCPeerConnection` that pairs two ends through the codes they swap and
+  delivers messages a task later, like a network (`test-rtc.ts`). The
+  tracker's AudioWorklet processor and the audio and video export workers run
+  in-process; for video encoding, Mediabunny and WebCodecs are stand-ins, so
+  what is tested is which codecs are picked, the fallbacks and that every frame
+  and its audio go out in step, not the encoded file.
+  `main.ts` (about 3,200 lines) wires the page together and holds the app's
+  state. `test-app.ts` boots it whole on the real `index.html`, with fresh
+  modules, an empty IndexedDB and local storage for each test, and stand-ins
+  for the audio context, workers, downloads, the clipboard, pop-ups and
+  animation frames. The `main-*.test.ts` files then use the page the way a
+  person does, by keys, clicks and file picks, and check the pattern, the
+  status line, the dialogs, the downloads and the messages sent to the audio
+  engine: editing and FT2 keys (`main-editing`), playback, scopes and panels
+  (`main-playback`), opening, saving, exporting, autosave, the song library,
+  share links and song tabs (`main-files`), hosting and joining a jam and
+  transfers, with the other browser played by the test over the fake WebRTC
+  link or BroadcastChannel (`main-jam`), and Setup, colours, MIDI, the edit
+  tools and help (`main-setup`). What is left there are guards for states the
+  page cannot reach by hand and the service worker, which only exists in the
+  build.
+- What the fakes cannot show: that canvas pixels look right (the tests check
+  what is drawn, not how it looks), sound from a real AudioWorklet thread,
+  encoded video from a real WebCodecs encoder, WebRTC across real networks,
+  and real MIDI devices. The browser smoke tests cover the first three in the
+  browsers they run in.
+- **replayer**: the public API (`replayer.ts`), the AudioWorklet processor
+  (`worklet.ts`) and the core run together in `replayer.test.ts` against a fake
+  AudioContext whose clock the test moves (`test-audio.ts`): play, pause, stop,
+  seek, loop and end, row callbacks timed to the output latency, volume,
+  scopes, mono output, loading from bytes and URLs, and the lite build. A real
+  browser's audio thread is only exercised by the smoke test, which plays the
   replayer page.
 
 ## Replayer accuracy against FastTracker 2 and ProTracker
@@ -192,8 +231,8 @@ sheet or Save to Files.
 | --- | :---: | :---: | --- |
 | XM playback (FT2 rules) | ✅ | ✅ libopenmpt | 78 of 84 OpenMPT tests, plus `xm.test.ts`, `ft2.test.ts` |
 | MOD playback (ProTracker 2 rules, Paula, A500/LED filter) | ✅ | ✅ libopenmpt | 22 of 22 side-by-side, plus `mod.test.ts`, `pt2.test.ts`, `render.test.ts` |
-| S3M / IT playback | ◐ | ✗ | Loaders and pitch tested; playback not compared with ST3/IT |
-| Effects | ◐ | ✅ libopenmpt | Covered through the OpenMPT suite and the FT2/PT2 tests; there is no one-test-per-effect list |
+| S3M / IT playback | ✅ | ✗ | Loaders and every effect of the shared playback path tested (`player-compat.test.ts`); not compared with ST3/IT |
+| Effects | ✅ | ✅ libopenmpt | One test per effect and volume column command on each playback path, plus the OpenMPT suite and the FT2/PT2 quirk tests |
 | Envelopes, fadeout, auto-vibrato | ✅ | ✅ libopenmpt | `xm.test.ts`, `ft2.test.ts`, `preview.test.ts`, OpenMPT envelope tests |
 | Resamplers and stereo separation | ✅ | – | `render.test.ts` (none, linear, cubic, sinc, Amiga) |
 | Load MOD, XM, S3M, IT, MTM, 669, OKT | ✅ | – | One test file per format with built test modules |
@@ -203,19 +242,20 @@ sheet or Save to Files.
 | Export WAV | ✅ | – | 16-bit, 24-bit and float read back |
 | Export FLAC | ✅ | – | Own encoder, bit-exact round trip of 16 and 24 bit |
 | Export MP3 | ◐ | – | Frame headers, ID3 and rate cap checked; audio quality judged by ear only |
+| Export video | ◐ | ✅ | `video/frames.test.ts` (frame audio equals the audio export, order list, scopes), `video/draw.test.ts` (layout fits 1 to 32 channels at every size), the worker and the real-time recorder with stand-ins for WebCodecs and MediaRecorder; smoke test checks the file container; picture judged by eye |
 | Pattern editing, blocks, transpose, interpolate | ✅ | – | `edit.test.ts`, `entry.test.ts` |
 | Undo / redo, song settings | ✅ | – | `song-editor.test.ts` |
-| Sample editor operations | ✅ | ✗ | The operations are tested (`sample-edit.test.ts`); the editor's mouse and touch handling is not |
-| Instrument editor, envelope drawing | ◐ | ✗ | Presets tested; the editor UI is not |
-| Song cleanup | ✅ | – | `cleanup.test.ts` |
+| Sample editor | ✅ | ✗ | The operations (`sample-edit.test.ts`) and the editor itself: selection, clipboard, every tool, loop markers, Quick Draw, zoom (`sample-editor.test.ts`); on real touch screens only by hand |
+| Instrument editor, envelope drawing | ✅ | ✗ | Presets, adding, dragging and deleting envelope points, sustain and loop points, keymap (`instrument-editor.test.ts`) |
+| Song stats and optimize (cleanup, half rate, 8-bit, play time) | ✅ | ✅ | `cleanup.test.ts`, `stats.test.ts`, `render.test.ts`, `song-stats.test.ts`; the smoke test opens Stats and optimizes |
 | Keyboard layout and octave keys | ✅ | – | `keyboard.test.ts` |
 | Touch keypad entry | ✅ | ◐ | `entry-pad.test.ts`; phone layout in the smoke test |
 | Responsive layout | – | ✅ | Six sizes in the smoke test, Chromium only |
-| Autosave and song library (IndexedDB) | ◐ | ✋ | MOD autosave round trip tested; the IndexedDB layer itself is not |
+| Autosave and song library (IndexedDB) | ✅ | ✅ | `db.test.ts` against fake-indexeddb: upgrades, a blocking tab, the demo song, versions kept; the iOS smoke test checks the real IndexedDB |
 | Share links | ✅ | – | `share.test.ts` |
-| Jam (live editing together) | ✅ | ✗ | Sync logic tested with simulated peers, including conflicting edits and message reordering; the WebRTC connection is not |
-| Replayer for demos and intros | ◐ | ✅ | Core tested; the page plays its demo in the smoke test |
-| MIDI input | ◐ | ✗ | Note and velocity mapping tested; no real MIDI device |
+| Jam (live editing together) | ✅ | ✗ | Sync logic tested with simulated peers, including conflicting edits and message reordering; invite codes, message splitting and back pressure over a fake WebRTC connection, tab jams over BroadcastChannel; hosting, joining and transfers on the page itself (`main-jam.test.ts`); a real WebRTC connection is not |
+| Replayer for demos and intros | ✅ | ✅ | API, worklet and core tested against a fake AudioContext; the page plays its demo in the smoke test |
+| MIDI input | ✅ | ✗ | Note and velocity mapping, and the page playing and recording from MIDI inputs, including devices plugged in later (`main-setup.test.ts`); no real MIDI device |
 | Offline use and updates (service worker) | ◐ | ✅ | `pwa.test.ts` covers what Setup offers for installing; the smoke test reloads offline, fetches every cached file, opens the manual and the replayer offline, and switches to a new service worker through the update bar. Installing itself and opening files with the installed app are not tested |
 | Help and manual | ✅ | ◐ | Every effect has a help entry, links and anchors resolve |
 

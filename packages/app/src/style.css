@@ -540,6 +540,145 @@ a.btn {
   white-space: nowrap;
 }
 
+.statusbar {
+  align-items: center;
+}
+
+.statusbar #status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Master volume: a mute button, a slider drawn as a value field with a lit
+   bar and a button for a handle, and the level. */
+.master-vol {
+  --vol: 100%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  margin-block: calc(var(--px) * -2);
+}
+
+.master-vol .btn {
+  min-height: calc(var(--px) * 12);
+  padding-block: calc(var(--px) * 1);
+}
+
+.master-vol .btn[aria-pressed='true'] {
+  padding-block: calc(var(--px) * 2) 0;
+}
+
+.master-vol .value {
+  min-width: calc(var(--px) * 30);
+  padding-block: calc(var(--px) * 1);
+}
+
+.master-vol.muted .value {
+  color: var(--dim);
+}
+
+.master-vol input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--px) * 72);
+  height: calc(var(--px) * 12);
+  margin: 0;
+  padding: 0 calc(var(--px) * 2);
+  background:
+    linear-gradient(to right, var(--btn-on) var(--vol), transparent var(--vol)) no-repeat
+      calc(var(--px) * 3) 50% / calc(100% - var(--px) * 6) calc(var(--px) * 4),
+    var(--field-bg);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--desk-lo),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--desk-hi);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.master-vol.muted input[type='range'] {
+  background:
+    linear-gradient(to right, var(--dim) var(--vol), transparent var(--vol)) no-repeat
+      calc(var(--px) * 3) 50% / calc(100% - var(--px) * 6) calc(var(--px) * 4),
+    var(--field-bg);
+}
+
+.master-vol input[type='range']:focus-visible {
+  outline: var(--px) dotted var(--text);
+  outline-offset: var(--px);
+}
+
+.master-vol input[type='range']::-webkit-slider-runnable-track {
+  height: 100%;
+  background: none;
+}
+
+.master-vol input[type='range']::-moz-range-track {
+  height: 100%;
+  background: none;
+}
+
+.master-vol input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--px) * 6);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--btn);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-lo);
+}
+
+.master-vol input[type='range']::-moz-range-thumb {
+  width: calc(var(--px) * 6);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--btn);
+  box-shadow:
+    inset var(--px) var(--px) 0 var(--btn-hi),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--btn-lo);
+}
+
+/* Fingers need a bigger slider and handle. */
+@media (pointer: coarse) {
+  .master-vol .btn,
+  .master-vol input[type='range'] {
+    min-height: calc(var(--px) * 16);
+    height: calc(var(--px) * 16);
+  }
+  .master-vol input[type='range']::-webkit-slider-thumb {
+    width: calc(var(--px) * 10);
+  }
+  .master-vol input[type='range']::-moz-range-thumb {
+    width: calc(var(--px) * 10);
+  }
+}
+
+/* Phones held upright: the volume gets a full-width row of its own above the
+   status text, with a long slider that is easy to hit with a thumb. */
+@media (max-width: 639px) {
+  .statusbar {
+    flex-wrap: wrap;
+    row-gap: calc(var(--px) * 4);
+  }
+  .master-vol {
+    order: -1;
+    flex: 1 1 100%;
+    margin-block: 0;
+  }
+  .master-vol input[type='range'] {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  .statusbar #status {
+    flex-basis: 100%;
+  }
+}
+
 .brand {
   color: var(--dim);
   flex: none;
@@ -1647,6 +1786,15 @@ select.value {
   accent-color: var(--scope-line);
 }
 
+/* A video that records in real time shows here while it runs. */
+.video-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: calc(var(--px) * 4);
+  box-shadow: 0 0 0 var(--px) var(--desk-lo);
+}
+
 .file-dialog .list li .idx {
   margin-right: calc(var(--px) * 2);
 }
@@ -1855,6 +2003,58 @@ select.value {
 .ins-picker.one-sample .picker-samples-title,
 .ins-picker.one-sample .picker-samples {
   display: none;
+}
+
+/* ---- Sample library ---------------------------------------------------- */
+
+.sample-lib .list,
+.sample-lib .info,
+.sample-lib-tabs {
+  width: min(calc(100vw - 64px), calc(var(--px) * 280));
+}
+
+.sample-lib .list {
+  height: min(45dvh, calc(var(--px) * 18 * 12));
+}
+
+.sample-lib .list li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 4);
+  line-height: calc(var(--px) * 18);
+}
+
+.sample-lib-wave {
+  flex: none;
+  width: calc(var(--px) * 48);
+  height: calc(var(--px) * 12);
+  background: var(--pat-bg);
+}
+
+.sample-lib-tabs .btn {
+  flex: 1 1 0;
+}
+
+.sample-lib .btn:disabled {
+  opacity: 0.4;
+  color: var(--dim);
+  cursor: default;
+}
+
+/* Two long buttons here, and one in the instrument picker: they share a row while they fit. */
+.sample-lib .picker-actions,
+#ins-picker .picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.sample-lib .picker-actions .btn,
+#ins-picker .picker-actions .btn {
+  flex: 1 1 auto;
+}
+
+.sample-lib-info {
+  min-height: 3lh;
 }
 
 /* ---- Pattern picker ---------------------------------------------------- */
@@ -2167,7 +2367,9 @@ button.brand:hover {
   .file-dialog .list,
   .file-dialog .share-url.value.text,
   .file-dialog .picker-actions,
-  .file-dialog .pat-picker .info {
+  .file-dialog .pat-picker .info,
+  .file-dialog.sample-lib .info,
+  .file-dialog .sample-lib-tabs {
     width: 100%;
     max-width: none;
   }
@@ -2262,4 +2464,47 @@ button.brand:hover {
 
 #install-info {
   white-space: normal;
+}
+
+/* Song stats: a summary, then scrolling tables of samples and patterns. */
+.stats-summary th {
+  padding-right: calc(var(--px) * 8);
+}
+
+.stats-scroll {
+  max-height: calc(var(--px) * 110);
+  overflow: auto;
+  border: var(--px) solid var(--desk-lo);
+  margin-bottom: calc(var(--px) * 4);
+}
+
+.stats-table {
+  width: 100%;
+}
+
+.stats-table th {
+  position: sticky;
+  top: 0;
+  background: var(--desk);
+}
+
+.stats-table th,
+.stats-table td {
+  white-space: nowrap;
+}
+
+.stats-table .num {
+  text-align: right;
+}
+
+.stats-table td.sub {
+  padding-left: calc(var(--px) * 8);
+}
+
+.stats-table tr.ins td {
+  color: var(--pat-instr);
+}
+
+.stats-table tr.unused td {
+  color: var(--dim);
 }

@@ -8,7 +8,7 @@
  * AudioWorklet starts and playback runs and stops, and that the Help dialog opens. What's new
  * must stay shut on a first visit and open once after an update. On the desktop
  * size a note typed into the pattern must change the saved XM, and WAV and MP3 export must hand
- * over files. The replayer page must load and play its demo too, and a German browser must get
+ * over files, as must the video export (in Chromium also its real-time fallback). The sample library must load a drum and a chip wave on a phone. The replayer page must load and play its demo too, and a German browser must get
  * the German language pack (and a Finnish one the Finnish pack). Playback must follow the order list (Chromium only).
  * After one visit the tracker, the manual and the replayer must work offline, and a new
  * service worker must offer a reload that switches to it. Screenshots go to the given folder.
@@ -188,6 +188,31 @@ await check('editing, saving and audio export', async () => {
   }
 });
 
+// Video export of the new (short) song: WebCodecs in the worker, and in Chromium also the
+// MediaRecorder fallback in real time, with the encoders taken away. Headless Firefox on the
+// CI runners has no running audio clock, so a recording could not finish there.
+for (const fallback of useFirefox ? [false] : [false, true]) {
+  await check(`video export${fallback ? ' (recorded in real time)' : ''}`, async () => {
+    const { context, page, errors } = await open(base, viewports[0]);
+    try {
+      if (fallback) await page.addInitScript(() => { delete window.VideoEncoder; delete window.AudioEncoder; });
+      if (fallback) await page.reload();
+      await page.waitForSelector('#pattern-no');
+      const file = await downloadBytes(page, () => document.querySelector('#video-go')?.click(), 120000);
+      const info = await page.locator('#video-info').textContent();
+      assert(file.bytes.length > 20000, `video is only ${file.bytes.length} bytes (${info})`);
+      const mp4 = file.bytes.subarray(4, 8).toString('latin1') === 'ftyp';
+      const webm = file.bytes.readUInt32BE(0) === 0x1a45dfa3;
+      assert(mp4 || webm, `${file.name} is neither MP4 nor WebM`);
+      assert(/\.(mp4|webm)$/.test(file.name) && (mp4 ? file.name.endsWith('.mp4') : file.name.endsWith('.webm')), `video is called ${file.name}`);
+      console.log(`     ${info}`);
+      assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 // Backing up the song library and restoring it in a browser that has none, on a phone.
 // Backups and the transfer between browsers, on a phone. Each browser context
 // starts with the demo song only.
@@ -290,6 +315,27 @@ await check('sending everything to another browser', async () => {
   }
 });
 
+await check('song stats and optimize', async () => {
+  const { context, page, errors } = await open(base, viewports[0]);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.locator('#stats-open').click();
+    await page.waitForFunction(() => /^\d+:\d\d$/.test(document.querySelector('#stats-time')?.textContent ?? ''));
+    const time = await page.locator('#stats-time').textContent();
+    // A new song is one empty 64-row pattern at speed 6 and 125 BPM.
+    assert(time === '0:08', `play time ${time}, expected 0:08`);
+    assert((await page.locator('#stats-samples tr').count()) > 1, 'no samples listed');
+    await page.waitForFunction(() => /Packed from/.test(document.querySelector('#stats-info')?.textContent ?? ''));
+    await page.locator('#cu-go').click();
+    const info = await page.locator('#stats-info').textContent();
+    assert(/^Optimized: .*instruments removed/.test(info ?? ''), `optimize said: ${info}`);
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+    if (shots) await page.screenshot({ path: join(shots, 'stats.png') });
+  } finally {
+    await context.close();
+  }
+});
+
 await check('replayer page plays its demo', async () => {
   const { context, page, errors } = await open(`${base}replayer/`, viewports[0]);
   try {
@@ -386,12 +432,41 @@ await check("What's new after an update", async () => {
   }
 });
 
+// The sample library on a phone: from the instrument picker, a drum becomes the instrument
+// and a chip wave goes into its sample slot.
+await check('sample library', async () => {
+  const { context, page, errors } = await open(base, phone);
+  try {
+    await page.waitForSelector('#pattern-no');
+    await page.locator('#ins-pick').click();
+    await page.locator('#picker-library').click();
+    await page.locator('#sample-library[open]').waitFor();
+    await page.locator('#sample-library .sample-lib-tabs [data-category="drums"]').click();
+    await page.locator('#sample-library li[data-id="kick"]').click();
+    if (shots) await page.screenshot({ path: join(shots, 'sample-library-phone.png') });
+    await page.locator('#sample-lib-instrument').click();
+    assert(!(await page.evaluate(() => document.querySelector('#sample-library').open)), 'the library stayed open');
+    assert((await page.locator('#ins-pick-name').textContent()) === 'Kick', 'the kick did not become the instrument');
+    await page.locator('#ins-pick').click();
+    await page.locator('#picker-library').click();
+    await page.locator('#sample-library .sample-lib-tabs [data-category="chip"]').click();
+    await page.locator('#sample-library li[data-id="pwmslow"]').click();
+    await page.locator('#sample-lib-load').click();
+    const sample = await page.evaluate(() => document.querySelector('#sample-list li[aria-selected="true"]')?.textContent ?? '');
+    assert(sample.includes('PWM slow'), `the sample slot holds "${sample}"`);
+    assert(errors.length === 0, `errors: ${errors.join(' | ')}`);
+  } finally {
+    await context.close();
+  }
+});
+
 // A browser set to German gets the German pack: the page, its dialogs and the manual.
 await check('German language pack', async () => {
   for (const viewport of [viewports[0], viewports[3]]) {
     const { context, page, errors } = await open(base, viewport, 'de-DE');
     try {
-      await page.waitForSelector('#pattern-no');
+      // #pattern-no is in the static page; the scopes appear once main.ts has run, after the language pack.
+      await page.waitForSelector('#scopes .scope', { state: 'attached' });
       const shown = await page.evaluate(() => ({
         lang: document.documentElement.lang,
         save: document.querySelector('#save').textContent,
@@ -421,7 +496,8 @@ await check('Finnish language pack', async () => {
   for (const viewport of [viewports[0], viewports[3]]) {
     const { context, page, errors } = await open(base, viewport, 'fi-FI');
     try {
-      await page.waitForSelector('#pattern-no');
+      // #pattern-no is in the static page; the scopes appear once main.ts has run, after the language pack.
+      await page.waitForSelector('#scopes .scope', { state: 'attached' });
       const shown = await page.evaluate(() => ({
         lang: document.documentElement.lang,
         save: document.querySelector('#save').textContent,

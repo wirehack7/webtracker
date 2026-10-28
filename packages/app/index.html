@@ -77,9 +77,10 @@
               <button type="button" class="btn" id="rec" aria-pressed="false" title="Edit mode (Space)">Rec</button>
               <button type="button" class="btn" id="new" title="New song">New</button>
               <button type="button" class="btn" id="load" title="Load a module: MOD, XM, S3M, IT, MTM, 669 or OKT, also packed as ZIP, gzip, MMCMP, PowerPacker or UMX; or an XP pattern / XT track into the current pattern (Ctrl+O)">Load</button>
-              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, FLAC or MP3, autosaved versions (Ctrl+S saves XM)">Save</button>
+              <button type="button" class="btn" id="save" title="Save as XM or MOD, export WAV, FLAC, MP3 or a video, autosaved versions (Ctrl+S saves XM)">Save</button>
               <button type="button" class="btn" id="songs-open" title="Songs kept in this browser">Songs</button>
               <button type="button" class="btn" id="share-open" title="Share the song as a link">Share</button>
+              <button type="button" class="btn" id="stats-open" title="Play time, file size, unused parts; make the song smaller for intros">Stats</button>
               <button type="button" class="btn" id="jam-open" aria-pressed="false" title="Edit this song together with others, live">Jam</button>
               <button type="button" class="btn" id="help-open" title="Keys, effects and workflows">Help</button>
               <button type="button" class="btn" id="about-open" title="Who made this">About</button>
@@ -124,7 +125,7 @@
             <button type="button" class="btn sm" id="len-dec" title="Shorter (Shift: 16 rows)">-</button><button type="button" class="btn sm" id="len-inc" title="Longer (Shift: 16 rows)">+</button>
           </span>
           <button type="button" class="btn sm keys-toggle head-extra" id="keys-toggle" aria-pressed="false">Keys</button>
-          <button type="button" class="btn sm head-extra" id="edit-tools-open" title="Transpose, remap instruments, scale volume, clean up the song (Ctrl+E)">Edit</button>
+          <button type="button" class="btn sm head-extra" id="edit-tools-open" title="Transpose, remap instruments, scale volume (Ctrl+E)">Edit</button>
           <button type="button" class="btn sm head-extra" id="setup-open" title="Colours, mixer, keys and MIDI">Setup</button>
         </div>
         <div id="pattern" class="pattern-view" tabindex="0" aria-label="Pattern editor"></div>
@@ -174,6 +175,11 @@
 
       <footer class="statusbar">
         <span id="status">Press a key or tap the piano to start audio.</span>
+        <span class="master-vol" id="master-vol" role="group" aria-label="Master volume">
+          <button type="button" class="btn sm vol-mute" aria-pressed="false" title="Mute everything this page plays">Vol</button>
+          <input type="range" min="0" max="100" step="1" value="100" aria-label="Master volume" title="Master volume: how loud everything this page plays comes out of this browser. Exports and the song itself stay as they are." />
+          <output class="value" translate="no">100</output>
+        </span>
         <button type="button" class="brand" id="brand-about" title="About chiptrackr"><span translate="no">chiptrackr</span></button>
       </footer>
     </div>
@@ -265,6 +271,36 @@
       </div>
       <p class="info" id="export-info">Muted channels stay out of the song mix. MP3 renders at 48000 Hz at most.</p>
 
+      <h2 class="ptitle">Export video</h2>
+      <div class="export-fields">
+        <label><span class="label">Size</span>
+          <select class="value" id="video-size">
+            <option value="1280x720">1280 x 720, wide</option>
+            <option value="1920x1080">1920 x 1080, wide</option>
+            <option value="1080x1080">1080 x 1080, square</option>
+            <option value="1080x1920">1080 x 1920, upright for phones</option>
+          </select>
+        </label>
+        <label><span class="label">Frames</span>
+          <select class="value" id="video-fps">
+            <option value="30" translate="no">30 fps</option>
+            <option value="60" translate="no">60 fps</option>
+          </select>
+        </label>
+        <label><span class="label">Format</span>
+          <select class="value" id="video-format">
+            <option value="mp4" translate="no">MP4 (H.264)</option>
+            <option value="webm" translate="no">WebM (VP9)</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="video-go">Render video</button>
+        <progress id="video-progress" max="1" value="0" hidden></progress>
+      </div>
+      <div id="video-preview"></div>
+      <p class="info" id="video-info">The pattern and the scopes in your colours, with the song's sound, for Mastodon, YouTube and the like. Muted channels stay silent.</p>
+
       <h2 class="ptitle">Use in a demo or intro</h2>
       <div class="row">
         <button type="button" class="btn" id="open-replayer" title="Opens the replayer page with this song, to hear it as your demo will play it">Open in replayer</button>
@@ -283,6 +319,23 @@
       <ol class="list" id="picker-list"></ol>
       <h2 class="ptitle picker-samples-title">Sample</h2>
       <div class="row picker-samples" id="picker-samples"></div>
+      <div class="row picker-actions">
+        <button type="button" class="btn" id="picker-library" title="Built-in chip waves, drums and effects for this instrument">Sample library</button>
+      </div>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog sample-lib" id="sample-library" aria-label="Sample library">
+      <h2 class="ptitle">Sample library</h2>
+      <div class="row sample-lib-tabs" role="group" aria-label="Category"></div>
+      <ol class="list"></ol>
+      <p class="info sample-lib-info"></p>
+      <div class="row picker-actions">
+        <button type="button" class="btn" id="sample-lib-load" title="Put this sound into the current sample slot">Load into sample</button>
+        <button type="button" class="btn" id="sample-lib-instrument" title="Replace the current instrument with this sound and its envelope">Make instrument</button>
+      </div>
+      <p class="info">Every sound here is generated by the tracker and free to use in any song.</p>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>
@@ -519,17 +572,33 @@
         <label><span class="label">End %</span><input type="number" class="value text" id="sc-end" value="50" min="0" max="400" /></label>
       </div>
       <div class="row"><button type="button" class="btn" id="sc-go">Scale</button></div>
-      <h3 class="ptitle">Clean up song</h3>
-      <div class="setup-fields">
+      <h3 class="ptitle">Song stats</h3>
+      <div class="row"><button type="button" class="btn" id="edit-stats" title="Play time, file size, unused parts; make the song smaller">Open</button></div>
+      <p class="info" id="edit-info"></p>
+      <form method="dialog" class="row">
+        <button type="submit" class="btn">Close</button>
+      </form>
+    </dialog>
+    <dialog class="panel help file-dialog stats-dialog" id="stats-dialog" aria-label="Song stats">
+      <h2 class="ptitle">Song stats</h2>
+      <table class="stats-summary" id="stats-summary"></table>
+      <h3 class="ptitle">Instruments and samples</h3>
+      <div class="stats-scroll"><table class="stats-table" id="stats-samples"></table></div>
+      <h3 class="ptitle">Patterns</h3>
+      <div class="stats-scroll"><table class="stats-table" id="stats-patterns"></table></div>
+      <h3 class="ptitle">Optimize</h3>
+      <div class="setup-fields stats-optimize">
         <label><span class="label">Unused patterns</span><input type="checkbox" id="cu-patterns" checked /></label>
         <label><span class="label">Duplicate patterns</span><input type="checkbox" id="cu-duplicates" checked /></label>
         <label><span class="label">Unused instruments</span><input type="checkbox" id="cu-instruments" checked /></label>
         <label><span class="label">Renumber instruments</span><input type="checkbox" id="cu-compact" /></label>
         <label><span class="label">Unused samples</span><input type="checkbox" id="cu-samples" checked title="Samples of multi-sample instruments that no note reaches" /></label>
         <label><span class="label">Cut after loop end</span><input type="checkbox" id="cu-tails" checked title="The part of a looped sample after its loop is never heard" /></label>
+        <label><span class="label">Half sample rate</span><input type="checkbox" id="cu-halve" title="Samples from 512 frames, retuned to keep their pitch; duller highs. Samples started with 9xx keep their rate. XM only" /></label>
+        <label><span class="label">8-bit samples</span><input type="checkbox" id="cu-8bit" title="Halves what 16-bit samples take; adds a little noise" /></label>
       </div>
-      <div class="row"><button type="button" class="btn" id="cu-go" title="Whole song; Ctrl+Z undoes it">Clean up</button></div>
-      <p class="info" id="edit-info"></p>
+      <p class="info" id="stats-info"></p>
+      <div class="row"><button type="button" class="btn" id="cu-go" title="Whole song; Ctrl+Z undoes it">Optimize</button></div>
       <form method="dialog" class="row">
         <button type="submit" class="btn">Close</button>
       </form>

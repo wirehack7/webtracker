@@ -8,6 +8,7 @@ import {
   deleteRow,
   emptyPattern,
   emptySample,
+  LoopType,
   insertRow,
   interpolateBlock,
   MAX_CHANNELS,
@@ -23,22 +24,23 @@ import {
   scaleVolumeBlock,
   transposeBlock,
   writeCell,
-  cleanupPreview,
   cleanupSong,
   type Block,
   type Cell,
-  type CleanupOptions,
   type CleanupResult,
   type Clip,
   type Pattern,
   type PlayerState,
   type Resampler,
+  type Sample,
   type Song,
 } from '@webtracker/engine';
 import { applyTrack, encodeWav, importSample, loadModule, loadRaw, loadXp, loadXt, sampleFromChannels, save8svx, saveMod, saveXi, saveXm, saveXp, saveXt, type RawFormat } from '@webtracker/formats';
 import { EngineNode } from './audio/engine.ts';
 import type { ExportReply, ExportRequest } from './audio/export-worker.ts';
 import { parseAudioFormat } from './audio/audio-format.ts';
+import { canExportVideo, exportVideo } from './video/video-export.ts';
+import type { VideoContainer } from './video/video-worker.ts';
 import type { EngineMessage, WorkletMessage } from './audio/messages.ts';
 import { enterEffect, enterInstrument, enterParam, enterVolume, nextAfterPadKey } from './editor/entry.ts';
 import { freePattern, patternInfos } from './editor/patterns.ts';
@@ -54,17 +56,21 @@ import { cellHelpTarget } from './ui/help-content.ts';
 import { mountAbout } from './ui/about.ts';
 import { mountHelp } from './ui/help.ts';
 import { hasVisitedBefore, markSeen, mountWhatsNew, readSeen, shouldShow } from './ui/changelog.ts';
+import { mountSongStats } from './ui/song-stats.ts';
 import { InstrumentEditor } from './ui/instrument-editor.ts';
 import { PatternEditor } from './ui/pattern-editor.ts';
 import { Column, formatEffect, formatVolume, hex } from './ui/pattern-view.ts';
 import { mountPiano } from './ui/piano.ts';
 import { SampleEditor } from './ui/sample-editor.ts';
+import { mountSampleLibrary } from './ui/sample-library.ts';
 import { BLOCKED } from './storage/db.ts';
 import { applyOrigin, listAutosaves, originOf, writeAutosave, type Autosave } from './storage/autosave.ts';
 import { createBackup, isSettingsKey, planRestore, readBackup } from './storage/backup.ts';
 import { addSongs, deleteSong, listSongs, putSong, renameSong, type LibrarySong } from './storage/library.ts';
 import { decodeShare, encodeShare, replayerUrl, SHARE_PARAM, shareFromHash, shrinkSong, type ShareQuality } from './storage/share.ts';
 import { track } from './track.ts';
+import { loadVolume, saveVolume, volumeGain } from './audio/master-volume.ts';
+import { mountVolumeControl } from './ui/volume-control.ts';
 import { initLanguage, language, LANGUAGES, msg, t, tNodes, translatePage } from './i18n/i18n.ts';
 import { editName } from './i18n/edit-names.ts';
 import { COLOR_VARS, loadSettings, midiToNote, parseColors, saveSettings, THEMES, UI_SIZES, uiPixel, velocityToVolume, type Settings, type Theme, type UiSize } from './ui/settings.ts';
@@ -110,6 +116,12 @@ let followSong = true;
 // ---- Audio ---------------------------------------------------------------
 
 let engine: EngineNode | null = null;
+let masterVolume = loadVolume();
+mountVolumeControl($('#master-vol'), masterVolume, (volume) => {
+  masterVolume = volume;
+  saveVolume(volume);
+  engine?.setGain(volumeGain(volume));
+});
 let starting: Promise<EngineNode | null> | null = null;
 let sounding: number | null = null;
 
@@ -127,6 +139,7 @@ const host = {
   sampleIndex: () => sampleSlot,
   status: (text: string) => (status.textContent = text),
   importFile: () => $<HTMLInputElement>('#sample-file').click(),
+  openLibrary: () => sampleLibrary.open(),
   saveInstrument: () => saveInstrument(),
   saveSample: (format: 'wav' | 'iff') => saveSample(format),
 };
@@ -138,7 +151,7 @@ $('#editors').append(sampleEditor.root, instrumentEditor.root);
 function ensureEngine(): Promise<EngineNode | null> {
   // Audio may start on a tap that also loads a file; that file's message stays.
   const before = status.textContent;
-  starting ??= EngineNode.start().then(
+  starting ??= EngineNode.start(volumeGain(masterVolume)).then(
     (node) => {
       engine = node;
       node.onMessage = handleWorkletMessage;
@@ -591,6 +604,66 @@ insPicker.addEventListener('click', (event) => {
   const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
   if (event.target === insPicker && !inside) insPicker.close();
 });
+// The built-in sample library, from the sample and instrument editors and the phone picker.
+/** The sound the library is playing, stopped when the next one starts. */
+let audition: AudioBufferSourceNode | null = null;
+async function auditionSample(sample: Sample): Promise<void> {
+  const node = engine ?? (await ensureEngine());
+  if (!node || sample.data.length === 0) return;
+  audition?.stop();
+  const ctx = node.context;
+  // C-4 plays a sample at this rate; the browser resamples it to the output.
+  const rate = Math.max(3000, Math.min(384000, rateForTuning(sample.relativeNote, sample.finetune)));
+  const buffer = ctx.createBuffer(1, sample.data.length, rate);
+  buffer.getChannelData(0).set(sample.data);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  const level = (0.5 * sample.volume) / 64;
+  gain.gain.value = level;
+  if (sample.loopType !== LoopType.None && sample.loopLength > 0) {
+    // A looped wave would ring forever: let it sound for a moment and fade.
+    source.loop = true;
+    source.loopStart = sample.loopStart / rate;
+    source.loopEnd = (sample.loopStart + sample.loopLength) / rate;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(level, now + 0.5);
+    gain.gain.linearRampToValueAtTime(0, now + 0.6);
+  }
+  source.connect(gain).connect(node.output);
+  source.start();
+  if (source.loop) source.stop(ctx.currentTime + 0.6);
+  audition = source;
+}
+
+const sampleLibraryDialog = $<HTMLDialogElement>('#sample-library');
+const sampleLibrary = mountSampleLibrary(sampleLibraryDialog, {
+  audition: (sample) => void auditionSample(sample),
+  loadSample(sample) {
+    const slot = sampleSlot;
+    editor.editInstrument(instrument - 1, 'load sample', (ins) => {
+      while (ins.samples.length < slot) ins.samples.push(emptySample());
+      ins.samples[slot] = sample;
+      if (!ins.name) ins.name = sample.name;
+    });
+    sampleEditor.resetView();
+    status.textContent = t('{name} from the sample library in {slot}.', { name: sample.name, slot: `${hex(instrument)}/${hex(slot, 1)}` });
+  },
+  loadInstrument(ins) {
+    editor.replaceInstrument(instrument - 1, 'load instrument', ins);
+    selectSample(0);
+    status.textContent = t('{name} from the sample library is instrument {instrument}.', { name: ins.name, instrument: hex(instrument) });
+  },
+});
+sampleLibraryDialog.addEventListener('close', () => {
+  audition?.stop();
+  audition = null;
+});
+$('#picker-library').addEventListener('click', () => {
+  insPicker.close();
+  sampleLibrary.open();
+});
+
 /** The arrows stop one slot after the last instrument with samples, ready for a new one. */
 function stepInstrument(delta: number): void {
   const instruments = song().instruments;
@@ -1447,6 +1520,83 @@ function exportDone(message: string): void {
 }
 
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+// ---- Video export ----------------------------------------------------------
+
+const videoGo = $<HTMLButtonElement>('#video-go');
+const videoProgress = $<HTMLProgressElement>('#video-progress');
+const videoInfo = $('#video-info');
+let videoExport: AbortController | null = null;
+
+async function startVideoExport(): Promise<void> {
+  if (videoExport) {
+    videoExport.abort();
+    return;
+  }
+  const s = song();
+  const [width = 1280, height = 720] = $<HTMLSelectElement>('#video-size').value.split('x').map(Number);
+  const controller = new AbortController();
+  videoExport = controller;
+  videoGo.textContent = t('Cancel');
+  videoProgress.hidden = false;
+  videoProgress.value = 0;
+  videoInfo.textContent = t('Rendering…');
+  const started = performance.now();
+  try {
+    const result = await exportVideo(
+      {
+        song: s,
+        title: s.title.trim(),
+        name: safeName(s.title, 'untitled'),
+        width,
+        height,
+        fps: Number($<HTMLSelectElement>('#video-fps').value),
+        container: $<HTMLSelectElement>('#video-format').value as VideoContainer,
+        beat: prefs.beat,
+        bar: prefs.bar,
+        muted: Array.from({ length: s.channels }, (_, c) => muted[c] === true),
+        resampler: prefs.resampler,
+        stereoSeparation: prefs.stereoSeparation,
+        volumeRamps: prefs.volumeRamps,
+        amplify: prefs.amplify,
+        karplusStrong: prefs.karplusStrong,
+      },
+      {
+        signal: controller.signal,
+        preview: $('#video-preview'),
+        onProgress: (fraction) => (videoProgress.value = fraction),
+        onRecording: () => (videoInfo.textContent = t('This browser records the video in real time: keep this tab in front until it is done.')),
+      },
+    );
+    const bytes = result.data instanceof Blob ? new Uint8Array(await result.data.arrayBuffer()) : result.data;
+    download(bytes, result.fileName, result.fileName.endsWith('.webm') ? 'video/webm' : 'video/mp4');
+    track('export-video', { size: `${width}x${height}`, recorded: result.recorded });
+    const took = ((performance.now() - started) / 1000).toFixed(1);
+    const details = { file: result.fileName, length: formatTime(result.seconds), size: (bytes.length / 1e6).toFixed(1), took };
+    videoDone(
+      result.recorded
+        ? t('{file}: {length} of video, {size} MB, recorded in {took} s.', details)
+        : t('{file} ({codecs}): {length} of video, {size} MB, rendered in {took} s.', { ...details, codecs: result.codecs }),
+    );
+  } catch (error) {
+    const { name, message } = error as Error;
+    videoDone(name === 'AbortError' ? t('Export cancelled.') : t('Export failed: {error}', { error: message }));
+  }
+}
+
+function videoDone(message: string): void {
+  videoExport = null;
+  videoGo.textContent = t('Render video');
+  videoProgress.hidden = true;
+  $('#video-preview').replaceChildren();
+  videoInfo.textContent = message;
+  status.textContent = message;
+}
+
+if (!canExportVideo()) {
+  videoGo.disabled = true;
+  videoInfo.textContent = t("This browser can't make videos. Chrome, Edge and Firefox can.");
+}
 
 // ---- Autosave ------------------------------------------------------------
 
@@ -2315,6 +2465,7 @@ $('#save-xm').addEventListener('click', saveSong);
 $('#save-mod').addEventListener('click', saveSongAsMod);
 $('#open-replayer').addEventListener('click', () => void openInReplayer());
 exportGo.addEventListener('click', exportAudio);
+videoGo.addEventListener('click', () => void startVideoExport());
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
   fileInput.value = '';
@@ -2436,46 +2587,25 @@ $('#sc-go').addEventListener('click', () => {
   runEditTool('scale volume', (p, b) => scaleVolumeBlock(song(), p, b, start, end), msg('Scale volume: {count} volumes changed.'), msg('Scale volume: nothing to change.'));
 });
 
-const cleanupOptions = (): CleanupOptions => ({
-  unusedPatterns: $<HTMLInputElement>('#cu-patterns').checked,
-  duplicatePatterns: $<HTMLInputElement>('#cu-duplicates').checked,
-  unusedInstruments: $<HTMLInputElement>('#cu-instruments').checked,
-  compactInstruments: $<HTMLInputElement>('#cu-compact').checked,
-  unusedSamples: $<HTMLInputElement>('#cu-samples').checked,
-  sampleTails: $<HTMLInputElement>('#cu-tails').checked,
+const songStatsDialog = mountSongStats($<HTMLDialogElement>('#stats-dialog'), {
+  song,
+  optimize(options) {
+    let result!: CleanupResult;
+    editor.editSong('clean up', (s) => {
+      result = cleanupSong(s, options);
+    });
+    status.textContent = t('Song optimized; Ctrl+Z undoes it.');
+    track('optimize');
+    return result;
+  },
 });
-
-/** What a clean-up removes, as a list for a sentence; empty when nothing. */
-function describeCleanup(result: CleanupResult): string {
-  const count = (n: number, one: string, many: string) => (n ? [t(n === 1 ? one : many, { count: n })] : []);
-  const parts = [
-    ...count(result.patterns, msg('{count} pattern'), msg('{count} patterns')),
-    ...count(result.instruments, msg('{count} instrument'), msg('{count} instruments')),
-    ...count(result.samples, msg('{count} sample'), msg('{count} samples')),
-  ];
-  if (result.frames) parts.push(t('{count} sample frames', { count: result.frames.toLocaleString(language()) }));
-  return parts.join(', ');
-}
-
-function previewCleanup(): void {
-  const what = describeCleanup(cleanupPreview(song(), cleanupOptions()));
-  editInfo.textContent = what ? t('Clean up would remove {what}.', { what }) : t('Clean up: nothing to remove.');
-}
-for (const id of ['#cu-patterns', '#cu-duplicates', '#cu-instruments', '#cu-compact', '#cu-samples', '#cu-tails']) {
-  $(id).addEventListener('change', previewCleanup);
-}
-$('#cu-go').addEventListener('click', () => {
-  const options = cleanupOptions();
-  if (!describeCleanup(cleanupPreview(song(), options))) {
-    editInfo.textContent = t('Clean up: nothing to remove.');
-    return;
-  }
-  let result!: CleanupResult;
-  editor.editSong('clean up', (s) => {
-    result = cleanupSong(s, options);
-  });
-  editInfo.textContent = t('Clean up removed {what}; Ctrl+Z undoes it.', { what: describeCleanup(result) });
-  status.textContent = editInfo.textContent;
+$('#stats-open').addEventListener('click', () => {
+  setSheet(false);
+  songStatsDialog.open();
+});
+$('#edit-stats').addEventListener('click', () => {
+  editTools.close();
+  songStatsDialog.open();
 });
 
 // Help opened with the cursor on a volume or effect jumps to its explanation.
@@ -2706,6 +2836,9 @@ window.addEventListener('keydown', (event) => {
     if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
       event.preventDefault();
       transpose((event.code === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 12 : 1));
+    } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+      event.preventDefault();
+      void playRow();
     }
     return;
   }
@@ -2754,8 +2887,7 @@ window.addEventListener('keydown', (event) => {
     case 'Enter':
     case 'NumpadEnter':
       event.preventDefault();
-      if (event.altKey) void playRow();
-      else void play(event.shiftKey);
+      void play(event.shiftKey);
       return;
   }
 

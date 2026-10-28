@@ -20,6 +20,23 @@ describe('Player scopes', () => {
     expect(Math.min(...scopes[1]!)).toBeLessThan(-0.05);
   });
 
+  it('keeps recording after a reset and with blocks larger than 128 frames', () => {
+    const song = createSong();
+    writeCell(song, song.patterns[0]!, 0, 0, { note: 49, instrument: 1 });
+    const player = new Player(song, 48000);
+    player.enableScopes(256);
+    player.playing = true;
+    player.reset();
+    const left = new Float32Array(1024);
+    const right = new Float32Array(1024);
+    player.process(left, right);
+    const [scope] = player.readScopes();
+    expect(scope).toHaveLength(256);
+    expect(Math.max(...scope!)).toBeGreaterThan(0.05);
+    player.enableScopes(0);
+    expect(player.readScopes()).toEqual([]);
+  });
+
   it('defaults new songs to four channels', () => {
     expect(createSong().channels).toBe(4);
   });

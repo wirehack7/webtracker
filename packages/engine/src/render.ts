@@ -69,3 +69,33 @@ export function renderSong(song: Song, options: RenderOptions = {}): Rendered {
   options.onProgress?.(1);
   return { sampleRate, left, right };
 }
+
+export interface SongDuration {
+  seconds: number;
+  /** True when the song did not jump back within the limit, e.g. an endless pattern loop. */
+  endless: boolean;
+}
+
+/**
+ * How long the song plays until it jumps back for the first time, as
+ * {@link renderSong} would render it. Runs the player at a low rate without
+ * keeping the output, since only the timing matters.
+ */
+export function songDuration(song: Song, maxSeconds = 20 * 60): SongDuration {
+  const sampleRate = 2000;
+  const maxFrames = maxSeconds * sampleRate;
+  const player = new Player(song, sampleRate);
+  player.resampler = 'none';
+  player.volumeRamps = false;
+  player.playing = true;
+  // Small steps, so the jump back is found within 10 ms.
+  const step = 20;
+  const left = new Float32Array(step);
+  const right = new Float32Array(step);
+  let frames = 0;
+  while (frames < maxFrames && player.loops === 0 && player.playing) {
+    player.process(left, right, step);
+    frames += step;
+  }
+  return { seconds: Math.min(frames, maxFrames) / sampleRate, endless: player.loops === 0 && player.playing };
+}

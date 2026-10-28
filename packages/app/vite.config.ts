@@ -19,6 +19,7 @@ function licenses(): Plugin {
         ['lamejs (@breezystack/lamejs), GNU Lesser General Public License 3.0', text('@breezystack/lamejs')],
         ['GNU Lesser General Public License 3.0', repoText('licenses/LGPL-3.0.txt')],
         ['GNU General Public License 3.0 (which the LGPL 3.0 builds on)', repoText('licenses/GPL-3.0.txt')],
+        ['Mediabunny (mediabunny), Mozilla Public License 2.0', text('mediabunny')],
       ];
       this.emitFile({
         type: 'asset',

@@ -36,12 +36,14 @@ export class EngineNode {
   private constructor(
     readonly context: AudioContext,
     private readonly node: AudioWorkletNode,
+    /** The page's master volume; everything that plays connects here, not to the destination. */
+    readonly output: GainNode,
   ) {
     node.port.onmessage = (event: MessageEvent<WorkletMessage>) => this.onMessage?.(event.data);
   }
 
   /** Must be called from a user gesture, browsers block audio otherwise. */
-  static async start(): Promise<EngineNode> {
+  static async start(gain = 1): Promise<EngineNode> {
     playThroughSilentMode();
     const context = new AudioContext({ latencyHint: 'interactive' });
     // Asked for at once, while the gesture still counts; later awaits would lose it on iOS.
@@ -56,8 +58,20 @@ export class EngineNode {
       numberOfInputs: 0,
       outputChannelCount: [2],
     });
-    node.connect(context.destination);
-    return new EngineNode(context, node);
+    const output = context.createGain();
+    output.gain.value = gain;
+    node.connect(output);
+    output.connect(context.destination);
+    return new EngineNode(context, node, output);
+  }
+
+  /** Sets the master volume, with a short glide so a slider drag does not click. */
+  setGain(gain: number): void {
+    const param = this.output.gain;
+    const now = this.context.currentTime;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.setTargetAtTime(gain, now, 0.015);
   }
 
   send(message: EngineMessage): void {

@@ -14,9 +14,32 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
-    id: '2026-10-26b',
+    id: '2026-10-28',
     items: [
       msg('Install chiptrackr as an app from Setup > App and offline. It runs fully offline, opens XM and MOD files from your computer and tells you when a new version is ready.'),
+    ],
+  },
+  {
+    id: '2026-10-27b',
+    items: [
+      msg('A master volume in the status bar sets how loud the whole page plays: songs, previews, the sample library and jams. Vol mutes, the mouse wheel works too, and the browser remembers it. Your song and exports stay untouched.'),
+    ],
+  },
+  {
+    id: '2026-10-27',
+    items: [msg('Alt+Enter plays only the cursor row again and moves down one row, as Help says.')],
+  },
+  {
+    id: '2026-10-26c',
+    items: [
+      msg('Export your song as a video, with the pattern scrolling and a scope per channel in your colours: Save > Export video. Wide, square or upright, ready for Mastodon and YouTube.'),
+    ],
+  },
+  {
+    id: '2026-10-26b',
+    items: [
+      msg('The sample library has chip waves, PWM loops, drums and effects, all made by the tracker and free to use. Open it with Library in the sample or instrument editor, or from the instrument picker on phones.'),
+      msg('Stats shows how long a song plays, what each part takes in the file and what the song never plays. Optimize makes it smaller for demos and intros: unused parts out, half sample rates, 8-bit samples, with Ctrl+Z to undo.'),
     ],
   },
   {

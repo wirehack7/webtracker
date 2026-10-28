@@ -11,6 +11,7 @@ export interface InstrumentEditorHost {
   sampleIndex(): number;
   status(text: string): void;
   importFile(): void;
+  openLibrary(): void;
   saveInstrument(): void;
 }
 
@@ -67,7 +68,8 @@ class EnvelopeView {
     select.title = t('Replace the envelope with a ready-made one');
     select.append(new Option(t('Preset'), ''), ...presets.map((p, i) => new Option(t(p.name), String(i))));
     select.addEventListener('change', () => {
-      const preset = presets[Number(select.value)];
+      // The placeholder has the value '', which Number() would read as the first preset.
+      const preset = select.value === '' ? undefined : presets[Number(select.value)];
       select.value = '';
       if (!preset) return;
       this.edit('envelope preset', (e) => Object.assign(e, preset.build()));
@@ -288,6 +290,7 @@ export class InstrumentEditor {
     top.append(
       this.name.root,
       button(t('Load'), () => host.importFile(), t('Load an XI instrument, or a sample into the current slot')),
+      button(t('Library'), () => host.openLibrary(), t('Built-in chip waves, drums and effects for this instrument')),
       button(t('Save XI'), () => host.saveInstrument(), t('Save this instrument as XI')),
       this.fadeout.root,
       el('span', 'label', t('Vibrato')),
