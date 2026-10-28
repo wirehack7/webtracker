@@ -14,6 +14,12 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: '2026-10-28',
+    items: [
+      msg('Install chiptrackr as an app from Setup > App and offline. It runs fully offline, opens XM and MOD files from your computer and tells you when a new version is ready.'),
+    ],
+  },
+  {
     id: '2026-10-27b',
     items: [
       msg('A master volume in the status bar sets how loud the whole page plays: songs, previews, the sample library and jams. Vol mutes, the mouse wheel works too, and the browser remembers it. Your song and exports stay untouched.'),

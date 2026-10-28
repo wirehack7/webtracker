@@ -2441,6 +2441,31 @@ button.brand:hover {
   }
 }
 
+/* A new version waits: a small bar at the top until Reload or Later, clear of the phone's bottom buttons. */
+.update-bar {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  top: calc(var(--px) * 6 + env(safe-area-inset-top));
+  width: max-content;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 16px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 5);
+}
+
+.update-bar[hidden] {
+  display: none;
+}
+
+#install-info {
+  white-space: normal;
+}
+
 /* Song stats: a summary, then scrolling tables of samples and patterns. */
 .stats-summary th {
   padding-right: calc(var(--px) * 8);

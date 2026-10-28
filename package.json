@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @webtracker/app dev",
-    "build": "pnpm --filter @webtracker/app build && pnpm --filter @webtracker/replayer build",
+    "build": "pnpm --filter @webtracker/app build && pnpm --filter @webtracker/replayer build && node scripts/service-worker.mjs",
     "preview": "pnpm --filter @webtracker/app preview",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
