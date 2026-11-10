@@ -15,7 +15,7 @@
     "@fontsource/press-start-2p": "^5.3.0",
     "@webtracker/engine": "workspace:*",
     "@webtracker/formats": "workspace:*",
-    "mediabunny": "1.62.1"
+    "mediabunny": "1.65.2"
   },
   "devDependencies": {
     "@types/audioworklet": "^0.0.100",
